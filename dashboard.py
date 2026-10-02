@@ -4,7 +4,7 @@
 """
 import html
 import os
-from datetime import date, datetime
+from datetime import date
 
 import pandas as pd
 
@@ -404,23 +404,8 @@ def shell(title, body):
 
 def build():
     d = paper.read_log()
-    live = d[~retro(d)]
-    today = d[d.date == date.today().isoformat()]
-    settled = live[(live.flag) & live.result.notna()]
     body = f"""
-<header class="hero">
-  <h1>NHL Total Model</h1>
-  <p>Over/under projections, OVER flags and live paper trading · updated {datetime.now():%b %-d, %Y %-I:%M %p} ET</p>
-  <div class="stats">
-    <div class="stat"><b>{int((today.flag).sum()) if len(today) else 0}</b><span>flags today</span></div>
-    <div class="stat"><b>{len(today)}</b><span>games today</span></div>
-    <div class="stat"><b>{(settled.result == 'W').sum()}-{(settled.result == 'L').sum()}-{(settled.result == 'P').sum()}</b><span>live record</span></div>
-  </div>
-</header>
-
-<section><div class="rule"><b>The rule:</b> bet the <b>OVER</b> only when the consensus line is <b>6 or 6.5</b> (never 5.5) and
-<b>both teams</b> are projected high-scoring (bar past the tick). Take it at the <b>best over</b> book. Check the goalies:
-a <span class='gb chg'>Changed</span> tag means the starter differs from the one the projection used.</div></section>
+<header class="hero"><h1>NHL Total Model</h1></header>
 
 <section><h2>Yesterday's results</h2>{yesterday(d)}</section>
 
