@@ -48,6 +48,10 @@ def pct(x, d=1):
     return "–" if x is None or pd.isna(x) else f"{x:+.{d}f}%"
 
 
+def book(b):
+    return e(str(b).replace(" NJ", "").replace("FanDuel", "FD").replace("BetRivers", "BetRiv"))
+
+
 def logo(abbr, size=36):
     a = e(abbr)
     return (f"<picture class='logo' style='width:{size}px;height:{size}px'>"
@@ -110,18 +114,17 @@ def team_row(abbr, proj, cutoff, goalie, goalie_now=None, b2b=False, score=None)
 
 def breakdown(r, flagged):
     if pd.isna(getattr(r, "away_ev", float("nan"))):
-        return ""
+        return "<div class='why'><div class='why-h'>Projection breakdown</div><p class='muted small'>Not available for this game.</p></div>"
     def row(side, abbr, proj):
         g = lambda c: getattr(r, f"{side}_{c}")
         adj = lambda v: f"{v * 100:+.1f}%" if abs(v) >= 0.0005 else "–"
         return (f"<tr><td>{logo(abbr, 18)} {e(abbr)}</td><td class='num'>{g('ev'):.2f}</td><td class='num'>{g('pp'):.2f}</td>"
                 f"<td class='num'>{g('oth'):.2f}</td><td class='num'>{adj(g('gadj'))}</td><td class='num'>{adj(g('b2badj'))}</td>"
                 f"<td class='num'><b>{proj:.2f}</b></td></tr>")
-    return f"""<details class='why'{' open' if flagged else ''}><summary>{'Why it’s flagged' if flagged else 'Projection breakdown'}</summary>
-      <table><thead><tr><th>Team</th><th>5v5</th><th>PP</th><th>Other</th><th>Opp. goalie</th><th>B2B</th><th>Proj</th></tr></thead>
-      <tbody>{row('away', r.away, r.proj_away)}{row('home', r.home, r.proj_home)}</tbody></table>
-      <p class='muted small'>Goals = (5v5 + power play + other situations) × opposing-goalie adjustment × back-to-back adjustment.
-      A + goalie adjustment means the opposing goalie has been below average.</p></details>"""
+    return f"""<div class='why'><div class='why-h'>{'Why it’s flagged' if flagged else 'Projection breakdown'}</div>
+      <table><thead><tr><th>Team</th><th class='num'>5v5</th><th class='num'>PP</th><th class='num'>Oth</th>
+      <th class='num' title='Opposing goalie adjustment'>Gl</th><th class='num'>B2B</th><th class='num'>Proj</th></tr></thead>
+      <tbody>{row('away', r.away, r.proj_away)}{row('home', r.home, r.proj_home)}</tbody></table></div>"""
 
 
 def game_card(r):
@@ -131,38 +134,42 @@ def game_card(r):
     hscore = int(r.home_score) if final else None
     rows = (team_row(r.away, r.proj_away, r.cutoff, r.away_goalie, getattr(r, "away_goalie_now", None), getattr(r, "away_b2b", False), ascore)
             + team_row(r.home, r.proj_home, r.cutoff, r.home_goalie, getattr(r, "home_goalie_now", None), getattr(r, "home_b2b", False), hscore))
-    meta = []
+    def kv(label, value):
+        return f"<div class='kv'><span>{label}</span><b>{value}</b></div>"
+    blank = "<div class='kv'></div>"
     if final:
         vs = "<span class='pill muted-pill'>no line</span>"
         if not pd.isna(r.bet_total):
             t = r.bet_total
             vs = (f"<span class='pill over'>OVER {line(t)}</span>" if r.final_total > t else
                   f"<span class='pill under'>UNDER {line(t)}</span>" if r.final_total < t else f"<span class='pill'>PUSH {line(t)}</span>")
-        meta.append(f"<div class='kv'><span>Total</span><b class='big-total'>{int(r.final_total)}</b></div>{vs}")
-    meta.append(f"<div class='kv'><span>Proj total</span><b>{r.proj:.2f}</b></div>")
-    if final:
-        meta.append(f"<div class='kv'><span>Proj away / home</span><b>{r.proj_away:.2f} / {r.proj_home:.2f}</b></div>")
-    meta.append(f"<div class='kv'><span>P(7+)</span><b>{r.p7:.0%}</b></div>")
-    if pd.isna(r.bet_total):
-        meta.append("<div class='kv'><span>Line</span><b class='muted'>not posted</b></div>")
-    elif final and not pd.isna(r.close_total) and r.close_total != r.bet_total:
-        meta.append(f"<div class='kv'><span>Line moved</span><b>{line(r.bet_total)} → {line(r.close_total)} {'↑' if r.close_total > r.bet_total else '↓'}</b></div>")
+        moved = "" if pd.isna(r.close_total) or pd.isna(r.bet_total) or r.close_total == r.bet_total else (
+            " ↑" if r.close_total > r.bet_total else " ↓")
+        meta = [kv("Total goals", f"<span class='big-total'>{int(r.final_total)}</span>"), kv("vs line", vs),
+                kv("Proj total", f"{r.proj:.2f}"),
+                kv("Line", "–" if pd.isna(r.bet_total) else f"{line(r.bet_total)} → {line(r.close_total)}{moved}"),
+                kv("P(7+)", f"{r.p7:.0%}"),
+                kv("Best over", f"{book(r.best_book)} o{line(r.best_total)} {price(r.best_over)}") if not pd.isna(r.best_total) else kv("Best over", "–")]
+        if flagged and not pd.isna(r.result):
+            meta += [kv("Pick", f"<span class='res {e(r.result)}'>{e(r.result)} {r.profit:+.2f}u</span>"),
+                     kv("Best book", "–" if pd.isna(r.profit_best) else f"{r.profit_best:+.2f}u"), blank]
     else:
-        meta.append(f"<div class='kv'><span>Line</span><b>{line(r.open_total)} → {line(r.bet_total)} <small>o{price(r.bet_over)}</small></b></div>")
-    if not pd.isna(r.best_total):
-        meta.append(f"<div class='kv'><span>Best over</span><b>{e(r.best_book)} o{line(r.best_total)} {price(r.best_over)}</b></div>")
-    if flagged and not pd.isna(r.result):
-        meta.append(f"<div class='kv'><span>Pick</span><b class='res {e(r.result)}'>{e(r.result)} {r.profit:+.2f}u</b></div>")
-        if not pd.isna(r.profit_best):
-            meta.append(f"<div class='kv'><span>Best book</span><b>{r.profit_best:+.2f}u</b></div>")
+        meta = [kv("Proj total", f"{r.proj:.2f}"), kv("P(7+)", f"{r.p7:.0%}"),
+                kv("Line", "<span class='muted'>not posted</span>" if pd.isna(r.bet_total) else
+                   f"{line(r.open_total)} → {line(r.bet_total)}"),
+                kv("Over price", "–" if pd.isna(r.bet_over) else price(r.bet_over)),
+                kv("Best over", f"{book(r.best_book)} o{line(r.best_total)} {price(r.best_over)}") if not pd.isna(r.best_total)
+                else kv("Best over", "<span class='muted'>–</span>"), blank]
     bar = f"<div class='flagbar'>★ OVER FLAG · {'over' if final else 'bet over'} {line(r.bet_total)}</div>" if flagged else ""
-    return f"""<article class='card{' flagged' if flagged else ''}'>{bar}{rows}
+    return f"""<article class='card{' flagged' if flagged else ''}'>{bar or "<div class='flagbar empty'></div>"}{rows}
       <div class='meta'>{''.join(meta)}</div>{breakdown(r, flagged)}</article>"""
 
 
 def day_cards(g):
     g = g.sort_values(["flag", "proj"], ascending=[False, False])
-    return f"<div class='cards'>{''.join(game_card(r) for r in g.itertuples())}</div>"
+    return (f"<div class='cards'>{''.join(game_card(r) for r in g.itertuples())}</div>"
+            "<p class='muted small legend'>Breakdown: 5v5 + PP (power play) + Oth (other situations) goals, then Gl = opposing-goalie "
+            "adjustment (+ means a below-average goalie) and B2B = back-to-back adjustment → Proj.</p>")
 
 
 def day_summary(g):
@@ -324,10 +331,12 @@ h2{margin:0 0 4px;font-size:21px;letter-spacing:-.01em}
 .rule{background:var(--card);border:1px solid var(--line);border-left:5px solid var(--gold);border-radius:10px;padding:12px 16px}
 .retro{border-left:4px solid var(--muted);padding:8px 14px;border-radius:8px;background:var(--ice);margin:0 0 12px}
 .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:14px}
-.card{position:relative;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 14px 12px;overflow:hidden}
+.card{position:relative;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 14px 12px;overflow:hidden;
+  display:flex;flex-direction:column}
 .card.flagged{border:2px solid var(--gold);background:linear-gradient(180deg,var(--gold-soft),var(--card) 55%)}
-.flagbar{margin:-14px -14px 8px;padding:6px 14px;background:var(--gold);color:#1a1200;font-size:12px;font-weight:800;letter-spacing:.05em}
-.team{display:flex;align-items:center;gap:10px;padding:6px 0}
+.flagbar{margin:-14px -14px 8px;padding:6px 14px;min-height:29px;background:var(--gold);color:#1a1200;font-size:12px;font-weight:800;letter-spacing:.05em}
+.flagbar.empty{background:transparent;padding:0;min-height:0;margin-bottom:0}
+.team{display:flex;align-items:center;gap:10px;padding:6px 0;min-height:78px}
 .team+.team{border-top:1px dashed var(--line)}
 .logo{display:inline-block;flex:none}.logo img{width:100%;height:100%;display:block}
 .tname{flex:1;min-width:0}.full{font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -339,10 +348,11 @@ h2{margin:0 0 4px;font-size:21px;letter-spacing:-.01em}
 .hot-tag{display:block;font-size:10px;font-weight:800;color:var(--accent);letter-spacing:.06em}
 .score{font-size:28px;font-weight:800;min-width:40px;text-align:right;font-variant-numeric:tabular-nums;line-height:1.1}
 .score small{display:block;font-size:11px;font-weight:600;color:var(--muted);white-space:nowrap}
-.meta{display:flex;flex-wrap:wrap;gap:6px 16px;align-items:center;margin-top:10px;padding-top:10px;border-top:1px solid var(--line)}
-.kv{display:flex;flex-direction:column}.kv span{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+.meta{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px 12px;align-items:start;margin-top:10px;padding-top:10px;border-top:1px solid var(--line)}
+.meta .kv b{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kv{display:flex;flex-direction:column;min-width:0}.kv>span{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);white-space:nowrap}
 .kv b{font-variant-numeric:tabular-nums}.kv small{color:var(--muted);font-weight:500}
-.big-total{font-size:22px}
+.big-total{font-size:22px;font-weight:800;line-height:1}
 .pill{display:inline-block;font-size:12px;font-weight:800;padding:3px 10px;border-radius:999px;background:var(--ice);letter-spacing:.03em}
 .pill.over{background:var(--pos);color:#fff}.pill.under{background:var(--neg);color:#fff}.muted-pill{color:var(--muted)}
 .res.W{color:var(--pos)}.res.L{color:var(--neg)}
@@ -364,16 +374,19 @@ footer{margin-top:32px;font-size:13px;color:var(--muted)}a{color:var(--accent)}
 .gb{display:inline-block;font-size:10px;font-weight:800;letter-spacing:.03em;padding:1px 6px;border-radius:999px;margin-left:4px;vertical-align:1px}
 .gb.ok{background:rgba(26,127,55,.15);color:var(--pos)}.gb.likely{background:rgba(201,151,0,.18);color:var(--gold)}
 .gb.proj{background:var(--ice);color:var(--muted)}.gb.chg{background:var(--neg);color:#fff}
-.goalie{white-space:normal}
+.goalie{white-space:normal;min-height:34px}
 .b2b{display:inline-block;font-size:10px;font-weight:800;padding:1px 6px;border-radius:4px;background:var(--red);color:#fff;
   margin-left:4px;vertical-align:2px;letter-spacing:.04em}
-details.why{margin-top:10px;border-top:1px solid var(--line);padding-top:8px}
-details.why summary{cursor:pointer;font-size:12px;font-weight:700;color:var(--accent);list-style:none}
-details.why summary::before{content:"▸ "}details.why[open] summary::before{content:"▾ "}
-details.why table{font-size:12px;margin-top:6px}details.why th,details.why td{padding:4px 6px}
-details.why td:first-child{display:flex;align-items:center;gap:4px}
+.why{margin-top:auto;padding-top:10px;border-top:1px solid var(--line)}
+.meta+.why{margin-top:auto}.card .meta{margin-bottom:10px}
+.why-h{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:var(--accent)}
+.card.flagged .why-h{color:var(--gold)}
+.why table{font-size:12px;margin-top:4px}.why th,.why td{padding:4px 3px}.why th{font-size:10px}
+.why td:first-child{white-space:nowrap}
+.why td:first-child .logo{vertical-align:-4px;margin-right:2px}
 .small-hero{padding:24px 24px 20px}.small-hero h1{font-size:clamp(22px,4vw,32px)}
 .daynav{display:flex;justify-content:space-between;align-items:center;margin:16px 0 0;font-weight:700}
+.legend{margin:8px 0 0}
 ul.archive{list-style:none;margin:0;padding:0}ul.archive li{padding:8px 0;border-bottom:1px solid var(--line)}
 ul.archive li:last-child{border-bottom:none}
 """
@@ -435,7 +448,7 @@ Data from the 2020-21 season onward only (MoneyPuck, NHL API, DailyFaceoff, Acti
 <div><dt>OVER FLAG</dt><dd>Both teams past the cutoff and the line is 6 or 6.5. These are the picks that count in the record.</dd></div>
 <div><dt>Goalie badges</dt><dd>✓ Confirmed / Likely / Projected starter, from DailyFaceoff, refreshed every run. "Changed" = different from the starter the projection used.</dd></div>
 <div><dt>B2B</dt><dd>Team played yesterday: its projected scoring is cut ~8% and its opponent's raised ~6.5%.</dd></div>
-<div><dt>Breakdown</dt><dd>Each team's projection split into 5-on-5, power play, other situations, and the goalie / back-to-back adjustments.</dd></div>
+<div><dt>Breakdown</dt><dd>Each team's goals = (5-on-5 + power play + other situations) × opposing-goalie adjustment × back-to-back adjustment. A + goalie number means the opposing goalie has been below average.</dd></div>
 </dl></div></section>"""
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
     with open(OUT, "w") as f:

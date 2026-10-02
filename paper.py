@@ -30,6 +30,10 @@ COLS = ["date", "away", "home", "proj", "proj_away", "proj_home", "cutoff", "fla
 BREAKDOWN = [f"{s}_{c}" for s in ("away", "home") for c in ("ev", "pp", "oth", "gadj", "b2badj")]
 
 
+def was_flagged_now(v):
+    return str(v).strip().lower() in ("true", "1", "1.0")
+
+
 def log_games(rows):
     """Add today's games. A game already logged keeps its FIRST line, except that a game
     which wasn't flagged before but is flagged now gets flagged with the current line.
@@ -58,11 +62,13 @@ def log_games(rows):
             # always refresh: latest starters, back-to-backs (the bet itself never changes)
             for c in ("away_goalie_now", "home_goalie_now", "away_b2b", "home_b2b", "updated_at"):
                 old.loc[i, c] = r[c]
+            if not was_flagged_now(old.at[i, "flag"]):  # best book is informational until a game is flagged
+                for c in ("best_book", "best_total", "best_over", "best_under"):
+                    old.loc[i, c] = r[c]
             if pd.isna(old.at[i, "away_ev"]):  # rows logged before breakdowns existed
                 for c in BREAKDOWN:
                     old.loc[i, c] = r[c]
-            was_flagged = str(old.at[i, "flag"]).strip().lower() in ("true", "1", "1.0")
-            if r.flag and not was_flagged:  # newly qualifies: flag it at today's current line
+            if r.flag and not was_flagged_now(old.at[i, "flag"]):  # newly qualifies: flag it at today's current line
                 for c in ("proj", "proj_away", "proj_home", "p7", "away_goalie", "home_goalie",
                           "bet_total", "bet_over", "bet_under", "best_book", "best_total", "best_over", "best_under",
                           "flag", "flagged_at") + tuple(BREAKDOWN):
