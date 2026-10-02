@@ -2,15 +2,15 @@
 
 **Live dashboard:** https://prezbo8.github.io/nhl-total-model/
 
-## Daily (automatic, 11:00 AM and 5:00 PM)
-Settles yesterday's paper trades, projects today's games, logs them. Output -> daily.log, picks -> paper_trades.csv.
-Turn off: launchctl unload ~/Library/LaunchAgents/com.daniell.nhl.papertrade.plist
+## Daily (automatic, on GitHub Actions — nothing runs on a local machine)
+`.github/workflows/daily.yml` runs at 11 AM and 5 PM Eastern (15:00 / 21:00 UTC; an hour earlier after DST ends):
+settles yesterday's paper trades, projects today's games, logs them, rebuilds the dashboard, commits back to the repo.
+Run it now: Actions tab -> "Daily NHL run" -> Run workflow (or `gh workflow run daily.yml`). Run logs show the full output.
 
 ## Commands
     cd ~/nhl-totals-model
     python3 paper.py report           # paper trading record
     python3 model.py today [DATE]     # projections + OVER flags + best book (logs only for today's date)
-    tail -60 daily.log                # latest scheduled run
 
 ## The rule (frozen)
 OVER only, consensus line 6 or 6.5 (never 5.5), BOTH teams projected 2.95+ goals
@@ -34,7 +34,7 @@ flagged at the 11 AM run (depends on Dobes / Silovs starting).
 ## Setup on a new machine
     pip install pandas numpy
     python3 model.py today        # first run downloads MoneyPuck game data (~126 MB, not in the repo)
-Scheduled job: run_daily.sh via launchd (com.daniell.nhl.papertrade.plist, 11:00 + 17:00).
+Scheduled job: GitHub Actions (.github/workflows/daily.yml).
 
 ## Files
 model.py (daily command, original model, backtest) · split_model.py (5v5/PP model used daily) ·
