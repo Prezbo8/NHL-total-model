@@ -61,7 +61,7 @@ def adjustments(injured, season, team_games):
             if r["status"] == "Day-To-Day":
                 o["dtd"].append(r["name"])
             continue
-        cand = pt[pt.key == m.norm_name(r["name"])]
+        cand = pt[pt.playerId == r["id"]] if r.get("id") else pt[pt.key == m.norm_name(r["name"])]
         if len(cand) > 1:  # same name (two Sebastian Ahos): prefer the one on this team
             same = cand[(cand.team_cur == r["team"]) | (cand.team_last == r["team"]) | (cand.team == r["team"])]
             cand = same if len(same) else cand
@@ -75,12 +75,36 @@ def adjustments(injured, season, team_games):
         share = p.toi_pg / SKATER_SECONDS
         d_off = share * (p.f - players.REPLACEMENT[0]) * in_rating
         d_def = share * (players.REPLACEMENT[1] - p.a) * in_rating
+        if r.get("tag") == "scratch":
+            # a healthy scratch is replaced by a normal roster player, not a better one: only count
+            # the effect when a GOOD player sits (team scores less / allows more), never a boost
+            d_off, d_def = max(d_off, 0.0), max(d_def, 0.0)
         if abs(d_off) + abs(d_def) < 0.002:  # depth player / long gone: not worth listing
             continue
         o["off"] *= 1 - d_off
         o["def"] *= 1 + d_def
-        o["out"].append((r["name"], d_off, d_def))
+        o["out"].append((r["name"] + (f" ({r['tag']})" if r.get("tag") else ""), d_off, d_def))
     return out
+
+
+def merge_lineups(injured, lineup_outs):
+    """Add players missing from the projected lineup (lineups.outs) to ESPN's list, without duplicates.
+    Game-time decisions become day-to-day. Returns the merged list."""
+    merged = [dict(r) for r in injured]
+    have = {(r["team"], m.norm_name(r["name"])): r for r in merged}
+    for team, lu in lineup_outs.items():
+        for pid, name, reason in lu["missing"]:
+            r = have.get((team, m.norm_name(name)))
+            if r is not None:
+                if r["status"] == "Day-To-Day":  # day-to-day on ESPN but not in tonight's lineup: he's out
+                    r.update(status="Out", id=pid, tag="scratch", note="day-to-day, not in lineup")
+                continue  # otherwise ESPN already has him as out
+            merged.append({"team": team, "name": name, "id": pid, "status": "Out",
+                           "tag": "IR" if reason.startswith("IR") else "scratch", "pos": "", "ret": None, "note": reason})
+        for name in lu["gtd"]:
+            if (team, m.norm_name(name)) not in have:
+                merged.append({"team": team, "name": name, "status": "Day-To-Day", "pos": "", "ret": None, "note": "game-time decision"})
+    return merged
 
 
 def team_games_this_season(games, season):

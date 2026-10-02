@@ -299,6 +299,20 @@ def dailyfaceoff(day):
     return out
 
 
+def lineup_label(info):
+    """'Last game (Oct 1)' or 'Walt Ruff, 6:40 PM' - where the projected lineup came from and when."""
+    if not info:
+        return None
+    src = info["source"]
+    if src.lower().startswith("last game"):
+        return src.replace("Last Game", "last game's lineup")
+    try:
+        t = pd.Timestamp(info["updated"]).tz_convert("America/New_York").strftime("%b %-d %-I:%M %p")
+    except Exception:
+        t = ""
+    return f"{src} {t}".strip()
+
+
 HIGH_Q = 0.60  # "high-scoring" = team's projected goals in the top 40% of last season's team projections
 
 
@@ -355,11 +369,24 @@ def today(day=None):
             shop.setdefault(key, []).append((names.get(r["book"], str(r["book"])), r["total"], int(r["over"]), int(r["under"])))
     except Exception as e:
         print(f"(couldn't read sportsbook lines for line shopping: {e})")
-    try:  # skater injuries (ESPN): remove injured regulars, replace with replacement-level players
-        import injuries
-        inj = injuries.adjustments(injuries.fetch(), season, injuries.team_games_this_season(games, season))
+    import injuries
+    try:  # skater injuries (ESPN)
+        injured = injuries.fetch()
     except Exception as e:
-        print(f"(couldn't read injuries: {e}; projecting without injury adjustments)")
+        print(f"(couldn't read ESPN injuries: {e})")
+        injured = []
+    lineup_info = {}
+    try:  # projected lineups (DailyFaceoff) vs official NHL rosters: healthy scratches, late changes
+        import lineups
+        playing = [t["abbrev"] for g in todays for t in (g["homeTeam"], g["awayTeam"])]
+        lineup_info = lineups.outs(day, playing)
+        injured = injuries.merge_lineups(injured, lineup_info)
+    except Exception as e:
+        print(f"(couldn't check projected lineups: {e}; using injuries only)")
+    try:  # remove missing regulars, replace with replacement-level players
+        inj = injuries.adjustments(injured, season, injuries.team_games_this_season(games, season))
+    except Exception as e:
+        print(f"(couldn't compute injury adjustments: {e}; projecting without them)")
         inj = {}
     no_inj = {"off": 1.0, "def": 1.0, "out": [], "dtd": []}
     st = pd.read_csv(goalies.STARTS)
@@ -449,6 +476,7 @@ def today(day=None):
                          "away_out": "; ".join(f"{n}|{o:.4f}|{d:.4f}" for n, o, d in ia["out"]) or None,
                          "home_out": "; ".join(f"{n}|{o:.4f}|{d:.4f}" for n, o, d in ih["out"]) or None,
                          "away_dtd": ", ".join(ia["dtd"]) or None, "home_dtd": ", ".join(ih["dtd"]) or None,
+                         "away_lineup": lineup_label(lineup_info.get(a)), "home_lineup": lineup_label(lineup_info.get(h)),
                          **{f"{s}_{c}": round(v, 4) for s in ("away", "home") for c, v in det[s].items()}})
     print("\n(goalie % = share of expected goals stopped beyond average; higher = better)")
     print("OVER FLAG = both teams high-scoring (marked +) and the line is 6 or 6.5. Overs only, never 5.5.")

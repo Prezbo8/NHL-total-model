@@ -46,6 +46,7 @@ TIPS = {
     "Likely": "Starter expected but not confirmed yet (DailyFaceoff).",
     "Projected": "Starter not announced yet: DailyFaceoff's guess, or this team's usual recent starter.",
     "OVER FLAG": "The model's pick: both teams projected high-scoring and the line is 6 or 6.5. Bet the OVER at the 'Best over' book. These are the picks that count in the record.",
+    "Lineups": "Projected lineup source (DailyFaceoff line combinations, checked against the official NHL roster). A reporter name = tonight's lineup; 'last game's lineup' = not updated for tonight yet. Regulars missing from the lineup are treated as out (scratch).",
     "B2B tag": "Played yesterday: the model cuts this team's scoring ~8% and raises its opponent's ~6.5%.",
 }
 
@@ -150,7 +151,7 @@ def injury_html(out, dtd):
         full.append(f"{name}: team scoring {-d_off * 100:+.1f}%, opponent scoring {d_def * 100:+.1f}%")
     if isinstance(dtd, str) and dtd:
         full.append(f"Day-to-day (usually plays, not adjusted): {dtd}")
-    text = ("Out = injured / suspended, already taken out of the projection. GF = his team's goals, GA = goals against. "
+    text = ("Out = injured, suspended or not in tonight's projected lineup (scratch), already taken out of the projection. GF = his team's goals, GA = goals against. "
             + " | ".join(full))
     return f"<div class='tip injwrap' tabindex='0' data-tip='{e(text)}'><div class='injuries'>{' '.join(parts)}</div></div>"
 
@@ -185,7 +186,16 @@ def breakdown(r, flagged):
       <table><thead><tr><th>{tip('Team', cls='tl')}</th><th class='num'>{tip('5v5')}</th><th class='num'>{tip('PP')}</th>
       <th class='num'>{tip('Oth')}</th><th class='num'>{tip('Gl')}</th><th class='num'>{tip('B2B')}</th>
       <th class='num'>{tip('Inj')}</th><th class='num'>{tip('Proj', cls='tr')}</th></tr></thead>
-      <tbody>{row('away', r.away, r.proj_away)}{row('home', r.home, r.proj_home)}</tbody></table></div>"""
+      <tbody>{row('away', r.away, r.proj_away)}{row('home', r.home, r.proj_home)}</tbody></table>{lineup_note(r)}</div>"""
+
+
+def lineup_note(r):
+    """Where each team's projected lineup came from (DailyFaceoff), so stale ones are obvious."""
+    parts = [f"{e(t)}: {e(src)}" for t, src in ((r.away, getattr(r, "away_lineup", None)), (r.home, getattr(r, "home_lineup", None)))
+             if isinstance(src, str) and src]
+    if not parts:
+        return ""
+    return (f"<div class='lineup-src'>{tip('Lineups', TIPS['Lineups'], 'tl')}: {' · '.join(parts)}</div>")
 
 
 def game_card(r):
@@ -472,6 +482,7 @@ footer{margin-top:32px;font-size:13px;color:var(--muted)}a{color:var(--accent)}
 .small-hero{padding:24px 24px 20px}.small-hero h1{font-size:clamp(22px,4vw,32px)}
 .daynav{display:flex;justify-content:space-between;align-items:center;margin:16px 0 0;font-weight:700}
 .legend{margin:8px 0 0}
+.lineup-src{margin-top:6px;font-size:11px;color:var(--muted);line-height:1.35}
 .tip{position:relative;cursor:help;border-bottom:1px dotted currentColor;outline:none}
 .tip::after{content:attr(data-tip);position:absolute;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%);
   width:max-content;max-width:250px;white-space:normal;text-transform:none;letter-spacing:0;font-size:12px;font-weight:500;
@@ -529,7 +540,7 @@ Data from the 2020-21 season onward only (MoneyPuck, NHL API, DailyFaceoff, Acti
 <div><dt>OVER FLAG</dt><dd>Both teams past the cutoff and the line is 6 or 6.5. These are the picks that count in the record.</dd></div>
 <div><dt>Goalie badges</dt><dd>✓ Confirmed / Likely / Projected starter, from DailyFaceoff, refreshed every run (every 2 hours). "Changed" = different from the starter the projection used.</dd></div>
 <div><dt>B2B</dt><dd>Team played yesterday: its projected scoring is cut ~8% and its opponent's raised ~6.5%.</dd></div>
-<div><dt>Injuries</dt><dd>From ESPN's injury list. Players who are Out, on IR or suspended are replaced by a replacement-level skater. GF = change to his team's scoring, GA = change to goals against (shown for whichever is bigger; hover for both). Day-to-day players are shown but not adjusted.</dd></div>
+<div><dt>Injuries &amp; lineups</dt><dd>ESPN's injury list plus DailyFaceoff's projected lineups checked against the official NHL roster. Players who are out, on IR, suspended, or missing from tonight's lineup (scratch) are replaced by a replacement-level skater. GF = change to his team's scoring, GA = change to goals against (shown for whichever is bigger; hover for both). Day-to-day players are shown but not adjusted.</dd></div>
 <div><dt>Breakdown</dt><dd>Each team's goals = (5-on-5 + power play + other situations) × opposing-goalie adjustment × back-to-back adjustment. A + goalie number means the opposing goalie has been below average.</dd></div>
 </dl></div></section>"""
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
