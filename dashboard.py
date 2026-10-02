@@ -13,9 +13,9 @@ import paper
 OUT = "docs/index.html"
 
 # backtest numbers (strict 2020-21+ data, frozen rule) from history.py / compare.py, Oct 2 2026
-BACKTEST = [  # season, open bets, open ROI, close bets, close ROI
-    ("2021-22", 341, 3.2, 352, 4.4), ("2022-23", None, None, 238, 1.7), ("2023-24", 12, 6.5, 18, -5.7),
-    ("2024-25", 47, 12.9, 47, 16.3), ("2025-26", 136, 7.8, 150, 3.6),
+BACKTEST = [  # season, open bets, open ROI, close bets, close ROI  (calibrated goalies, G_SHRINK=200; Oct 2 2026)
+    ("2021-22", 428, -1.8, 434, 0.2), ("2022-23", None, None, 256, 4.5), ("2023-24", 11, 1.1, 19, -10.6),
+    ("2024-25", 44, 6.6, 44, 10.4), ("2025-26", 137, 5.7, 150, 3.5),
 ]
 
 from teams import TEAMS  # noqa: E402
@@ -312,12 +312,13 @@ def backtest():
                    for s, ob, oroi, cb, croi in BACKTEST)
     return f"""<div class='scroll'><table><thead><tr><th>Season</th><th>Bets at open</th><th>ROI at open</th>
       <th>Bets at close</th><th>ROI at close</th></tr></thead>
-      <tbody>{rows}<tr class='total'><td>2021–26</td><td class='num'>536</td><td class='num pos'>+5.3%</td>
-      <td class='num'>805</td><td class='num pos'>+3.9%</td></tr></tbody></table></div>
+      <tbody>{rows}<tr class='total'><td>2021–26</td><td class='num'>620</td><td class='num pos'>+0.5%</td>
+      <td class='num'>903</td><td class='num pos'>+2.3%</td></tr></tbody></table></div>
       <ul class='notes'>
         <li><b>Open</b> = betting the first line books post; <b>close</b> = the final line before puck drop. Counts differ
             because lines move into or out of 6 / 6.5 during the day.</li>
-        <li>~55% wins; uncertainty about ±3–4% ROI. Line shopping added about <b>+2.2 pts</b> on the same picks.</li>
+        <li>53–55% wins; uncertainty about ±3–4% ROI, so the past edge is small and not proven. Line shopping added about
+            <b>+2.2 pts</b> on the same picks. Goalie ratings are calibrated to match how goalies actually play.</li>
         <li>No 2022-23 opening lines in the data. With pre-2020 data the same rule was about break-even (2016–21).</li>
       </ul>"""
 

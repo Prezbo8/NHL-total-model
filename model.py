@@ -27,7 +27,7 @@ DATA_URL = "https://moneypuck.com/moneypuck/playerData/careers/gameByGame/all_te
 K = 15          # games of "last season" weight before this season's games take over
 W_GOALS = 0.5   # offense/defense metric = W_GOALS*goals + (1-W_GOALS)*xG
 REGRESS = 0.33  # pull last season's rating this far back to league average
-G_SHRINK = 60   # xG faced before a goalie's own record counts as much as "average goalie"
+G_SHRINK = 200  # xG faced before a goalie's own record counts as much as "average goalie" (calibrated: ratings match actual play)
 G_DECAY = 0.7   # how much of a goalie's past seasons carries into the next one
 # back-to-backs (team played yesterday), measured on 2022-24 seasons vs projections
 B2B_TIRED = 0.92     # tired team scores ~8% fewer goals than projected
@@ -453,8 +453,8 @@ def today(day=None):
     print("\n(goalie % = share of expected goals stopped beyond average; higher = better)")
     print("OVER FLAG = both teams high-scoring (marked +) and the line is 6 or 6.5. Overs only, never 5.5.")
     print("Always bet the 'best over' book: line shopping added ~+2 pts ROI in the backtest.")
-    print("Model uses 2020-21 onward only. Tested 2021-26: +5.3% ROI at open, +3.9% at close, ~55% wins"
-          " (break-even in 2016-21 with older data). Not yet proven live.")
+    print("Model uses 2020-21 onward only. Tested 2021-26: +0.5% ROI at open, +2.3% at close, 53-55% wins"
+          " (+2 pts more with line shopping). Small, unproven edge: judge it on live paper trading.")
     print("\nTODAY'S FLAGS: " + ("; ".join(flagged) if flagged else "none"))
     if day == date.today().isoformat():  # never log past dates: that would be hindsight
         import paper

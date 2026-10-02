@@ -22,10 +22,9 @@ P(7+) = model's chance the game has 7+ total goals (wins over 6.5 and over 6; 6 
 team xG + goals, PP/PK + penalties drawn/taken, starting goalie GSAx, back-to-backs.
 Player ratings built (players.py) but OFF (roster_w = 0) — didn't help the rule.
 
-## Grade: 86% (B)
-Backtest 2021-26 (2020+ data): +5.3% ROI at open, +3.9% at close, ~55% wins; line shopping ~+2 pts more.
-Caveat: same rule was break-even 2016-21 with older data. Judge live after 50-75 flagged picks
-(~mid/late November). A- if ~55%+ wins and lines move toward the over; C if ~50%.
+## Backtest (2021-26, 2020+ data, calibrated goalies)
++0.5% ROI at open (620 bets), +2.3% at close (903 bets), 53-55% wins; line shopping ~+2 pts more.
+Small and unproven: the live paper-trading record decides.
 
 ## Watch
 Oct 3: MTL @ PIT flagged (over, best book BetMGM o6 -105 at 2:40 AM) — first paper trade if still
