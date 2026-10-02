@@ -426,9 +426,9 @@ def build():
     body = f"""
 <header class="hero"><h1>NHL Total Model</h1></header>
 
-<section><h2>Yesterday's results</h2>{yesterday(d)}</section>
-
 <section><h2>Today's slate</h2>{slate(d)}</section>
+
+<section><h2>Yesterday's results</h2>{yesterday(d)}</section>
 
 <section><h2>Paper trading record</h2>{record(d)}</section>
 
