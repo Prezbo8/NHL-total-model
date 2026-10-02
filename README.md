@@ -1,0 +1,40 @@
+# NHL Total Model
+
+## Daily (automatic, 11:00 AM and 5:00 PM)
+Settles yesterday's paper trades, projects today's games, logs them. Output -> daily.log, picks -> paper_trades.csv.
+Turn off: launchctl unload ~/Library/LaunchAgents/com.daniell.nhl.papertrade.plist
+
+## Commands
+    cd ~/nhl-totals-model
+    python3 paper.py report           # paper trading record
+    python3 model.py today [DATE]     # projections + OVER flags + best book (logs only for today's date)
+    tail -60 daily.log                # latest scheduled run
+
+## The rule (frozen)
+OVER only, consensus line 6 or 6.5 (never 5.5), BOTH teams projected 2.95+ goals
+(top 40% of last season's team projections). Bet it at the "best over" book.
+P(7+) = model's chance the game has 7+ total goals (wins over 6.5 and over 6; 6 goals pushes an over 6).
+
+## Model
+5v5 / power-play split (split_model.py), 2020-21 onward data only (FIRST_SEASON = 2020):
+team xG + goals, PP/PK + penalties drawn/taken, starting goalie GSAx, back-to-backs.
+Player ratings built (players.py) but OFF (roster_w = 0) — didn't help the rule.
+
+## Grade: 86% (B)
+Backtest 2021-26 (2020+ data): +5.3% ROI at open, +3.9% at close, ~55% wins; line shopping ~+2 pts more.
+Caveat: same rule was break-even 2016-21 with older data. Judge live after 50-75 flagged picks
+(~mid/late November). A- if ~55%+ wins and lines move toward the over; C if ~50%.
+
+## Watch
+Oct 3: MTL @ PIT flagged (over, best book BetMGM o6 -105 at 2:40 AM) — first paper trade if still
+flagged at the 11 AM run (depends on Dobes / Silovs starting).
+
+## Setup on a new machine
+    pip install pandas numpy
+    python3 model.py today        # first run downloads MoneyPuck game data (~126 MB, not in the repo)
+Scheduled job: run_daily.sh via launchd (com.daniell.nhl.papertrade.plist, 11:00 + 17:00).
+
+## Files
+model.py (daily command, original model, backtest) · split_model.py (5v5/PP model used daily) ·
+goalies.py · players.py · paper.py (paper trading log) · odds.py / books.py / sbr.py (line data) ·
+grade.py / compare.py / history.py (tests vs real lines) · *.csv (downloaded data + paper_trades.csv)

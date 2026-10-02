@@ -1,0 +1,6 @@
+date,away,home,proj,proj_away,proj_home,cutoff,flag,p7,away_goalie,home_goalie,open_total,open_over,bet_total,bet_over,bet_under,best_book,best_total,best_over,best_under,logged_at,flagged_at,close_total,close_over,close_under,away_score,home_score,final_total,result,profit,clv,result_best,profit_best
+2026-10-02,NYR,DET,5.277,2.529,2.747,2.954,False,0.3987,Igor Shesterkin (Unconfirmed),John Gibson (Unconfirmed),6.0,-110,5.5,-135,114,,,,,2026-10-02 01:57,,,,,,,,,,,,
+2026-10-02,WSH,CAR,5.713,2.835,2.878,2.954,False,0.4378,Logan Thompson (Confirmed),Pyotr Kochetkov (Unconfirmed),6.5,107,6.5,104,-125,,,,,2026-10-02 01:57,,,,,,,,,,,,
+2026-10-02,BOS,WPG,5.707,3.004,2.704,2.954,False,0.4372,Jeremy Swayman (Unconfirmed),Stuart Skinner (Unconfirmed),5.5,-125,5.5,-125,105,,,,,2026-10-02 01:57,,,,,,,,,,,,
+2026-10-02,STL,DAL,5.559,2.683,2.876,2.954,False,0.4238,Joel Hofer (Unconfirmed),Jake Oettinger (Unconfirmed),5.5,-120,5.5,-136,113,,,,,2026-10-02 01:57,,,,,,,,,,,,
+2026-10-02,ANA,VGK,6.074,2.844,3.23,2.954,False,0.4707,Lukas Dostal (Unconfirmed),Carter Hart (Unconfirmed),6.5,-109,6.5,-120,-100,,,,,2026-10-02 01:57,,,,,,,,,,,,
