@@ -61,10 +61,10 @@ def report(d, label):
     y = (dec.result == 1).values.astype(float)
     ll = lambda p: -np.mean(y * np.log(p) + (1 - y) * np.log(1 - p))
     print(f"\n=== {label}: {len(d)} games with a closing line ({(d.result == 0).sum()} pushes) ===")
-    print(f"  lines: " + ", ".join(f"{k}: {v:.0%}" for k, v in d.line.value_counts(normalize=True).sort_index().items()))
+    print("  lines: " + ", ".join(f"{k}: {v:.0%}" for k, v in d.line.value_counts(normalize=True).sort_index().items()))
     print(f"  log loss on over/under (lower = better):  market {ll(dec.mkt_over.values):.4f}   model {ll(dec.m_over_np.values):.4f}")
     print(f"  correlation of model vs market over-probability: {np.corrcoef(d.m_over_np, d.mkt_over)[0, 1]:.2f}")
-    print(f"  betting the side the model likes vs the vig-free market, at the actual closing price:")
+    print("  betting the side the model likes vs the vig-free market, at the actual closing price:")
     for edge in (0.0, 0.02, 0.04, 0.06, 0.08):
         side, prof, won = bets(d, edge)
         if len(prof):
@@ -82,7 +82,7 @@ def main():
     test = d[d.season >= 2024]
     report(test, "2024-25 + 2025-26 (unseen test seasons)")
     # does the model add anything the market doesn't already know?
-    tr, te = d[(d.season <= 2023) & (d.result != 0)], test[test.result != 0]
+    tr = d[(d.season <= 2023) & (d.result != 0)]
     lg = lambda p: np.log(p / (1 - p))
     beta = m.logit_fit(np.column_stack([lg(tr.mkt_over), lg(tr.m_over_np)]), (tr.result == 1).values.astype(float))
     print(f"\n  blend fit on 2022-24: logit(P over) = {beta[0]:+.3f} + {beta[1]:.2f}*market + {beta[2]:.2f}*model"
