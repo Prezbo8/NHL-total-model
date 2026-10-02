@@ -47,7 +47,7 @@ def backfill(day):
     rows = []
     for g in sched:
         h, a = g["homeTeam"]["abbrev"], g["awayTeam"]["abbrev"]
-        cn = lambda t: t.get("commonName", {}).get("default", "~~")
+        cn = lambda t: (t.get("commonName") or t.get("name") or {}).get("default", "~~")
         def starter(team):
             k = next((k for k in dfo if k.endswith(cn(team))), None)
             name, status = dfo.get(k, (None, None))
