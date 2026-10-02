@@ -1,5 +1,7 @@
 # NHL Total Model
 
+**Live dashboard:** https://prezbo8.github.io/nhl-total-model/
+
 ## Daily (automatic, 11:00 AM and 5:00 PM)
 Settles yesterday's paper trades, projects today's games, logs them. Output -> daily.log, picks -> paper_trades.csv.
 Turn off: launchctl unload ~/Library/LaunchAgents/com.daniell.nhl.papertrade.plist
@@ -37,4 +39,4 @@ Scheduled job: run_daily.sh via launchd (com.daniell.nhl.papertrade.plist, 11:00
 ## Files
 model.py (daily command, original model, backtest) · split_model.py (5v5/PP model used daily) ·
 goalies.py · players.py · paper.py (paper trading log) · odds.py / books.py / sbr.py (line data) ·
-grade.py / compare.py / history.py (tests vs real lines) · *.csv (downloaded data + paper_trades.csv)
+grade.py / compare.py / history.py (tests vs real lines) · dashboard.py (builds docs/index.html) · *.csv (downloaded data + paper_trades.csv)

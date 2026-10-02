@@ -73,10 +73,35 @@ def fetch(url):
     return urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
 
 
+def refresh_data(tries=3):
+    """Download MoneyPuck's game file to a temp file and swap it in only if it looks complete,
+    so a dropped connection can never wipe the existing data."""
+    import os
+    import time
+    tmp = DATA + ".part"
+    for i in range(tries):
+        try:
+            with urllib.request.urlopen(fetch(DATA_URL), timeout=300) as f, open(tmp, "wb") as out:
+                while chunk := f.read(1 << 20):
+                    out.write(chunk)
+            with open(tmp) as f:
+                ok = f.readline().startswith("team,season") and os.path.getsize(tmp) > 50_000_000
+            if ok:
+                os.replace(tmp, DATA)
+                return True
+            print(f"(MoneyPuck download looked incomplete, attempt {i + 1}/{tries})")
+        except Exception as e:
+            print(f"(MoneyPuck download failed, attempt {i + 1}/{tries}: {e})")
+        time.sleep(30 * (i + 1))
+    if os.path.exists(tmp):
+        os.remove(tmp)
+    print("(using the previously downloaded MoneyPuck data)")
+    return False
+
+
 def load_games(refresh=False, xg="xGoals"):
     if refresh:
-        with urllib.request.urlopen(fetch(DATA_URL)) as f, open(DATA, "wb") as out:
-            out.write(f.read())
+        refresh_data()
     d = pd.read_csv(DATA, usecols=["season", "gameId", "playerTeam", "opposingTeam", "home_or_away",
                                    "gameDate", "situation", "goalsFor", "goalsAgainst",
                                    f"{xg}For", f"{xg}Against", "playoffGame"])

@@ -7,9 +7,11 @@ PY="$HOME/venv_mlb/bin/python3"
   "$PY" paper.py settle
   "$PY" model.py today 2>&1 | tr '\r' '\n' | grep -v '^  goalie [0-9]'
   "$PY" paper.py report
+  "$PY" dashboard.py   # rebuild docs/index.html (GitHub Pages)
   # push the updated paper-trade record (and refreshed data files) to GitHub
   GIT=/opt/homebrew/bin/git
   "$GIT" add -u
+  "$GIT" add docs/index.html
   if ! "$GIT" diff --cached --quiet; then
     "$GIT" commit -q -m "daily update $(date '+%Y-%m-%d %H:%M')" && "$GIT" push -q && echo "pushed to GitHub"
   else

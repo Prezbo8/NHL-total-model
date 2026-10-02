@@ -4,3 +4,4 @@ daily.log
 launchd.err
 __pycache__/
 .DS_Store
+moneypuck_games.csv.part

@@ -1,0 +1,107 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>NHL Total Model</title><style>
+:root{--bg:#f7f7f5;--card:#fff;--ink:#1d1d1f;--muted:#6b6b70;--line:#e3e3e0;--accent:#1f6feb;--flag:#b8860b;--flagbg:#fff6dc;--pos:#1a7f37;--neg:#c62828}
+@media (prefers-color-scheme:dark){:root{--bg:#111214;--card:#1a1b1e;--ink:#ececee;--muted:#9a9aa2;--line:#2c2d31;--accent:#58a6ff;--flag:#e3b341;--flagbg:#2a2310;--pos:#3fb950;--neg:#f85149;color-scheme:dark}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+.wrap{max-width:1100px;margin:0 auto;padding:24px 16px 64px}
+header h1{margin:0;font-size:28px}header p{margin:4px 0 0;color:var(--muted)}
+section{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:20px;margin-top:20px}
+h2{margin:0 0 12px;font-size:19px}.muted{color:var(--muted)}.small{font-size:13px}
+.scroll{overflow-x:auto}table{border-collapse:collapse;width:100%;font-size:14px}
+th,td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top;white-space:nowrap}
+th{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);font-weight:600}
+td.small{white-space:normal;min-width:180px}.num{text-align:right;font-variant-numeric:tabular-nums}
+tr.flagged td{background:var(--flagbg)}tr.total td{font-weight:700}
+.flag{display:inline-block;background:var(--flag);color:#fff;font-size:11px;font-weight:700;padding:2px 6px;border-radius:4px;margin-left:6px}
+.hi{color:var(--accent);font-weight:700}.pos{color:var(--pos)}.neg{color:var(--neg)}
+.res.W{color:var(--pos);font-weight:700}.res.L{color:var(--neg);font-weight:700}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:16px}
+.tile{border:1px solid var(--line);border-radius:10px;padding:12px}.tile .label{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.big{font-size:28px;font-weight:700;font-variant-numeric:tabular-nums}
+.rule{border-left:4px solid var(--flag);padding:8px 14px;background:var(--flagbg);border-radius:6px}
+.gradebox{display:flex;align-items:baseline;gap:14px;margin-bottom:12px}.gradebox .big{font-size:44px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:20px}@media (max-width:760px){.grid2{grid-template-columns:1fr}}
+.grid2 section{margin-top:0}ul.notes{margin:12px 0 0;padding-left:20px;color:var(--muted)}dt{font-weight:700;margin-top:10px}dd{margin:2px 0 0;color:var(--muted)}
+</style></head>
+<body><div class="wrap">
+<header><h1>NHL Total Model</h1><p>Over/under projections, OVER flags and live paper trading · updated Oct 02, 2026 12:24 PM</p></header>
+
+<section><h2>The rule</h2><div class="rule"><b>OVER only</b>, consensus line <b>6 or 6.5</b> (never 5.5), and <b>both teams</b> projected
+as high-scoring (top 40% of last season's team projections). Bet it at the <b>best over</b> book.</div></section>
+
+<section><h2>Latest slate</h2><p class='muted'>2026-10-02 · high-scoring = projected <b>2.95+</b> goals (marked <span class='hi'>+</span>) ·
+      logged 2026-10-02 01:57</p>
+      <div class='scroll'><table><thead><tr><th>Game</th><th>Proj</th><th>Away / home</th><th>P(7+)</th>
+      <th>Open → logged line</th><th>Best over 6/6.5</th><th>Starters (away / home)</th><th>Final</th></tr></thead>
+      <tbody><tr class=''>
+          <td><b>ANA @ VGK</b> </td>
+          <td class='num'>6.07</td>
+          <td class='num'>2.84 / 3.23<span class='hi'>+</span></td>
+          <td class='num'>47.1%</td>
+          <td class='num'>6.5 → 6.5 <span class='muted'>o-120</span></td>
+          <td>–</td>
+          <td class='small'>Lukas Dostal (Unconfirmed)<br>Carter Hart (Unconfirmed)</td>
+          <td class='num'><span class='muted'>pending</span></td></tr><tr class=''>
+          <td><b>WSH @ CAR</b> </td>
+          <td class='num'>5.71</td>
+          <td class='num'>2.83 / 2.88</td>
+          <td class='num'>43.8%</td>
+          <td class='num'>6.5 → 6.5 <span class='muted'>o+104</span></td>
+          <td>–</td>
+          <td class='small'>Logan Thompson (Confirmed)<br>Pyotr Kochetkov (Unconfirmed)</td>
+          <td class='num'><span class='muted'>pending</span></td></tr><tr class=''>
+          <td><b>BOS @ WPG</b> </td>
+          <td class='num'>5.71</td>
+          <td class='num'>3.00<span class='hi'>+</span> / 2.70</td>
+          <td class='num'>43.7%</td>
+          <td class='num'>5.5 → 5.5 <span class='muted'>o-125</span></td>
+          <td>–</td>
+          <td class='small'>Jeremy Swayman (Unconfirmed)<br>Stuart Skinner (Unconfirmed)</td>
+          <td class='num'><span class='muted'>pending</span></td></tr><tr class=''>
+          <td><b>STL @ DAL</b> </td>
+          <td class='num'>5.56</td>
+          <td class='num'>2.68 / 2.88</td>
+          <td class='num'>42.4%</td>
+          <td class='num'>5.5 → 5.5 <span class='muted'>o-136</span></td>
+          <td>–</td>
+          <td class='small'>Joel Hofer (Unconfirmed)<br>Jake Oettinger (Unconfirmed)</td>
+          <td class='num'><span class='muted'>pending</span></td></tr><tr class=''>
+          <td><b>NYR @ DET</b> </td>
+          <td class='num'>5.28</td>
+          <td class='num'>2.53 / 2.75</td>
+          <td class='num'>39.9%</td>
+          <td class='num'>6 → 5.5 <span class='muted'>o-135</span></td>
+          <td>–</td>
+          <td class='small'>Igor Shesterkin (Unconfirmed)<br>John Gibson (Unconfirmed)</td>
+          <td class='num'><span class='muted'>pending</span></td></tr></tbody></table></div></section>
+
+<section><h2>Paper trading record</h2><div class='tiles'><div class='tile'><div class='label'>Flagged picks</div><div class='big'>0</div><div class='muted'>0 settled</div></div><div class='tile'><div class='label'>Record</div><div class='big'>–</div><div class='muted'>no results yet</div></div><div class='tile'><div class='label'>ROI (consensus)</div><div class='big'>–</div><div class='muted'></div></div><div class='tile'><div class='label'>ROI (best book)</div><div class='big'>–</div><div class='muted'></div></div><div class='tile'><div class='label'>Line moved our way</div><div class='big'>–</div><div class='muted'>of 0 · target 70%+</div></div></div><p class='muted'>No flagged picks have settled yet. Judge the rule after 50–75 flagged picks, not before.</p></section>
+
+<div class="grid2" style="margin-top:20px">
+<section><h2>Backtest: frozen rule, 2020+ data only</h2><div class='scroll'><table><thead><tr><th>Season</th><th>Open bets</th><th>Open ROI</th><th>Close bets</th><th>Close ROI</th></tr></thead>
+      <tbody><tr><td>2021-22</td><td class='num'>341</td><td class='num pos'>+3.2%</td><td class='num'>352</td><td class='num pos'>+4.4%</td></tr><tr><td>2022-23</td><td class='num'>–</td><td class='num '>–</td><td class='num'>238</td><td class='num pos'>+1.7%</td></tr><tr><td>2023-24</td><td class='num'>12</td><td class='num pos'>+6.5%</td><td class='num'>18</td><td class='num neg'>-5.7%</td></tr><tr><td>2024-25</td><td class='num'>47</td><td class='num pos'>+12.9%</td><td class='num'>47</td><td class='num pos'>+16.3%</td></tr><tr><td>2025-26</td><td class='num'>136</td><td class='num pos'>+7.8%</td><td class='num'>150</td><td class='num pos'>+3.6%</td></tr><tr class='total'><td>2021–26</td><td class='num'>536</td><td class='num pos'>+5.3%</td><td class='num'>805</td><td class='num pos'>+3.9%</td></tr></tbody></table></div>
+      <ul class='notes'>
+        <li>~55% wins. Uncertainty is about ±3–4% ROI, so the edge is real-looking but not proven.</li>
+        <li>Line shopping (best of DraftKings / FanDuel / BetRivers / BetMGM) added about <b>+2.2 pts</b> ROI on the same picks.</li>
+        <li>Caveat: with pre-2020 data the same rule was about break-even in 2016–21 (−0.8% open, +0.3% close).</li>
+        <li>No 2022-23 opening lines in the data; seasons with few bets (2023-24) are noisy.</li>
+      </ul></section>
+<section><h2>Grade</h2><div class='gradebox'><div class='big'>84%</div><div>B · not yet proven live</div></div>
+      <div class='scroll'><table><thead><tr><th>Part</th><th>Weight</th><th>Score</th></tr></thead><tbody><tr><td>Backtest results (2020+, with line shopping)</td><td class='num'>30%</td><td class='num'>89%</td></tr><tr><td>Beats the market</td><td class='num'>25%</td><td class='num'>88%</td></tr><tr><td>Stats and method</td><td class='num'>15%</td><td class='num'>94%</td></tr><tr><td>How trustworthy the edge is</td><td class='num'>20%</td><td class='num'>70%</td></tr><tr><td>Live proof</td><td class='num'>10%</td><td class='num'>70%</td></tr></tbody></table></div>
+      <p class='muted'>A- if 50–75 live flagged picks win ~55%+ with lines moving toward the over; about 75% if they run near 50%.</p></section>
+</div>
+
+<section><h2>How it works</h2>
+<p>Each team's goals are projected separately for <b>5-on-5</b> (expected goals + actual goals for/against per 60) and the
+<b>power play</b> (PP and PK efficiency × penalties drawn and taken), plus other situations. The opposing
+<b>starting goalie's</b> goals saved above expected scales goals allowed, and <b>back-to-backs</b> cut the tired team's scoring ~8%
+(opponent +6.5%). Uses only data from the 2020-21 season onward (MoneyPuck, NHL API, DailyFaceoff, Action Network).</p>
+<dl>
+<dt>P(7+)</dt><dd>Model's chance the game has 7 or more goals: wins an over 6.5 and an over 6 (exactly 6 pushes an over 6). The NHL average is about 45%.</dd>
+<dt>Proj</dt><dd>Projected total goals (away + home).</dd>
+<dt>Best over 6/6.5</dt><dd>The best-value over at 6 or 6.5 across DraftKings, FanDuel, BetRivers and BetMGM.</dd>
+<dt>Line moved our way</dt><dd>Whether the closing line moved toward the over after the pick: the best early sign of a real edge.</dd>
+</dl></section>
+
+<p class="muted small">Paper trading only, not betting advice. Source: <a href="https://github.com/Prezbo8/nhl-total-model">github.com/Prezbo8/nhl-total-model</a></p>
+</div></body></html>
