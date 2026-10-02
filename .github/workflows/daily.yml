@@ -1,10 +1,12 @@
 name: Daily NHL run
 
-# 15:00 and 21:00 UTC = 11 AM and 5 PM Eastern (EDT); 10 AM / 4 PM after DST ends.
+# Every 2 hours from 11 AM to 9 PM Eastern, all year.
+# GitHub schedules in UTC only, so both sets are listed and the "gate" step runs whichever matches
+# today's Eastern offset (summer EDT = UTC-4, winter EST = UTC-5) and skips the other.
 on:
   schedule:
-    - cron: "0 15 * * *"
-    - cron: "0 21 * * *"
+    - cron: "0 15,17,19,21,23,1 * * *"   # EDT: 11a 1p 3p 5p 7p 9p
+    - cron: "0 16,18,20,22,0,2 * * *"    # EST: 11a 1p 3p 5p 7p 9p
   workflow_dispatch: {}
 
 permissions:
@@ -22,34 +24,46 @@ jobs:
     env:
       TZ: America/New_York   # "today" means today in Eastern time
     steps:
+      - name: Gate (run only the schedule that matches Eastern time today)
+        id: gate
+        run: |
+          if [ "${{ github.event_name }}" != "schedule" ]; then echo "run=true" >> "$GITHUB_OUTPUT"; exit 0; fi
+          if [ "$(date +%Z)" = "EDT" ]; then want="0 15,17,19,21,23,1 * * *"; else want="0 16,18,20,22,0,2 * * *"; fi
+          if [ "${{ github.event.schedule }}" = "$want" ]; then echo "run=true" >> "$GITHUB_OUTPUT"
+          else echo "run=false" >> "$GITHUB_OUTPUT"; echo "other daylight-saving slot: skipping"; fi
+
       - uses: actions/checkout@v4
+        if: steps.gate.outputs.run == 'true'
 
       - uses: actions/setup-python@v5
+        if: steps.gate.outputs.run == 'true'
         with:
           python-version: "3.13"
 
       - name: Install
+        if: steps.gate.outputs.run == 'true'
         run: pip install "pandas==2.2.3" "numpy==2.2.6"   # same versions the code is tested with
 
       # each step runs even if an earlier one failed (e.g. settling hits an API outage),
       # so today's projections and the dashboard still get made; the run still shows red
       - name: Settle yesterday's paper trades
+        if: steps.gate.outputs.run == 'true'
         run: python paper.py settle
 
       - name: Project today's games, flag, log
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && steps.gate.outputs.run == 'true' }}
         run: python model.py today
 
       - name: Report
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && steps.gate.outputs.run == 'true' }}
         run: python paper.py report
 
       - name: Rebuild dashboard
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && steps.gate.outputs.run == 'true' }}
         run: python dashboard.py
 
       - name: Commit and push results
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && steps.gate.outputs.run == 'true' }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898299+github-actions[bot]@users.noreply.github.com"
@@ -64,7 +78,7 @@ jobs:
           fi
 
       - name: Rebuild GitHub Pages
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && steps.gate.outputs.run == 'true' }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh api -X POST "repos/${{ github.repository }}/pages/builds" || echo "pages build request failed (site may still update on its own)"

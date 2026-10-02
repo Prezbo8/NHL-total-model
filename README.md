@@ -3,7 +3,7 @@
 **Live dashboard:** https://prezbo8.github.io/nhl-total-model/
 
 ## Daily (automatic, on GitHub Actions — nothing runs on a local machine)
-`.github/workflows/daily.yml` runs at 11 AM and 5 PM Eastern (15:00 / 21:00 UTC; an hour earlier after DST ends):
+`.github/workflows/daily.yml` runs every 2 hours from 11 AM to 9 PM Eastern, all year (daylight saving handled):
 settles yesterday's paper trades, projects today's games, logs them, rebuilds the dashboard, commits back to the repo.
 Run it now: Actions tab -> "Daily NHL run" -> Run workflow (or `gh workflow run daily.yml`). Run logs show the full output.
 

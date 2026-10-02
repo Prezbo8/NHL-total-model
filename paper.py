@@ -1,7 +1,7 @@
 """Paper-trading log for the OVER flag.
 
 model.py today  -> logs every game (flagged or not) with the line at the time;
-                   runs at 11:00 and 17:00 so games whose line moves to 6/6.5 later get caught
+                   runs every 2 hours 11 AM-9 PM ET so games whose line moves to 6/6.5 later get caught
 python3 paper.py settle   -> fills in closing line + final score for finished games
 python3 paper.py report   -> how the flagged overs are doing
 """
