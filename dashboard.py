@@ -316,7 +316,7 @@ def day_page(d, day, days):
       <p>{day_summary(g)}</p></header>
       <nav class='daynav'>{prev_}<a href='../index.html'>Dashboard</a>{next_}</nav>
       {RETRO_NOTE if retro(g).any() else ""}<section>{day_cards(g)}</section>"""
-    return shell(f"NHL Total Model · {day}", body)
+    return shell(f"NHL Total Model · {day}", body, root="../")
 
 
 def record(d):
@@ -487,10 +487,13 @@ ul.archive li:last-child{border-bottom:none}
 """
 
 
-def shell(title, body):
+def shell(title, body, root=""):
     return f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>{e(title)}</title>
-<link rel="icon" href="https://assets.nhle.com/logos/nhl/svg/NHL_light.svg"><style>{CSS}</style></head>
+<link rel="icon" type="image/svg+xml" href="{root}favicon.svg" media="(prefers-color-scheme: light)">
+<link rel="icon" type="image/svg+xml" href="{root}favicon-dark.svg" media="(prefers-color-scheme: dark)">
+<link rel="icon" type="image/png" sizes="32x32" href="{root}favicon-32.png">
+<link rel="apple-touch-icon" href="{root}apple-touch-icon.png"><style>{CSS}</style></head>
 <body><div class="wrap">{body}
 {SCRIPT}
 <footer>Paper trading only, not betting advice · Team logos © NHL and its teams ·
