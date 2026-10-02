@@ -31,19 +31,25 @@ jobs:
       - name: Install
         run: pip install "pandas==2.2.3" "numpy==2.2.6"   # same versions the code is tested with
 
+      # each step runs even if an earlier one failed (e.g. settling hits an API outage),
+      # so today's projections and the dashboard still get made; the run still shows red
       - name: Settle yesterday's paper trades
         run: python paper.py settle
 
       - name: Project today's games, flag, log
+        if: ${{ !cancelled() }}
         run: python model.py today
 
       - name: Report
+        if: ${{ !cancelled() }}
         run: python paper.py report
 
       - name: Rebuild dashboard
+        if: ${{ !cancelled() }}
         run: python dashboard.py
 
       - name: Commit and push results
+        if: ${{ !cancelled() }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898299+github-actions[bot]@users.noreply.github.com"
@@ -58,6 +64,7 @@ jobs:
           fi
 
       - name: Rebuild GitHub Pages
+        if: ${{ !cancelled() }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh api -X POST "repos/${{ github.repository }}/pages/builds" || echo "pages build request failed (site may still update on its own)"

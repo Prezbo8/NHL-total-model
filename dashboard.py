@@ -4,7 +4,7 @@
 """
 import html
 import os
-from datetime import datetime
+from datetime import date, datetime
 
 import pandas as pd
 
@@ -128,7 +128,7 @@ def breakdown(r, flagged):
 
 
 def game_card(r):
-    flagged = r.flag == True
+    flagged = r.flag
     final = not pd.isna(r.final_total)
     ascore = int(r.away_score) if final else None
     hscore = int(r.home_score) if final else None
@@ -174,13 +174,13 @@ def day_cards(g):
 
 def day_summary(g):
     done = g[g.final_total.notna()]
-    flags = int((g.flag == True).sum())
+    flags = int((g.flag).sum())
     parts = [f"{len(g)} games", f"<b>{flags} flag{'s' if flags != 1 else ''}</b>"]
     if len(done):
         wl = done[done.bet_total.notna()]
         parts.append(f"<b>{(wl.final_total > wl.bet_total).sum()} of {len(wl)}</b> went over the line")
         parts.append(f"avg <b>{done.final_total.mean():.1f}</b> goals (projected {done.proj.mean():.1f})")
-        fl = done[(done.flag == True) & done.result.notna()]
+        fl = done[(done.flag) & done.result.notna()]
         if len(fl):
             parts.append(f"flags <b>{(fl.result == 'W').sum()}-{(fl.result == 'L').sum()}-{(fl.result == 'P').sum()}</b> ({fl.profit.sum():+.2f}u)")
     return " · ".join(parts)
@@ -191,10 +191,10 @@ RETRO_NOTE = ("<p class='retro'><b>Retroactive day:</b> added after the fact fro
 
 
 def slate(d):
-    if d.empty:
-        return "<p class='muted'>No games logged yet.</p>"
-    day = d.date.max()
+    day = date.today().isoformat()  # Eastern time on GitHub Actions (TZ is set in the workflow)
     g = d[d.date == day]
+    if g.empty:
+        return f"<p class='muted'>{pd.Timestamp(day):%A, %B %-d}: no games logged for today (off day, or the morning run hasn't happened yet).</p>"
     return f"""<p class='sub'>{pd.Timestamp(day):%A, %B %-d} · {day_summary(g)} · bar tick = high-scoring cutoff
       ({g.cutoff.iloc[0]:.2f} goals){f" · starters as of {e(g.updated_at.dropna().max())}" if g.updated_at.notna().any() else ""}</p>
       {day_cards(g)}"""
@@ -259,7 +259,7 @@ def day_page(d, day, days):
 
 def record(d):
     d = d[~retro(d)]  # backfilled days never count toward the live record
-    f = d[d.flag == True]
+    f = d[d.flag]
     s = f[f.result.notna()]
     dec = s[s.result != "P"]
     w, l, p = (s.result == "W").sum(), (s.result == "L").sum(), (s.result == "P").sum()
@@ -403,19 +403,16 @@ def shell(title, body):
 
 
 def build():
-    d = pd.read_csv(paper.LOG) if os.path.exists(paper.LOG) else pd.DataFrame(columns=paper.COLS)
-    for c in paper.COLS:
-        if c not in d:
-            d[c] = None
+    d = paper.read_log()
     live = d[~retro(d)]
-    today = d[d.date == d.date.max()] if len(d) else d
-    settled = live[(live.flag == True) & live.result.notna()]
+    today = d[d.date == date.today().isoformat()]
+    settled = live[(live.flag) & live.result.notna()]
     body = f"""
 <header class="hero">
   <h1>NHL Total Model</h1>
   <p>Over/under projections, OVER flags and live paper trading · updated {datetime.now():%b %-d, %Y %-I:%M %p} ET</p>
   <div class="stats">
-    <div class="stat"><b>{int((today.flag == True).sum()) if len(today) else 0}</b><span>flags today</span></div>
+    <div class="stat"><b>{int((today.flag).sum()) if len(today) else 0}</b><span>flags today</span></div>
     <div class="stat"><b>{len(today)}</b><span>games today</span></div>
     <div class="stat"><b>{(settled.result == 'W').sum()}-{(settled.result == 'L').sum()}-{(settled.result == 'P').sum()}</b><span>live record</span></div>
   </div>

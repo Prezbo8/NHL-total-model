@@ -34,11 +34,26 @@ def was_flagged_now(v):
     return str(v).strip().lower() in ("true", "1", "1.0")
 
 
+def read_log():
+    """Load the log with true/false columns as real booleans, however the CSV stored them
+    ('True', 'False', '1.0', blank...). Everything that reads the log goes through here."""
+    d = pd.read_csv(LOG) if os.path.exists(LOG) else pd.DataFrame(columns=COLS)
+    for c in COLS:
+        if c not in d:
+            d[c] = None
+    for c in ("flag", "away_b2b", "home_b2b"):
+        d[c] = d[c].map(was_flagged_now).astype(bool)
+    for c in ("result", "result_best", "best_book", "away_goalie_now", "home_goalie_now", "updated_at", "flagged_at",
+              "away_goalie", "home_goalie"):
+        d[c] = d[c].astype(object)
+    return d
+
+
 def log_games(rows):
     """Add today's games. A game already logged keeps its FIRST line, except that a game
     which wasn't flagged before but is flagged now gets flagged with the current line.
     Games that have already started are never logged or changed (no live lines)."""
-    old = pd.read_csv(LOG) if os.path.exists(LOG) else pd.DataFrame(columns=COLS)
+    old = read_log()
     now = pd.Timestamp.now(tz="UTC")
     new = pd.DataFrame(rows)
     new = new.reindex(columns=list(dict.fromkeys(["start_utc"] + list(new.columns) + COLS)))  # any missing field -> empty
@@ -46,17 +61,14 @@ def log_games(rows):
     if new.empty:
         return 0, 0
     key = lambda d: d.date.astype(str) + d.away + d.home
+    new["flag"] = new.flag.map(was_flagged_now).astype(bool)
     new["flagged_at"] = np.where(new.flag, new.logged_at, None)
     added, upgraded = new, 0
     if len(old):
         old_keys = key(old)
         added = new[~key(new).isin(old_keys)]
-        for c in COLS:
-            if c not in old:
-                old[c] = None
-        for c in ("away_goalie_now", "home_goalie_now", "updated_at", "away_b2b", "home_b2b", "flag", "flagged_at",
-                  "best_book", "away_goalie", "home_goalie"):
-            old[c] = old[c].astype(object)  # mixed bools/strings/missing: keep pandas from forcing a dtype
+        for c in ("away_b2b", "home_b2b", "flag"):
+            old[c] = old[c].astype(object)  # allow assigning row values without pandas forcing a dtype
         for _, r in new[key(new).isin(old_keys)].iterrows():
             i = old.index[old_keys == key(pd.DataFrame([r])).iloc[0]][0]
             # always refresh: latest starters, back-to-backs (the bet itself never changes)
@@ -83,9 +95,7 @@ def settle():
     if not os.path.exists(LOG):
         print("no log yet")
         return
-    d = pd.read_csv(LOG)
-    for c in ("result", "result_best", "best_book"):
-        d[c] = d[c].astype(object)
+    d = read_log()
     todo = d[d.final_total.isna() & (pd.to_datetime(d.date) < pd.Timestamp(date.today()))]
     for day in sorted(todo.date.unique()):
         with urllib.request.urlopen(fetch(f"https://api-web.nhle.com/v1/score/{day}")) as f:
@@ -103,12 +113,12 @@ def settle():
             if k in closing:
                 c = closing[k]
                 d.loc[i, ["close_total", "close_over", "close_under"]] = [c["total"], c["over"], c["under"]]
-            if d.at[i, "flag"] and not pd.isna(d.at[i, "bet_total"]):
+            if d.at[i, "flag"] and not pd.isna(d.at[i, "bet_total"]) and not pd.isna(d.at[i, "bet_over"]):
                 bt, bo = d.at[i, "bet_total"], d.at[i, "bet_over"]
                 res = "W" if a + h > bt else "P" if a + h == bt else "L"
                 d.at[i, "result"] = res
                 d.at[i, "profit"] = {"W": float(grade.payout(bo)), "P": 0.0, "L": -1.0}[res]
-                if k in closing:
+                if k in closing and not pd.isna(d.at[i, "bet_under"]):
                     d.at[i, "clv"] = clv(bt, bo, d.at[i, "bet_under"], c)
                 if not pd.isna(d.at[i, "best_total"]):  # same bet at the best sportsbook price
                     bbt, bbo = d.at[i, "best_total"], d.at[i, "best_over"]
@@ -131,9 +141,9 @@ def report():
     if not os.path.exists(LOG):
         print("no log yet")
         return
-    d = pd.read_csv(LOG)
+    d = read_log()
     d = d[~d.logged_at.astype(str).str.contains("retroactively")]  # backfilled days don't count
-    f = d[d.flag == True]
+    f = d[d.flag]
     s = f[f.result.notna()]
     print(f"games logged: {len(d)}   flagged overs: {len(f)}   settled: {len(s)}")
     if len(s):

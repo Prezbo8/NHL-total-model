@@ -5,7 +5,6 @@ home goals = 5v5 (home 5v5 offense x away 5v5 defense x 5v5 minutes)
            + other (4v4, 3v3 OT, empty nets...: league average)
 then scaled by the opposing starter's goalie skill and back-to-backs, as in model.py.
 """
-import numpy as np
 import pandas as pd
 
 import model as m
@@ -49,7 +48,15 @@ class Rate:
         self.sum = {}
 
 
-def walk_split(games, k=m.K, w=m.W_GOALS, regress=m.REGRESS, known_starters=True, with_projector=False, roster_w=0.0):
+def season_of(day):
+    """NHL season (start year) a date belongs to: Aug-Dec -> that year, Jan-Jul -> the year before."""
+    return day.year if day.month >= 8 else day.year - 1
+
+
+def walk_split(games, k=m.K, w=m.W_GOALS, regress=m.REGRESS, known_starters=True, with_projector=False, roster_w=0.0,
+               live_season=None):
+    """live_season: the season being projected. If it's newer than the data (e.g. opening day, before any
+    of its games exist), last season's ratings are rolled over into this season's starting ratings."""
     starter, by_game, gg = m.load_goalies()
     # goalie history only from seasons that are part of this run (nothing before games' first season)
     gs = m.GoalieSkill(gg.iloc[0:0])
@@ -88,7 +95,7 @@ def walk_split(games, k=m.K, w=m.W_GOALS, regress=m.REGRESS, known_starters=True
             det[side] = {"ev": ev, "pp": pp, "oth": oth, "gadj": gadj, "b2badj": f - 1}
         return (out[0], out[1], det) if detail else (out[0], out[1])
 
-    last = games.season.max()
+    last = max(games.season.max(), live_season or 0)
     for season, sg in games.groupby("season", sort=True):
         gs.new_season()
         if roster_w and R["off5"].prior:
@@ -129,6 +136,8 @@ def walk_split(games, k=m.K, w=m.W_GOALS, regress=m.REGRESS, known_starters=True
         if season != last:  # keep the current season's ratings live for today's games
             for rate in R.values():
                 rate.end_season(regress)
+    if last > games.season.max():  # new season with no games yet: start it like any other season
+        gs.new_season()
     proj = pd.DataFrame(rows, columns=["gameId", "season", "gameDate", "home", "away", "proj", "total", "lam_h", "lam_a"])
     project.goalie_skill = gs.skill
     return (proj, project) if with_projector else proj

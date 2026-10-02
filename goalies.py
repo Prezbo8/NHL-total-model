@@ -44,18 +44,19 @@ def refresh(seasons):
 
     have = pd.read_csv(GOALIE_GAMES) if os.path.exists(GOALIE_GAMES) else pd.DataFrame(columns=["playerId"])
     known = set(zip(have.playerId, have.gameId)) if len(have) else set()
-    need = {p for p, g in zip(new.playerId, new.gameId) if (p, g) not in known}
+    cur = new[new.season.isin(seasons)]  # only chase games from the seasons being refreshed
+    need = {p for p, g in zip(cur.playerId, cur.gameId) if (p, g) not in known}
     parts = [have[~have.playerId.isin(need)]]
     for i, pid in enumerate(sorted(need)):
         time.sleep(1.5)  # be polite to MoneyPuck
         print(f"  goalie {i + 1}/{len(need)}", end="\r")
         try:
             d = pd.read_csv(io.BytesIO(get(MP_GOALIE.format(pid))))
+            d = d[d.situation == "all"]
+            parts.append(d[["playerId", "season", "gameId", "gameDate", "name", "xGoals", "goals"]])
         except Exception as e:
-            print(f"  skip goalie {pid}: {e}")
-            continue
-        d = d[d.situation == "all"]
-        parts.append(d[["playerId", "season", "gameId", "gameDate", "name", "xGoals", "goals"]])
+            print(f"  skip goalie {pid}: {e} (keeping their saved history)")
+            parts.append(have[have.playerId == pid])  # a failed download must never erase what we had
     if need:
         print()
     pd.concat(parts).to_csv(GOALIE_GAMES, index=False)

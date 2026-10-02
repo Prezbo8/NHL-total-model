@@ -26,13 +26,14 @@ def backfill(day):
     J = lambda u: json.load(urllib.request.urlopen(m.fetch(u)))
     games = sm.load_split()
     games = games[games.gameDate < int(day.replace("-", ""))]          # nothing from that day or later
-    proj, project = sm.walk_split(games, known_starters=False, with_projector=True)
-    cal = m.fit_calibration(proj[proj.season.between(2022, games.season.max() - 1)])
-    prev = proj[proj.season == games.season.max() - 1]
+    season = sm.season_of(d0)
+    proj, project = sm.walk_split(games, known_starters=False, with_projector=True, live_season=season)
+    cal = m.fit_calibration(proj[proj.season.between(2022, season - 1)])
+    prev = proj[proj.season == season - 1]
     cutoff = np.quantile(np.r_[prev.lam_h, prev.lam_a], m.HIGH_Q)
     sched = [g for g in J(f"https://api-web.nhle.com/v1/score/{day}")["games"] if g["gameType"] == 2]
     tired = {g[s]["abbrev"] for g in J(f"https://api-web.nhle.com/v1/score/{d0 - timedelta(days=1)}")["games"]
-             for s in ("homeTeam", "awayTeam")}
+             if g["gameType"] in (2, 3) and g.get("gameScheduleState", "OK") == "OK" for s in ("homeTeam", "awayTeam")}
     dfo = m.dailyfaceoff(day)
     st = pd.read_csv(goalies.STARTS)
     ids = {n.lower(): p for n, p in zip(st.name, st.playerId)}
@@ -49,7 +50,7 @@ def backfill(day):
         h, a = g["homeTeam"]["abbrev"], g["awayTeam"]["abbrev"]
         cn = lambda t: (t.get("commonName") or t.get("name") or {}).get("default", "~~")
         def starter(team):
-            k = next((k for k in dfo if k.endswith(cn(team))), None)
+            k = next((k for k in dfo if k.endswith(m.norm_name(cn(team)))), None)
             name, status = dfo.get(k, (None, None))
             return (f"{name} ({status})", ids.get(str(name).lower())) if name else ("unknown", None)
         hg, hp = starter(g["homeTeam"])

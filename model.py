@@ -281,14 +281,21 @@ def backtest():
     print("    break-even: +120 needs 45.5%, -110 needs 52.4%, -140 needs 58.3%")
 
 
+def norm_name(s):
+    """Compare team names safely: 'Montréal' == 'Montreal', 'St. Louis' == 'St Louis'."""
+    import unicodedata
+    s = unicodedata.normalize("NFKD", str(s)).encode("ascii", "ignore").decode()
+    return " ".join(s.replace(".", "").lower().split())
+
+
 def dailyfaceoff(day):
-    """Projected/confirmed starters: {team name: (goalie name, status)}"""
+    """Projected/confirmed starters: {normalized team name: (goalie name, status)}"""
     html = urllib.request.urlopen(fetch(f"https://www.dailyfaceoff.com/starting-goalies/{day}")).read().decode()
     data = json.loads(re.search(r'__NEXT_DATA__" type="application/json">(.*?)</script>', html).group(1))
     out = {}
     for g in data["props"]["pageProps"]["data"]:
         for side in ("home", "away"):
-            out[g[f"{side}TeamName"].replace(".", "")] = (g[f"{side}GoalieName"], g[f"{side}NewsStrengthName"] or "Unconfirmed")
+            out[norm_name(g[f"{side}TeamName"])] = (g[f"{side}GoalieName"], g[f"{side}NewsStrengthName"] or "Unconfirmed")
     return out
 
 
@@ -304,10 +311,11 @@ def today(day=None):
     day = day or date.today().isoformat()
     load_games(refresh=True)
     games = sm.load_split()
-    goalies.refresh([int(games.season.max())])
-    proj, project = sm.walk_split(games, known_starters=False, with_projector=True)
-    cal = fit_calibration(proj[proj.season.between(2022, games.season.max() - 1)])
-    prev = proj[proj.season == games.season.max() - 1]
+    season = sm.season_of(date.fromisoformat(day))  # from the date, not the data (opening day has no games yet)
+    goalies.refresh([season])
+    proj, project = sm.walk_split(games, known_starters=False, with_projector=True, live_season=season)
+    cal = fit_calibration(proj[proj.season.between(2022, season - 1)])
+    prev = proj[proj.season == season - 1]
     cutoff = np.quantile(np.r_[prev.lam_h, prev.lam_a], HIGH_Q)
 
     def schedule(d):
@@ -315,7 +323,11 @@ def today(day=None):
             return [g for wk in json.load(f)["gameWeek"] if wk["date"] == d for g in wk["games"]]
     todays = [g for g in schedule(day) if g["gameType"] == 2]
     yday = (date.fromisoformat(day) - timedelta(days=1)).isoformat()
-    tired = {g[s]["abbrev"] for g in schedule(yday) for s in ("homeTeam", "awayTeam")}
+    # back-to-back = played a real game yesterday (the effect was measured on regular-season games;
+    # preseason and postponed games don't count)
+    tired = {g[s]["abbrev"] for g in schedule(yday)
+             if g["gameType"] in (2, 3) and g.get("gameScheduleState", "OK") == "OK"
+             for s in ("homeTeam", "awayTeam")}
     if not todays:
         print(f"No regular-season games on {day}.")
         return
@@ -348,7 +360,7 @@ def today(day=None):
     recent = st[(st.started == 1) & (st.season >= st.season.max() - 1)].sort_values("gameId")
 
     def starter(team_abbrev, team_name):
-        name, status = dfo.get(team_name.replace(".", ""), (None, None))
+        name, status = dfo.get(norm_name(team_name), (None, None))
         if name and name.lower() in ids:
             return name, ids[name.lower()], status
         # fallback: whoever started most of the team's last 10 games
