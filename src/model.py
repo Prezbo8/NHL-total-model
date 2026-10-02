@@ -6,8 +6,8 @@ projects a game total and the chance it goes OVER 6 (7+ goals; 6 = push).
 Each team's starting goalie (DailyFaceoff) adjusts the goals they'll allow,
 based on goals saved above expected (MoneyPuck).
 
-  python3 model.py backtest        # test on past seasons
-  python3 model.py today [DATE]    # 5v5/PP split model projections + OVER flags (default today)
+  python3 src/model.py backtest        # test on past seasons
+  python3 src/model.py today [DATE]    # 5v5/PP split model projections + OVER flags (default today)
 """
 import json
 import re
@@ -20,8 +20,9 @@ import pandas as pd
 
 import goalies
 import players
+import paths
 
-DATA = "moneypuck_games.csv"
+DATA = paths.data("moneypuck_games.csv")
 DATA_URL = "https://moneypuck.com/moneypuck/playerData/careers/gameByGame/all_teams.csv"
 
 K = 15          # games of "last season" weight before this season's games take over

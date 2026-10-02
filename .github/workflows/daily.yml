@@ -54,19 +54,19 @@ jobs:
       # so today's projections and the dashboard still get made; the run still shows red
       - name: Settle yesterday's paper trades
         if: steps.gate.outputs.run == 'true'
-        run: python paper.py settle
+        run: python src/paper.py settle
 
       - name: Project today's games, flag, log
         if: ${{ !cancelled() && steps.gate.outputs.run == 'true' }}
-        run: python model.py today
+        run: python src/model.py today
 
       - name: Report
         if: ${{ !cancelled() && steps.gate.outputs.run == 'true' }}
-        run: python paper.py report
+        run: python src/paper.py report
 
       - name: Rebuild dashboard
         if: ${{ !cancelled() && steps.gate.outputs.run == 'true' }}
-        run: python dashboard.py
+        run: python src/dashboard.py
 
       - name: Commit and push results
         if: ${{ !cancelled() && steps.gate.outputs.run == 'true' }}
@@ -74,6 +74,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898299+github-actions[bot]@users.noreply.github.com"
           git add -u
+          git add data
           git add docs
           if git diff --cached --quiet; then
             echo "no changes to push"

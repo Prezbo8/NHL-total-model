@@ -11,9 +11,10 @@ import time
 import urllib.request
 
 import pandas as pd
+import paths
 
-SKATERS = "skater_seasons.csv"
-LINEUPS = "opening_lineups.csv"
+SKATERS = paths.data("skater_seasons.csv")
+LINEUPS = paths.data("opening_lineups.csv")
 MP_SKATERS = "https://moneypuck.com/moneypuck/playerData/seasonSummary/{}/regular/skaters.csv"
 BOX = "https://api-web.nhle.com/v1/gamecenter/{}/boxscore"
 N_GAMES = 5          # lineup = skaters used in each team's first N games

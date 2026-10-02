@@ -2,7 +2,7 @@
 (ratings from games before that day, that day's DailyFaceoff starters, opening lines).
 Rows are marked as retroactive. Settled afterwards by paper.settle().
 
-  python3 backfill.py 2026-10-01
+  python3 src/backfill.py 2026-10-01
 """
 import json
 import sys

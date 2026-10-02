@@ -8,9 +8,10 @@ import urllib.error
 import urllib.request
 
 import pandas as pd
+import paths
 
-STARTS = "goalie_starts.csv"
-GOALIE_GAMES = "goalie_games.csv"
+STARTS = paths.data("goalie_starts.csv")
+GOALIE_GAMES = paths.data("goalie_games.csv")
 MP_GOALIE = "https://moneypuck.com/moneypuck/playerData/careers/gameByGame/regular/goalies/{}.csv"
 NHL_LOG = ("https://api.nhle.com/stats/rest/en/goalie/summary?isAggregate=false&isGame=true&limit=-1"
            "&cayenneExp=seasonId={}%20and%20gameTypeId=2")

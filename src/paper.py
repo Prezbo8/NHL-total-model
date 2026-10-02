@@ -1,9 +1,9 @@
 """Paper-trading log for the OVER flag.
 
-model.py today  -> logs every game (flagged or not) with the line at the time;
+src/model.py today  -> logs every game (flagged or not) with the line at the time;
                    runs every 2 hours 11 AM-9 PM ET so games whose line moves to 6/6.5 later get caught
-python3 paper.py settle   -> fills in closing line + final score for finished games
-python3 paper.py report   -> how the flagged overs are doing
+python3 src/paper.py settle   -> fills in closing line + final score for finished games
+python3 src/paper.py report   -> how the flagged overs are doing
 """
 import json
 import os
@@ -17,8 +17,9 @@ import pandas as pd
 import grade
 from model import fetch
 import odds
+import paths
 
-LOG = "paper_trades.csv"
+LOG = paths.data("paper_trades.csv")
 COLS = ["date", "away", "home", "proj", "proj_away", "proj_home", "cutoff", "flag", "p7",
         "away_goalie", "home_goalie", "open_total", "open_over", "bet_total", "bet_over", "bet_under", "best_book", "best_total", "best_over", "best_under",
         "logged_at", "flagged_at",

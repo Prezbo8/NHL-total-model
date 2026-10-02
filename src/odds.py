@@ -6,9 +6,10 @@ import urllib.request
 from datetime import date, timedelta
 
 import pandas as pd
+import paths
 
-ODDS = "odds_history.csv"
-ODDS_OPEN = "odds_open.csv"
+ODDS = paths.data("odds_history.csv")
+ODDS_OPEN = paths.data("odds_open.csv")
 URL = "https://api.actionnetwork.com/web/v1/scoreboard/nhl?period=game&date={}"
 UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126 Safari/537.36"
 SEASONS = [(date(2022, 10, 1), date(2023, 4, 20)), (date(2023, 10, 1), date(2024, 4, 25)),

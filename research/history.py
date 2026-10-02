@@ -3,8 +3,11 @@
 Rule (unchanged from the daily job): OVER only, line 6 or 6.5, both teams' projected
 goals >= the previous season's 60th percentile of team projections.
 
-  python3 history.py
+  python3 research/history.py
 """
+import os as _os
+import sys as _sys
+_sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..", "src"))  # model code lives in src/
 import numpy as np
 import pandas as pd
 

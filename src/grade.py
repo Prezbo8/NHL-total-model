@@ -1,6 +1,6 @@
 """Grade the model against real closing totals (Action Network consensus).
 
-  python3 grade.py
+  python3 src/grade.py
 """
 import numpy as np
 import pandas as pd

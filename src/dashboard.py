@@ -1,6 +1,6 @@
-"""Build docs/index.html (GitHub Pages dashboard) from paper_trades.csv.
+"""Build docs/index.html (GitHub Pages dashboard) from data/paper_trades.csv.
 
-  python3 dashboard.py
+  python3 src/dashboard.py
 """
 import html
 import os
@@ -9,16 +9,16 @@ from datetime import date
 import pandas as pd
 
 import paper
+import paths
+from teams import TEAMS
 
-OUT = "docs/index.html"
+OUT = os.path.join(paths.DOCS_DIR, "index.html")
 
 # backtest numbers (strict 2020-21+ data, frozen rule) from history.py / compare.py, Oct 2 2026
 BACKTEST = [  # season, open bets, open ROI, close bets, close ROI  (calibrated goalies, G_SHRINK=200; Oct 2 2026)
     ("2021-22", 428, -1.8, 434, 0.2), ("2022-23", None, None, 256, 4.5), ("2023-24", 11, 1.1, 19, -10.6),
     ("2024-25", 44, 6.6, 44, 10.4), ("2025-26", 137, 5.7, 150, 3.5),
 ]
-
-from teams import TEAMS  # noqa: E402
 
 SCALE = 4.5  # projected-goal bars run 0 -> 4.5 goals
 

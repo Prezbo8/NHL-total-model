@@ -3,13 +3,17 @@
 Each game is two rows (visitor, home). OpenOU/CloseOU hold the total and a price:
 the visitor row's price is the OVER, the home row's is the UNDER.
 """
+import os as _os
+import sys as _sys
+_sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..", "src"))  # model code lives in src/
 import re
 import time
 import urllib.request
 
 import pandas as pd
+import paths  # noqa: E402
 
-SBR = "sbr_odds.csv"
+SBR = paths.data("sbr_odds.csv")
 URL = "https://www.sportsbookreviewsonline.com/scoresoddsarchives/nhl-odds-{}/"
 UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126 Safari/537.36"
 # page slug -> season start year (2020-21 is just "2021" on the site)

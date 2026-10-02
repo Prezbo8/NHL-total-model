@@ -1,7 +1,5 @@
-# 126 MB, over GitHub's limit; re-downloaded by every daily run (model.py today)
-moneypuck_games.csv
-daily.log
-launchd.err
+# MoneyPuck game file: 126 MB (over GitHub's limit), re-downloaded by every run (src/model.py today)
+data/moneypuck_games.csv
+data/moneypuck_games.csv.part
 __pycache__/
 .DS_Store
-moneypuck_games.csv.part

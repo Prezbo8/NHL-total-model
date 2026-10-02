@@ -8,8 +8,9 @@ from datetime import timedelta
 import pandas as pd
 
 import odds
+import paths
 
-BOOKS = "odds_books.csv"
+BOOKS = paths.data("odds_books.csv")
 
 
 NOT_BOOKS = {15, 30}  # Action Network's consensus and opening lines, not bettable
