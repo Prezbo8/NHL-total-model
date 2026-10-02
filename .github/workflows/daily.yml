@@ -1,12 +1,17 @@
 name: Daily NHL run
 
-# Every 2 hours from 11 AM to 9 PM Eastern, all year.
-# GitHub schedules in UTC only, so both sets are listed and the "gate" step runs whichever matches
-# today's Eastern offset (summer EDT = UTC-4, winter EST = UTC-5) and skips the other.
+# Every 2 hours from 11 AM to 9 PM Eastern, all year (runs at :17, with a :47 backup).
+# - GitHub schedules in UTC only, so summer (EDT) and winter (EST) sets are both listed; the "gate"
+#   step runs whichever matches today's Eastern offset and skips the other.
+# - Not on the hour: GitHub drops/delays scheduled runs at the top of the hour under load (none of the
+#   :00 runs on Oct 2 2026 ever fired). The :47 backup catches a dropped :17 run; running twice is
+#   harmless (first logged line stays the bet, settling skips settled games, dashboard just rebuilds).
 on:
   schedule:
-    - cron: "0 15,17,19,21,23,1 * * *"   # EDT: 11a 1p 3p 5p 7p 9p
-    - cron: "0 16,18,20,22,0,2 * * *"    # EST: 11a 1p 3p 5p 7p 9p
+    - cron: "17 15,17,19,21,23,1 * * *"   # EDT 11:17a 1:17p 3:17p 5:17p 7:17p 9:17p
+    - cron: "47 15,17,19,21,23,1 * * *"   # EDT backup, 30 min later
+    - cron: "17 16,18,20,22,0,2 * * *"    # EST 11:17a ... 9:17p
+    - cron: "47 16,18,20,22,0,2 * * *"    # EST backup
   workflow_dispatch: {}
 
 permissions:
@@ -28,8 +33,9 @@ jobs:
         id: gate
         run: |
           if [ "${{ github.event_name }}" != "schedule" ]; then echo "run=true" >> "$GITHUB_OUTPUT"; exit 0; fi
-          if [ "$(date +%Z)" = "EDT" ]; then want="0 15,17,19,21,23,1 * * *"; else want="0 16,18,20,22,0,2 * * *"; fi
-          if [ "${{ github.event.schedule }}" = "$want" ]; then echo "run=true" >> "$GITHUB_OUTPUT"
+          if [ "$(date +%Z)" = "EDT" ]; then hours="15,17,19,21,23,1"; else hours="16,18,20,22,0,2"; fi
+          if [ "${{ github.event.schedule }}" = "17 $hours * * *" ] || [ "${{ github.event.schedule }}" = "47 $hours * * *" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
           else echo "run=false" >> "$GITHUB_OUTPUT"; echo "other daylight-saving slot: skipping"; fi
 
       - uses: actions/checkout@v4
