@@ -32,7 +32,7 @@ Oct 3: MTL @ PIT flagged (over, best book BetMGM o6 -105 at 2:40 AM) — first p
 flagged at the 11 AM run (depends on Dobes / Silovs starting).
 
 ## Setup on a new machine
-    pip install pandas numpy
+    pip install pandas==2.2.3 numpy==2.2.6
     python3 model.py today        # first run downloads MoneyPuck game data (~126 MB, not in the repo)
 Scheduled job: GitHub Actions (.github/workflows/daily.yml).
 

@@ -29,7 +29,7 @@ jobs:
           python-version: "3.13"
 
       - name: Install
-        run: pip install pandas numpy
+        run: pip install "pandas==2.2.3" "numpy==2.2.6"   # same versions the code is tested with
 
       - name: Settle yesterday's paper trades
         run: python paper.py settle

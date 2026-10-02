@@ -37,6 +37,7 @@ def log_games(rows):
     old = pd.read_csv(LOG) if os.path.exists(LOG) else pd.DataFrame(columns=COLS)
     now = pd.Timestamp.now(tz="UTC")
     new = pd.DataFrame(rows)
+    new = new.reindex(columns=list(dict.fromkeys(["start_utc"] + list(new.columns) + COLS)))  # any missing field -> empty
     new = new[pd.to_datetime(new.start_utc, utc=True) > now].drop(columns="start_utc")
     if new.empty:
         return 0, 0
@@ -49,8 +50,9 @@ def log_games(rows):
         for c in COLS:
             if c not in old:
                 old[c] = None
-        for c in ("away_goalie_now", "home_goalie_now", "updated_at"):
-            old[c] = old[c].astype(object)
+        for c in ("away_goalie_now", "home_goalie_now", "updated_at", "away_b2b", "home_b2b", "flag", "flagged_at",
+                  "best_book", "away_goalie", "home_goalie"):
+            old[c] = old[c].astype(object)  # mixed bools/strings/missing: keep pandas from forcing a dtype
         for _, r in new[key(new).isin(old_keys)].iterrows():
             i = old.index[old_keys == key(pd.DataFrame([r])).iloc[0]][0]
             # always refresh: latest starters, back-to-backs (the bet itself never changes)
@@ -59,7 +61,8 @@ def log_games(rows):
             if pd.isna(old.at[i, "away_ev"]):  # rows logged before breakdowns existed
                 for c in BREAKDOWN:
                     old.loc[i, c] = r[c]
-            if r.flag and old.at[i, "flag"] != True:  # newly qualifies: flag it at today's current line
+            was_flagged = str(old.at[i, "flag"]).strip().lower() in ("true", "1", "1.0")
+            if r.flag and not was_flagged:  # newly qualifies: flag it at today's current line
                 for c in ("proj", "proj_away", "proj_home", "p7", "away_goalie", "home_goalie",
                           "bet_total", "bet_over", "bet_under", "best_book", "best_total", "best_over", "best_under",
                           "flag", "flagged_at") + tuple(BREAKDOWN):
