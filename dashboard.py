@@ -68,6 +68,49 @@ def slate(d):
       <tbody>{''.join(rows)}</tbody></table></div>"""
 
 
+def yesterday(d):
+    """Most recent day with final scores: every logged game's result vs the line."""
+    done = d[d.final_total.notna()]
+    if done.empty:
+        return ("<p class='muted'>No finished games yet. Each morning's run fills in the previous night's final "
+                "scores here (first results: the Oct 2 games, after the Oct 3 morning run).</p>")
+    day = done.date.max()
+    g = done[done.date == day].sort_values("proj", ascending=False)
+    rows, overs, n_line = [], 0, 0
+    for r in g.itertuples():
+        vs = ""
+        if not pd.isna(r.bet_total):
+            n_line += 1
+            if r.final_total > r.bet_total:
+                vs, overs = "<span class='pos'><b>OVER</b></span>", overs + 1
+            elif r.final_total < r.bet_total:
+                vs = "<span class='neg'><b>UNDER</b></span>"
+            else:
+                vs = "<b>PUSH</b>"
+        flag = "<span class='flag'>OVER FLAG</span>" if r.flag == True else ""
+        pick = ""
+        if r.flag == True and not pd.isna(r.result):
+            pick = f"<span class='res {e(r.result)}'>{e(r.result)}</span> {r.profit:+.2f}u"
+            if not pd.isna(r.profit_best):
+                pick += f" <span class='muted'>(best book {r.profit_best:+.2f}u)</span>"
+        moved = ""
+        if not pd.isna(r.close_total) and not pd.isna(r.bet_total) and r.close_total != r.bet_total:
+            moved = " ↑" if r.close_total > r.bet_total else " ↓"
+        rows.append(f"""<tr class='{"flagged" if r.flag == True else ""}'>
+          <td><b>{e(r.away)} @ {e(r.home)}</b> {flag}</td>
+          <td class='num'>{r.proj:.2f}</td><td class='num'>{r.p7:.1%}</td>
+          <td class='num'>{line(r.bet_total)} → {line(r.close_total)}{moved}</td>
+          <td class='num'>{e(r.away)} {int(r.away_score)} – {int(r.home_score)} {e(r.home)}</td>
+          <td class='num'><b>{int(r.final_total)}</b></td><td>{vs}</td><td>{pick or "<span class='muted'>–</span>"}</td></tr>""")
+    flagged = g[(g.flag == True) & g.result.notna()]
+    fl = (f"Flagged picks: <b>{(flagged.result == 'W').sum()}-{(flagged.result == 'L').sum()}-{(flagged.result == 'P').sum()}</b>, "
+          f"{flagged.profit.sum():+.2f}u" if len(flagged) else "No flagged picks")
+    return f"""<p class='muted'>{e(day)} · {len(g)} games · <b>{overs} of {n_line}</b> went over the logged line ·
+      avg total <b>{g.final_total.mean():.1f}</b> goals (model projected {g.proj.mean():.1f}) · {fl}</p>
+      <div class='scroll'><table><thead><tr><th>Game</th><th>Proj</th><th>P(7+)</th><th>Line (logged → close)</th>
+      <th>Final</th><th>Goals</th><th>vs line</th><th>Pick result</th></tr></thead><tbody>{''.join(rows)}</tbody></table></div>"""
+
+
 def record(d):
     f = d[d.flag == True]
     s = f[f.result.notna()]
@@ -155,6 +198,8 @@ def build():
 
 <section><h2>The rule</h2><div class="rule"><b>OVER only</b>, consensus line <b>6 or 6.5</b> (never 5.5), and <b>both teams</b> projected
 as high-scoring (top 40% of last season's team projections). Bet it at the <b>best over</b> book.</div></section>
+
+<section><h2>Yesterday's results</h2>{yesterday(d)}</section>
 
 <section><h2>Latest slate</h2>{slate(d)}</section>
 
