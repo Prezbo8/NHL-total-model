@@ -23,6 +23,39 @@ from teams import TEAMS  # noqa: E402
 SCALE = 4.5  # projected-goal bars run 0 -> 4.5 goals
 
 
+TIPS = {
+    "Proj total": "Projected total goals for the game (away + home), from the model.",
+    "P(7+)": "Model's chance of 7 or more total goals. 7+ wins an over 6.5 and an over 6 (exactly 6 pushes an over 6). NHL average ≈ 45%.",
+    "Line": "Consensus total: opening line → line when logged (on results: logged line → closing line). ↑/↓ = which way it moved.",
+    "Over price": "Consensus price for the over at the logged line (American odds: −120 = risk 120 to win 100; +110 = risk 100 to win 110).",
+    "Best over": "Best-value over at 6 or 6.5 across DraftKings, FanDuel, BetRivers, BetMGM and Caesars, chosen with the model's probabilities (an over 6 can push).",
+    "Total goals": "Final total goals (a shootout winner counts as one goal, as sportsbooks settle it).",
+    "vs line": "Did the game go over or under the line that was logged before it started?",
+    "Pick": "Result of the OVER FLAG bet at the logged consensus line, in units (1 unit risked).",
+    "Best book": "Same pick at the best sportsbook price (the 'Best over' book), in units.",
+    "Team": "Team, away first then home.",
+    "5v5": "Projected even-strength (5-on-5) goals: team's 5v5 attack × opponent's 5v5 defense × 5v5 minutes.",
+    "PP": "Projected power-play goals: PP efficiency × opponent's penalty kill × power-play time (penalties drawn × opponent's penalties taken).",
+    "Oth": "Other situations (4-on-4, 3-on-3 overtime, empty nets, 5-on-3): league average, same for every team.",
+    "Gl": "Opposing-goalie adjustment. + = facing a below-average goalie (more goals), − = facing an above-average goalie.",
+    "B2B": "Back-to-back adjustment: −8% if this team played yesterday, +6.5% if its opponent did.",
+    "Inj": "Injury adjustment: this team's injured players (less scoring) plus the opponent's injured defenders (more scoring). – = game logged before injuries were tracked.",
+    "Proj": "Projected goals = (5v5 + PP + Oth) × goalie × back-to-back × injury adjustments.",
+    "HIGH": "Projected 2.95+ goals (top 40% of last season's team projections). An OVER FLAG needs both teams HIGH.",
+    "Confirmed": "Starter confirmed (DailyFaceoff). Refreshed every run.",
+    "Likely": "Starter expected but not confirmed yet (DailyFaceoff).",
+    "Projected": "Starter not announced yet: DailyFaceoff's guess, or this team's usual recent starter.",
+    "OVER FLAG": "The model's pick: both teams projected high-scoring and the line is 6 or 6.5. Bet the OVER at the 'Best over' book. These are the picks that count in the record.",
+    "B2B tag": "Played yesterday: the model cuts this team's scoring ~8% and raises its opponent's ~6.5%.",
+}
+
+
+def tip(label, text=None, cls=""):
+    """Label with an explanation that pops up on hover (or tap on a phone)."""
+    t = text or TIPS.get(label, "")
+    return f"<span class='tip {cls}' tabindex='0' data-tip='{e(t)}'>{label}</span>" if t else label
+
+
 def e(x):
     return html.escape("" if x is None or (isinstance(x, float) and pd.isna(x)) else str(x))
 
@@ -82,10 +115,10 @@ def goalie_html(logged, now):
     now = now if isinstance(now, str) else logged
     nm, status = goalie_parts(now)
     st = status.lower()
-    badge = ("<span class='gb ok'>✓ Confirmed</span>" if "confirmed" in st and "un" not in st else
-             "<span class='gb likely'>Likely</span>" if "likely" in st else "<span class='gb proj'>Projected</span>")
+    badge = (f"<span class='gb ok'>{tip('✓ Confirmed', TIPS['Confirmed'])}</span>" if "confirmed" in st and "un" not in st else
+             f"<span class='gb likely'>{tip('Likely')}</span>" if "likely" in st else f"<span class='gb proj'>{tip('Projected')}</span>")
     old_nm, _ = goalie_parts(logged)
-    changed = (f"<span class='gb chg' title='Projection was made with {e(old_nm)} in net'>Changed from {e(old_nm)}</span>"
+    changed = (f"<span class='gb chg'>{tip('Changed from ' + e(old_nm), f'The starter changed after this game was logged: the projection was made with {old_nm} in net. A better goalie now = projection too high; a worse one = too low.')}</span>"
                if old_nm != nm and old_nm != "unknown" else "")
     return f"<div class='goalie'>{e(nm)} {badge}{changed}</div>"
 
@@ -102,24 +135,35 @@ def injury_html(out, dtd):
         for name, d_off, d_def in players_out[:3]:
             last = e(name.split(" ", 1)[-1])
             effect = f"{-d_off * 100:+.1f}% GF" if abs(d_off) >= abs(d_def) else f"{d_def * 100:+.1f}% GA"
-            tip = f"{name}: team scoring {-d_off * 100:+.1f}%, opponent scoring {d_def * 100:+.1f}%"
-            items.append(f"<span title='{e(tip)}'>{last} {effect}</span>")
+            items.append(f"<span>{last} {effect}</span>")
         more = players_out[3:]
         if more:
-            items.append(f"<span title='{e(', '.join(p[0] for p in more))}'>+{len(more)} more</span>")
+            items.append(f"<span>+{len(more)} more</span>")
         parts.append(f"<span class='inj out'>Out: {', '.join(items)}</span>")
     if isinstance(dtd, str) and dtd and len(players_out) < 3:
-        parts.append(f"<span class='inj dtd' title='Day-to-day (usually plays, not adjusted): {e(dtd)}'>DTD: "
+        parts.append("<span class='inj dtd'>DTD: "
                      f"{', '.join(e(n.split(' ', 1)[-1]) for n in dtd.split(', ')[:2])}</span>")
-    return f"<div class='injuries'>{' '.join(parts)}</div>" if parts else "<div class='injuries'></div>"
+    if not parts:
+        return "<div class='injuries'></div>"
+    full = []
+    for name, d_off, d_def in players_out:
+        full.append(f"{name}: team scoring {-d_off * 100:+.1f}%, opponent scoring {d_def * 100:+.1f}%")
+    if isinstance(dtd, str) and dtd:
+        full.append(f"Day-to-day (usually plays, not adjusted): {dtd}")
+    text = ("Out = injured / suspended, already taken out of the projection. GF = his team's goals, GA = goals against. "
+            + " | ".join(full))
+    return f"<div class='tip injwrap' tabindex='0' data-tip='{e(text)}'><div class='injuries'>{' '.join(parts)}</div></div>"
 
 
 def team_row(abbr, proj, cutoff, goalie, goalie_now=None, b2b=False, score=None, out=None, dtd=None):
     hot = proj >= cutoff
-    right = (f"<div class='score'>{score}<small>proj {proj:.2f}{' · HIGH' if hot else ''}</small></div>" if score is not None else
-             f"<div class='pg'><b>{proj:.2f}</b>{'<span class=hot-tag>HIGH</span>' if hot else ''}</div>")
+    tname = TEAMS.get(abbr, abbr)
+    right = (f"<div class='score'>{tip(str(score), f'{tname} scored {score}. The model projected {proj:.2f} before the game.', 'tr')}"
+             f"<small>proj {proj:.2f}{' · HIGH' if hot else ''}</small></div>" if score is not None else
+             f"<div class='pg'><b>{tip(f'{proj:.2f}', f'{tname} projected goals tonight (high-scoring cutoff: {cutoff:.2f}).', 'tr')}</b>"
+             f"{'<span class=hot-tag>' + tip('HIGH', cls='tr') + '</span>' if hot else ''}</div>")
     on_b2b = str(b2b).strip().lower() in ("true", "1", "1.0")  # CSV may hold bools, strings or floats
-    tag = "<span class='b2b' title='Played yesterday: model cuts this team’s scoring ~8%'>B2B</span>" if on_b2b else ""
+    tag = f"<span class='b2b'>{tip('B2B', TIPS['B2B tag'])}</span>" if on_b2b else ""
     return f"""<div class='team'>
       {logo(abbr)}
       <div class='tname'><div class='full'>{name(abbr)} {tag}</div>{goalie_html(goalie, goalie_now)}
@@ -138,9 +182,9 @@ def breakdown(r, flagged):
                 f"<td class='num'>{'–' if pd.isna(g('inj')) else adj(g('inj'))}</td>"
                 f"<td class='num'><b>{proj:.2f}</b></td></tr>")
     return f"""<div class='why'><div class='why-h'>{'Why it’s flagged' if flagged else 'Projection breakdown'}</div>
-      <table><thead><tr><th>Team</th><th class='num'>5v5</th><th class='num'>PP</th><th class='num'>Oth</th>
-      <th class='num' title='Opposing goalie adjustment'>Gl</th><th class='num'>B2B</th>
-      <th class='num' title='Injuries: own injured players + opponent injured defenders'>Inj</th><th class='num'>Proj</th></tr></thead>
+      <table><thead><tr><th>{tip('Team', cls='tl')}</th><th class='num'>{tip('5v5')}</th><th class='num'>{tip('PP')}</th>
+      <th class='num'>{tip('Oth')}</th><th class='num'>{tip('Gl')}</th><th class='num'>{tip('B2B')}</th>
+      <th class='num'>{tip('Inj')}</th><th class='num'>{tip('Proj', cls='tr')}</th></tr></thead>
       <tbody>{row('away', r.away, r.proj_away)}{row('home', r.home, r.proj_home)}</tbody></table></div>"""
 
 
@@ -152,7 +196,7 @@ def game_card(r):
     rows = (team_row(r.away, r.proj_away, r.cutoff, r.away_goalie, r.away_goalie_now, r.away_b2b, ascore, r.away_out, r.away_dtd)
             + team_row(r.home, r.proj_home, r.cutoff, r.home_goalie, r.home_goalie_now, r.home_b2b, hscore, r.home_out, r.home_dtd))
     def kv(label, value, wide=False):
-        return f"<div class='kv{' wide' if wide else ''}'><span>{label}</span><b>{value}</b></div>"
+        return f"<div class='kv{' wide' if wide else ''}'><span>{tip(label)}</span><b>{value}</b></div>"
     blank = "<div class='kv'></div>"
     if final:
         vs = "<span class='pill muted-pill'>no line</span>"
@@ -177,7 +221,8 @@ def game_card(r):
                 kv("Over price", "–" if pd.isna(r.bet_over) else price(r.bet_over)),
                 kv("Best over", f"{book(r.best_book)} o{line(r.best_total)} {price(r.best_over)}", wide=True) if not pd.isna(r.best_total)
                 else kv("Best over", "<span class='muted'>–</span>", wide=True)]
-    bar = f"<div class='flagbar'>★ OVER FLAG · {'over' if final else 'bet over'} {line(r.bet_total)}</div>" if flagged else ""
+    bar = (f"<div class='flagbar'>{tip('★ OVER FLAG', TIPS['OVER FLAG'], 'tl')} · {'over' if final else 'bet over'} {line(r.bet_total)}</div>"
+           if flagged else "")
     return f"""<article class='card{' flagged' if flagged else ''}'>{bar or "<div class='flagbar empty'></div>"}{rows}
       <div class='meta'>{''.join(meta)}</div>{breakdown(r, flagged)}</article>"""
 
@@ -240,10 +285,10 @@ def accuracy(d):
     team_err = pd.concat([(s.away_score - s.proj_away).abs(), (s.home_score - s.proj_home).abs()]).mean()
     n_retro = int(retro(s).sum())
     return f"""<div class='tiles'>
-      <div class='tile'><div class='label'>Games settled</div><div class='num-big'>{len(s)}</div><div class='muted'>{n_retro} retroactive</div></div>
-      <div class='tile'><div class='label'>Avg projected total</div><div class='num-big'>{s.proj.mean():.2f}</div><div class='muted'>actual {s.final_total.mean():.2f}</div></div>
-      <div class='tile'><div class='label'>Model P(7+)</div><div class='num-big'>{s.p7.mean():.0%}</div><div class='muted'>actual 7+ rate {(s.final_total >= 7).mean():.0%}</div></div>
-      <div class='tile'><div class='label'>Team goals error</div><div class='num-big'>{team_err:.2f}</div><div class='muted'>avg miss per team</div></div></div>
+      <div class='tile'><div class='label'>{tip('Games settled', 'Finished games in the log (live + retroactive).', 'tl')}</div><div class='num-big'>{len(s)}</div><div class='muted'>{n_retro} retroactive</div></div>
+      <div class='tile'><div class='label'>{tip('Avg projected total', 'Average projected total vs average actual goals. Projections run a little low by design; P(7+) corrects for it.', 'tl')}</div><div class='num-big'>{s.proj.mean():.2f}</div><div class='muted'>actual {s.final_total.mean():.2f}</div></div>
+      <div class='tile'><div class='label'>{tip('Model P(7+)', 'Average predicted chance of 7+ goals vs how often it actually happened. If the model is calibrated they match.', 'tl')}</div><div class='num-big'>{s.p7.mean():.0%}</div><div class='muted'>actual 7+ rate {(s.final_total >= 7).mean():.0%}</div></div>
+      <div class='tile'><div class='label'>{tip('Team goals error', 'Average miss between a team’s projected and actual goals. Hockey is random; ~1.3–1.9 is normal.', 'tl')}</div><div class='num-big'>{team_err:.2f}</div><div class='muted'>avg miss per team</div></div></div>
       <div class='scroll'><table><thead><tr><th>Projected total</th><th>Games</th><th>Avg proj</th><th>Avg goals</th>
       <th>Model P(7+)</th><th>Actual 7+</th></tr></thead><tbody>{''.join(rows)}</tbody></table></div>
       <ul class='notes'><li>The test that matters is <b>Model P(7+) vs Actual 7+</b>: if the model is calibrated they match, and
@@ -289,8 +334,13 @@ def record(d):
         ("ROI · best book", pct(sb.profit_best.mean() * 100) if len(sb) else "–", f"{sb.profit_best.sum():+.2f}u" if len(sb) else "&nbsp;"),
         ("Line moved our way", f"{(c > 0).mean():.0%}" if len(c) else "–", f"of {len(c)} · target 70%+" if len(c) else "target 70%+"),
     ]
-    tiles_html = "".join(f"<div class='tile'><div class='label'>{a}</div><div class='num-big'>{b}</div><div class='muted'>{c_}</div></div>"
-                         for a, b, c_ in tiles)
+    rec_tips = {"Flagged picks": "Live OVER FLAG picks logged so far (retroactive days excluded).",
+                "Record": "Wins-losses-pushes of flagged overs at the logged consensus line.",
+                "ROI · consensus": "Profit per unit risked at the logged consensus price. Break-even at −110 needs 52.4% wins.",
+                "ROI · best book": "Same picks at the best sportsbook price: what line shopping adds.",
+                "Line moved our way": "Share of picks where the closing line moved toward the over after we logged it. The best early sign of a real edge (target 70%+)."}
+    tiles_html = "".join(f"<div class='tile'><div class='label'>{tip(a, rec_tips.get(a), 'tl')}</div><div class='num-big'>{b}</div>"
+                         f"<div class='muted'>{c_}</div></div>" for a, b, c_ in tiles)
     if len(s):
         rows = "".join(f"""<tr><td>{e(r.date)}</td><td class='matchup'>{logo(r.away, 22)}{logo(r.home, 22)} {e(r.away)} @ {e(r.home)}</td>
             <td class='num'>o{line(r.bet_total)} {price(r.bet_over)}</td><td>{e(r.best_book)} o{line(r.best_total)} {price(r.best_over)}</td>
@@ -310,8 +360,10 @@ def backtest():
         return "<td class='num'>–</td>" if v is None else f"<td class='num {'pos' if v > 0 else 'neg'}'>{pct(v)}</td>"
     rows = "".join(f"<tr><td>{s}</td><td class='num'>{'–' if ob is None else ob}</td>{roi(oroi)}<td class='num'>{cb}</td>{roi(croi)}</tr>"
                    for s, ob, oroi, cb, croi in BACKTEST)
-    return f"""<div class='scroll'><table><thead><tr><th>Season</th><th>Bets at open</th><th>ROI at open</th>
-      <th>Bets at close</th><th>ROI at close</th></tr></thead>
+    return f"""<div class='scroll'><table><thead><tr><th>Season</th><th>{tip('Bets at open', 'Flagged overs if bet at the opening line (the first number books post).', 'down')}</th>
+      <th>{tip('ROI at open', 'Profit per unit risked betting at the opening line.', 'down')}</th>
+      <th>{tip('Bets at close', 'Flagged overs if bet at the closing line (right before puck drop). Counts differ because lines move into or out of 6/6.5.', 'down')}</th>
+      <th>{tip('ROI at close', 'Profit per unit risked betting at the closing line.', 'down tr')}</th></tr></thead>
       <tbody>{rows}<tr class='total'><td>2021–26</td><td class='num'>620</td><td class='num pos'>+0.5%</td>
       <td class='num'>903</td><td class='num pos'>+2.3%</td></tr></tbody></table></div>
       <ul class='notes'>
@@ -322,6 +374,20 @@ def backtest():
         <li>No 2022-23 opening lines in the data. With pre-2020 data the same rule was about break-even (2016–21).</li>
       </ul>"""
 
+
+SCRIPT = """<script>
+// keep hover explanations on screen: anchor them left/right when near an edge
+document.addEventListener("mouseover", show); document.addEventListener("focusin", show);
+function show(ev) {
+  const t = ev.target.closest && ev.target.closest(".tip"); if (!t) return;
+  const r = t.getBoundingClientRect(), w = Math.min(250, window.innerWidth - 24);
+  t.classList.remove("tl", "tr");
+  if (r.left + r.width / 2 - w / 2 < 8) t.classList.add("tl");
+  else if (r.left + r.width / 2 + w / 2 > window.innerWidth - 8) t.classList.add("tr");
+  t.classList.toggle("down", r.top < 140);
+}
+</script>
+"""
 
 CSS = """
 :root{--bg:#f3f5f8;--card:#fff;--ink:#0f1a2a;--muted:#5f6b7a;--line:#dfe4ea;--ice:#e8eef5;
@@ -349,10 +415,10 @@ h2{margin:0 0 4px;font-size:21px;letter-spacing:-.01em}
 .rule{background:var(--card);border:1px solid var(--line);border-left:5px solid var(--gold);border-radius:10px;padding:12px 16px}
 .retro{border-left:4px solid var(--muted);padding:8px 14px;border-radius:8px;background:var(--ice);margin:0 0 12px}
 .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:14px}
-.card{position:relative;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 14px 12px;overflow:hidden;
+.card{position:relative;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 14px 12px;
   display:flex;flex-direction:column}
 .card.flagged{border:2px solid var(--gold);background:linear-gradient(180deg,var(--gold-soft),var(--card) 55%)}
-.flagbar{margin:-14px -14px 8px;padding:6px 14px;min-height:29px;background:var(--gold);color:#1a1200;font-size:12px;font-weight:800;letter-spacing:.05em}
+.flagbar{margin:-14px -14px 8px;padding:6px 14px;min-height:29px;border-radius:12px 12px 0 0;background:var(--gold);color:#1a1200;font-size:12px;font-weight:800;letter-spacing:.05em}
 .flagbar.empty{background:transparent;padding:0;min-height:0;margin-bottom:0}
 .team{display:flex;align-items:center;gap:10px;padding:6px 0;min-height:78px}
 .team+.team{border-top:1px dashed var(--line)}
@@ -406,6 +472,16 @@ footer{margin-top:32px;font-size:13px;color:var(--muted)}a{color:var(--accent)}
 .small-hero{padding:24px 24px 20px}.small-hero h1{font-size:clamp(22px,4vw,32px)}
 .daynav{display:flex;justify-content:space-between;align-items:center;margin:16px 0 0;font-weight:700}
 .legend{margin:8px 0 0}
+.tip{position:relative;cursor:help;border-bottom:1px dotted currentColor;outline:none}
+.tip::after{content:attr(data-tip);position:absolute;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%);
+  width:max-content;max-width:250px;white-space:normal;text-transform:none;letter-spacing:0;font-size:12px;font-weight:500;
+  line-height:1.4;text-align:left;color:#f2f5f9;background:#0f1a2a;border:1px solid rgba(255,255,255,.18);padding:7px 10px;
+  border-radius:8px;box-shadow:0 8px 22px rgba(0,0,0,.3);opacity:0;visibility:hidden;transition:opacity .12s;z-index:60;pointer-events:none}
+.tip:hover::after,.tip:focus::after,.tip:focus-within::after{opacity:1;visibility:visible}
+.tip.tl::after{left:0;transform:none}.tip.tr::after{left:auto;right:0;transform:none}
+.tip.down::after{bottom:auto;top:calc(100% + 8px)}
+.tip.injwrap{display:block;border-bottom:none}.tip.injwrap .injuries{text-decoration:underline dotted;text-underline-offset:2px}
+.gb .tip,.b2b .tip,.flagbar .tip,.hot-tag .tip{border-bottom-color:rgba(127,127,127,.6)}
 ul.archive{list-style:none;margin:0;padding:0}ul.archive li{padding:8px 0;border-bottom:1px solid var(--line)}
 ul.archive li:last-child{border-bottom:none}
 """
@@ -416,6 +492,7 @@ def shell(title, body):
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>{e(title)}</title>
 <link rel="icon" href="https://assets.nhle.com/logos/nhl/svg/NHL_light.svg"><style>{CSS}</style></head>
 <body><div class="wrap">{body}
+{SCRIPT}
 <footer>Paper trading only, not betting advice · Team logos © NHL and its teams ·
 <a href="https://github.com/Prezbo8/nhl-total-model">github.com/Prezbo8/nhl-total-model</a></footer>
 </div></body></html>"""
