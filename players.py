@@ -35,8 +35,8 @@ def refresh_skaters(seasons):
     for s in seasons:
         d = pd.read_csv(io.BytesIO(get(MP_SKATERS.format(s))))
         d = d[d.situation == "all"]
-        parts.append(d[["playerId", "season", "name", "team", "position", "icetime", "OnIce_F_xGoals", "OnIce_A_xGoals",
-                        "OnIce_F_goals", "OnIce_A_shotsOnGoal", "I_F_goals", "I_F_points"]])
+        parts.append(d[["playerId", "season", "name", "team", "position", "games_played", "icetime", "OnIce_F_xGoals",
+                        "OnIce_A_xGoals", "OnIce_F_goals", "OnIce_A_shotsOnGoal", "I_F_goals", "I_F_points"]])
         time.sleep(2)
     pd.concat(parts).to_csv(SKATERS, index=False)
 
@@ -67,6 +67,37 @@ def refresh_lineups(games, seasons):
 # player rating = 50% advanced + 50% regular stats (weights fixed up front, not tuned)
 OFFENSE = {"OnIce_F_xGoals": 0.5, "OnIce_F_goals": 1 / 6, "I_F_goals": 1 / 6, "I_F_points": 1 / 6}
 DEFENSE = {"OnIce_A_xGoals": 0.5, "OnIce_A_shotsOnGoal": 0.5}
+
+
+def player_table(season, min_season=2020):
+    """One row per skater: offense/defense ratios vs league average (1.0 = average, same 50% advanced /
+    50% regular formula as roster_ratings, shrunk toward replacement for low minutes), plus games
+    played and ice time per game this season and last. Uses seasons season-2..season (never before
+    min_season), INCLUDING the current season - this is for live use, not backtests."""
+    sk = pd.read_csv(SKATERS)
+    first = max(season - 2, min_season)
+    past = sk[sk.season.between(first, season)].copy()
+    past["w"] = past.season.map({season: 1.0, season - 1: 0.7, season - 2: 0.4})
+    stats = list(OFFENSE) + list(DEFENSE)
+    lg = {c: past[c].sum() / past.icetime.sum() for c in stats}
+    wt = past.assign(**{c: past[c] * past.w for c in stats + ["icetime"]})
+    agg = wt.groupby("playerId")[stats + ["icetime"]].sum()
+    shrink = SHRINK_MIN * 60
+    agg["f"] = sum(w * (agg[c] + shrink * lg[c] * REPLACEMENT[0]) / (agg.icetime + shrink) / lg[c] for c, w in OFFENSE.items())
+    agg["a"] = sum(w * (agg[c] + shrink * lg[c] * REPLACEMENT[1]) / (agg.icetime + shrink) / lg[c] for c, w in DEFENSE.items())
+    cur = sk[sk.season == season].set_index("playerId")
+    last = sk[sk.season == season - 1].set_index("playerId")
+    latest = past.sort_values("season").groupby("playerId").last()
+    out = agg[["f", "a"]].join(latest[["name", "team", "position"]])
+    out["gp_cur"] = cur.games_played.reindex(out.index).fillna(0)
+    out["team_cur"] = cur.team.reindex(out.index)
+    out["gp_last"] = last.games_played.reindex(out.index).fillna(0)
+    out["team_last"] = last.team.reindex(out.index)
+    # ice time per game: this season once he has 5+ games, else last season
+    toi_cur = (cur.icetime / cur.games_played).reindex(out.index)
+    toi_last = (last.icetime / last.games_played).reindex(out.index)
+    out["toi_pg"] = toi_cur.where(out.gp_cur >= 5, toi_last).fillna(toi_cur).fillna(0)
+    return out.reset_index()
 
 
 def roster_ratings(season, min_season=None):

@@ -355,6 +355,13 @@ def today(day=None):
             shop.setdefault(key, []).append((names.get(r["book"], str(r["book"])), r["total"], int(r["over"]), int(r["under"])))
     except Exception as e:
         print(f"(couldn't read sportsbook lines for line shopping: {e})")
+    try:  # skater injuries (ESPN): remove injured regulars, replace with replacement-level players
+        import injuries
+        inj = injuries.adjustments(injuries.fetch(), season, injuries.team_games_this_season(games, season))
+    except Exception as e:
+        print(f"(couldn't read injuries: {e}; projecting without injury adjustments)")
+        inj = {}
+    no_inj = {"off": 1.0, "def": 1.0, "out": [], "dtd": []}
     st = pd.read_csv(goalies.STARTS)
     ids = {n.lower(): p for n, p in zip(st.name, st.playerId)}
     recent = st[(st.started == 1) & (st.season >= st.season.max() - 1)].sort_values("gameId")
@@ -393,6 +400,10 @@ def today(day=None):
         hg, hp, hs = starter(h, hname)
         ag, ap, as_ = starter(a, aname)
         lh, la, det = project(h, a, hp, ap, h in tired, a in tired, detail=True)
+        ih, ia = inj.get(h, no_inj), inj.get(a, no_inj)
+        fh_inj, fa_inj = ih["off"] * ia["def"], ia["off"] * ih["def"]  # own injuries + opponent's injured defenders
+        lh, la = lh * fh_inj, la * fa_inj
+        det["home"]["inj"], det["away"]["inj"] = fh_inj - 1, fa_inj - 1
         x = lh + la
         p7 = p_from(cal, 7, x)
         ln = lines.get((h, a), {})
@@ -414,6 +425,11 @@ def today(day=None):
             print(f"     best over 6/6.5: {bk} o{bt:g} {bo:+d}   others: {others}")
         print(f"     G: {ag} ({as_}, {project.goalie_skill(ap):+.1%}) vs {hg} ({hs}, {project.goalie_skill(hp):+.1%})"
               + (f"   back-to-back: {', '.join(sorted(tired & {h, a}))}" if tired & {h, a} else ""))
+        for t, ii in ((a, ia), (h, ih)):
+            if ii["out"] or ii["dtd"]:
+                print(f"     injuries {t}: " + ", ".join(
+                    f"{n} out ({-o * 100:+.1f}% GF)" if abs(o) >= abs(d) else f"{n} out ({d * 100:+.1f}% GA)" for n, o, d in ii["out"])
+                      + (" | day-to-day: " + ", ".join(ii["dtd"]) if ii["dtd"] else ""))
         if flag:
             flagged.append(f"{a} @ {h} OVER {cur['total']:g} ({cur['over']:+d})"
                            + (f" -> best: {best[1]} o{best[2]:g} {best[3]:+d}" if best else ""))
@@ -430,6 +446,9 @@ def today(day=None):
                          "away_b2b": a in tired, "home_b2b": h in tired,
                          "away_goalie_now": f"{ag} ({as_})", "home_goalie_now": f"{hg} ({hs})",
                          "updated_at": pd.Timestamp.now().strftime("%Y-%m-%d %H:%M"),
+                         "away_out": "; ".join(f"{n}|{o:.4f}|{d:.4f}" for n, o, d in ia["out"]) or None,
+                         "home_out": "; ".join(f"{n}|{o:.4f}|{d:.4f}" for n, o, d in ih["out"]) or None,
+                         "away_dtd": ", ".join(ia["dtd"]) or None, "home_dtd": ", ".join(ih["dtd"]) or None,
                          **{f"{s}_{c}": round(v, 4) for s in ("away", "home") for c, v in det[s].items()}})
     print("\n(goalie % = share of expected goals stopped beyond average; higher = better)")
     print("OVER FLAG = both teams high-scoring (marked +) and the line is 6 or 6.5. Overs only, never 5.5.")

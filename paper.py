@@ -25,9 +25,10 @@ COLS = ["date", "away", "home", "proj", "proj_away", "proj_home", "cutoff", "fla
         "close_total", "close_over", "close_under", "away_score", "home_score", "final_total",
         "result", "profit", "clv", "result_best", "profit_best",
         # context for the dashboard: back-to-backs, latest starters, projection breakdown
-        "away_b2b", "home_b2b", "away_goalie_now", "home_goalie_now", "updated_at"] + [
-        f"{s}_{c}" for s in ("away", "home") for c in ("ev", "pp", "oth", "gadj", "b2badj")]
-BREAKDOWN = [f"{s}_{c}" for s in ("away", "home") for c in ("ev", "pp", "oth", "gadj", "b2badj")]
+        "away_b2b", "home_b2b", "away_goalie_now", "home_goalie_now", "updated_at",
+        "away_out", "home_out", "away_dtd", "home_dtd"] + [
+        f"{s}_{c}" for s in ("away", "home") for c in ("ev", "pp", "oth", "gadj", "b2badj", "inj")]
+BREAKDOWN = [f"{s}_{c}" for s in ("away", "home") for c in ("ev", "pp", "oth", "gadj", "b2badj", "inj")]
 
 
 def was_flagged_now(v):
@@ -44,7 +45,7 @@ def read_log():
     for c in ("flag", "away_b2b", "home_b2b"):
         d[c] = d[c].map(was_flagged_now).astype(bool)
     for c in ("result", "result_best", "best_book", "away_goalie_now", "home_goalie_now", "updated_at", "flagged_at",
-              "away_goalie", "home_goalie"):
+              "away_goalie", "home_goalie", "away_out", "home_out", "away_dtd", "home_dtd"):
         d[c] = d[c].astype(object)
     return d
 
@@ -72,7 +73,8 @@ def log_games(rows):
         for _, r in new[key(new).isin(old_keys)].iterrows():
             i = old.index[old_keys == key(pd.DataFrame([r])).iloc[0]][0]
             # always refresh: latest starters, back-to-backs (the bet itself never changes)
-            for c in ("away_goalie_now", "home_goalie_now", "away_b2b", "home_b2b", "updated_at"):
+            for c in ("away_goalie_now", "home_goalie_now", "away_b2b", "home_b2b", "updated_at",
+                      "away_out", "home_out", "away_dtd", "home_dtd"):
                 old.loc[i, c] = r[c]
             if not was_flagged_now(old.at[i, "flag"]):  # best book is informational until a game is flagged
                 for c in ("best_book", "best_total", "best_over", "best_under"):

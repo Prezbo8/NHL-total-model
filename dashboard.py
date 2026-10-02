@@ -18,17 +18,8 @@ BACKTEST = [  # season, open bets, open ROI, close bets, close ROI
     ("2024-25", 47, 12.9, 47, 16.3), ("2025-26", 136, 7.8, 150, 3.6),
 ]
 
-TEAMS = {
-    "ANA": "Anaheim Ducks", "ARI": "Arizona Coyotes", "BOS": "Boston Bruins", "BUF": "Buffalo Sabres",
-    "CGY": "Calgary Flames", "CAR": "Carolina Hurricanes", "CHI": "Chicago Blackhawks", "COL": "Colorado Avalanche",
-    "CBJ": "Columbus Blue Jackets", "DAL": "Dallas Stars", "DET": "Detroit Red Wings", "EDM": "Edmonton Oilers",
-    "FLA": "Florida Panthers", "LAK": "Los Angeles Kings", "MIN": "Minnesota Wild", "MTL": "Montréal Canadiens",
-    "NSH": "Nashville Predators", "NJD": "New Jersey Devils", "NYI": "New York Islanders", "NYR": "New York Rangers",
-    "OTT": "Ottawa Senators", "PHI": "Philadelphia Flyers", "PIT": "Pittsburgh Penguins", "SJS": "San Jose Sharks",
-    "SEA": "Seattle Kraken", "STL": "St. Louis Blues", "TBL": "Tampa Bay Lightning", "TOR": "Toronto Maple Leafs",
-    "UTA": "Utah Mammoth", "VAN": "Vancouver Canucks", "VGK": "Vegas Golden Knights", "WSH": "Washington Capitals",
-    "WPG": "Winnipeg Jets",
-}
+from teams import TEAMS  # noqa: E402
+
 SCALE = 4.5  # projected-goal bars run 0 -> 4.5 goals
 
 
@@ -99,7 +90,31 @@ def goalie_html(logged, now):
     return f"<div class='goalie'>{e(nm)} {badge}{changed}</div>"
 
 
-def team_row(abbr, proj, cutoff, goalie, goalie_now=None, b2b=False, score=None):
+def injury_html(out, dtd):
+    """'Out: Hyman −3.0%, Nugent-Hopkins −2.0%' (impact on the team's scoring) and day-to-day names."""
+    parts, players_out = [], []
+    if isinstance(out, str) and out:
+        for it in out.split("; "):
+            name, d_off, d_def = (it.split("|") + ["0", "0"])[:3]
+            players_out.append((name, float(d_off or 0), float(d_def or 0)))
+        players_out.sort(key=lambda p: -max(abs(p[1]), abs(p[2])))  # biggest impact first
+        items = []
+        for name, d_off, d_def in players_out[:3]:
+            last = e(name.split(" ", 1)[-1])
+            effect = f"{-d_off * 100:+.1f}% GF" if abs(d_off) >= abs(d_def) else f"{d_def * 100:+.1f}% GA"
+            tip = f"{name}: team scoring {-d_off * 100:+.1f}%, opponent scoring {d_def * 100:+.1f}%"
+            items.append(f"<span title='{e(tip)}'>{last} {effect}</span>")
+        more = players_out[3:]
+        if more:
+            items.append(f"<span title='{e(', '.join(p[0] for p in more))}'>+{len(more)} more</span>")
+        parts.append(f"<span class='inj out'>Out: {', '.join(items)}</span>")
+    if isinstance(dtd, str) and dtd and len(players_out) < 3:
+        parts.append(f"<span class='inj dtd' title='Day-to-day (usually plays, not adjusted): {e(dtd)}'>DTD: "
+                     f"{', '.join(e(n.split(' ', 1)[-1]) for n in dtd.split(', ')[:2])}</span>")
+    return f"<div class='injuries'>{' '.join(parts)}</div>" if parts else "<div class='injuries'></div>"
+
+
+def team_row(abbr, proj, cutoff, goalie, goalie_now=None, b2b=False, score=None, out=None, dtd=None):
     hot = proj >= cutoff
     right = (f"<div class='score'>{score}<small>proj {proj:.2f}{' · HIGH' if hot else ''}</small></div>" if score is not None else
              f"<div class='pg'><b>{proj:.2f}</b>{'<span class=hot-tag>HIGH</span>' if hot else ''}</div>")
@@ -108,7 +123,7 @@ def team_row(abbr, proj, cutoff, goalie, goalie_now=None, b2b=False, score=None)
     return f"""<div class='team'>
       {logo(abbr)}
       <div class='tname'><div class='full'>{name(abbr)} {tag}</div>{goalie_html(goalie, goalie_now)}
-        {goal_bar(proj, cutoff, abbr)}</div>
+        {injury_html(out, dtd)}{goal_bar(proj, cutoff, abbr)}</div>
       {right}</div>"""
 
 
@@ -120,10 +135,12 @@ def breakdown(r, flagged):
         adj = lambda v: f"{v * 100:+.1f}%" if abs(v) >= 0.0005 else "–"
         return (f"<tr><td>{logo(abbr, 18)} {e(abbr)}</td><td class='num'>{g('ev'):.2f}</td><td class='num'>{g('pp'):.2f}</td>"
                 f"<td class='num'>{g('oth'):.2f}</td><td class='num'>{adj(g('gadj'))}</td><td class='num'>{adj(g('b2badj'))}</td>"
+                f"<td class='num'>{'–' if pd.isna(g('inj')) else adj(g('inj'))}</td>"
                 f"<td class='num'><b>{proj:.2f}</b></td></tr>")
     return f"""<div class='why'><div class='why-h'>{'Why it’s flagged' if flagged else 'Projection breakdown'}</div>
       <table><thead><tr><th>Team</th><th class='num'>5v5</th><th class='num'>PP</th><th class='num'>Oth</th>
-      <th class='num' title='Opposing goalie adjustment'>Gl</th><th class='num'>B2B</th><th class='num'>Proj</th></tr></thead>
+      <th class='num' title='Opposing goalie adjustment'>Gl</th><th class='num'>B2B</th>
+      <th class='num' title='Injuries: own injured players + opponent injured defenders'>Inj</th><th class='num'>Proj</th></tr></thead>
       <tbody>{row('away', r.away, r.proj_away)}{row('home', r.home, r.proj_home)}</tbody></table></div>"""
 
 
@@ -132,10 +149,10 @@ def game_card(r):
     final = not pd.isna(r.final_total)
     ascore = int(r.away_score) if final else None
     hscore = int(r.home_score) if final else None
-    rows = (team_row(r.away, r.proj_away, r.cutoff, r.away_goalie, getattr(r, "away_goalie_now", None), getattr(r, "away_b2b", False), ascore)
-            + team_row(r.home, r.proj_home, r.cutoff, r.home_goalie, getattr(r, "home_goalie_now", None), getattr(r, "home_b2b", False), hscore))
-    def kv(label, value):
-        return f"<div class='kv'><span>{label}</span><b>{value}</b></div>"
+    rows = (team_row(r.away, r.proj_away, r.cutoff, r.away_goalie, r.away_goalie_now, r.away_b2b, ascore, r.away_out, r.away_dtd)
+            + team_row(r.home, r.proj_home, r.cutoff, r.home_goalie, r.home_goalie_now, r.home_b2b, hscore, r.home_out, r.home_dtd))
+    def kv(label, value, wide=False):
+        return f"<div class='kv{' wide' if wide else ''}'><span>{label}</span><b>{value}</b></div>"
     blank = "<div class='kv'></div>"
     if final:
         vs = "<span class='pill muted-pill'>no line</span>"
@@ -158,8 +175,8 @@ def game_card(r):
                 kv("Line", "<span class='muted'>not posted</span>" if pd.isna(r.bet_total) else
                    f"{line(r.open_total)} → {line(r.bet_total)}"),
                 kv("Over price", "–" if pd.isna(r.bet_over) else price(r.bet_over)),
-                kv("Best over", f"{book(r.best_book)} o{line(r.best_total)} {price(r.best_over)}") if not pd.isna(r.best_total)
-                else kv("Best over", "<span class='muted'>–</span>"), blank]
+                kv("Best over", f"{book(r.best_book)} o{line(r.best_total)} {price(r.best_over)}", wide=True) if not pd.isna(r.best_total)
+                else kv("Best over", "<span class='muted'>–</span>", wide=True)]
     bar = f"<div class='flagbar'>★ OVER FLAG · {'over' if final else 'bet over'} {line(r.bet_total)}</div>" if flagged else ""
     return f"""<article class='card{' flagged' if flagged else ''}'>{bar or "<div class='flagbar empty'></div>"}{rows}
       <div class='meta'>{''.join(meta)}</div>{breakdown(r, flagged)}</article>"""
@@ -169,7 +186,7 @@ def day_cards(g):
     g = g.sort_values(["flag", "proj"], ascending=[False, False])
     return (f"<div class='cards'>{''.join(game_card(r) for r in g.itertuples())}</div>"
             "<p class='muted small legend'>Breakdown: 5v5 + PP (power play) + Oth (other situations) goals, then Gl = opposing-goalie "
-            "adjustment (+ means a below-average goalie) and B2B = back-to-back adjustment → Proj.</p>")
+            "adjustment (+ means a below-average goalie), B2B = back-to-back and Inj = injury adjustments → Proj.</p>")
 
 
 def day_summary(g):
@@ -349,7 +366,7 @@ h2{margin:0 0 4px;font-size:21px;letter-spacing:-.01em}
 .score{font-size:28px;font-weight:800;min-width:40px;text-align:right;font-variant-numeric:tabular-nums;line-height:1.1}
 .score small{display:block;font-size:11px;font-weight:600;color:var(--muted);white-space:nowrap}
 .meta{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px 12px;align-items:start;margin-top:10px;padding-top:10px;border-top:1px solid var(--line)}
-.meta .kv b{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.meta .kv b{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.meta .kv.wide{grid-column:span 2}
 .kv{display:flex;flex-direction:column;min-width:0}.kv>span{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);white-space:nowrap}
 .kv b{font-variant-numeric:tabular-nums}.kv small{color:var(--muted);font-weight:500}
 .big-total{font-size:22px;font-weight:800;line-height:1}
@@ -375,6 +392,7 @@ footer{margin-top:32px;font-size:13px;color:var(--muted)}a{color:var(--accent)}
 .gb.ok{background:rgba(26,127,55,.15);color:var(--pos)}.gb.likely{background:rgba(201,151,0,.18);color:var(--gold)}
 .gb.proj{background:var(--ice);color:var(--muted)}.gb.chg{background:var(--neg);color:#fff}
 .goalie{white-space:normal;min-height:34px}
+.injuries{min-height:16px;font-size:11px;line-height:1.35;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.inj.out{color:var(--neg);font-weight:700}.inj.dtd{color:var(--muted)}
 .b2b{display:inline-block;font-size:10px;font-weight:800;padding:1px 6px;border-radius:4px;background:var(--red);color:#fff;
   margin-left:4px;vertical-align:2px;letter-spacing:.04em}
 .why{margin-top:auto;padding-top:10px;border-top:1px solid var(--line)}
@@ -430,6 +448,7 @@ Data from the 2020-21 season onward only (MoneyPuck, NHL API, DailyFaceoff, Acti
 <div><dt>OVER FLAG</dt><dd>Both teams past the cutoff and the line is 6 or 6.5. These are the picks that count in the record.</dd></div>
 <div><dt>Goalie badges</dt><dd>✓ Confirmed / Likely / Projected starter, from DailyFaceoff, refreshed every run. "Changed" = different from the starter the projection used.</dd></div>
 <div><dt>B2B</dt><dd>Team played yesterday: its projected scoring is cut ~8% and its opponent's raised ~6.5%.</dd></div>
+<div><dt>Injuries</dt><dd>From ESPN's injury list. Players who are Out, on IR or suspended are replaced by a replacement-level skater. GF = change to his team's scoring, GA = change to goals against (shown for whichever is bigger; hover for both). Day-to-day players are shown but not adjusted.</dd></div>
 <div><dt>Breakdown</dt><dd>Each team's goals = (5-on-5 + power play + other situations) × opposing-goalie adjustment × back-to-back adjustment. A + goalie number means the opposing goalie has been below average.</dd></div>
 </dl></div></section>"""
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
