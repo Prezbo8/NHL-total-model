@@ -76,6 +76,7 @@ def yesterday(d):
                 "scores here (first results: the Oct 2 games, after the Oct 3 morning run).</p>")
     day = done.date.max()
     g = done[done.date == day].sort_values("proj", ascending=False)
+    is_retro = retro(g).any()
     rows, overs, n_line = [], 0, 0
     for r in g.itertuples():
         vs = ""
@@ -105,13 +106,21 @@ def yesterday(d):
     flagged = g[(g.flag == True) & g.result.notna()]
     fl = (f"Flagged picks: <b>{(flagged.result == 'W').sum()}-{(flagged.result == 'L').sum()}-{(flagged.result == 'P').sum()}</b>, "
           f"{flagged.profit.sum():+.2f}u" if len(flagged) else "No flagged picks")
-    return f"""<p class='muted'>{e(day)} · {len(g)} games · <b>{overs} of {n_line}</b> went over the logged line ·
+    note = ("<p class='retro'><b>Retroactive:</b> this day was added after the fact from pre-game data only "
+            "(ratings from earlier games, that day's projected starters, opening lines). It's shown for reference and "
+            "does <b>not</b> count toward the paper trading record.</p>") if is_retro else ""
+    return f"""{note}<p class='muted'>{e(day)} · {len(g)} games · <b>{overs} of {n_line}</b> went over the logged line ·
       avg total <b>{g.final_total.mean():.1f}</b> goals (model projected {g.proj.mean():.1f}) · {fl}</p>
       <div class='scroll'><table><thead><tr><th>Game</th><th>Proj</th><th>P(7+)</th><th>Line (logged → close)</th>
       <th>Final</th><th>Goals</th><th>vs line</th><th>Pick result</th></tr></thead><tbody>{''.join(rows)}</tbody></table></div>"""
 
 
+def retro(d):
+    return d.logged_at.astype(str).str.contains("retroactively")
+
+
 def record(d):
+    d = d[~retro(d)]  # backfilled days are shown in results but never count toward the live record
     f = d[d.flag == True]
     s = f[f.result.notna()]
     dec = s[s.result != "P"]
@@ -182,6 +191,7 @@ tr.flagged td{background:var(--flagbg)}tr.total td{font-weight:700}
 .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:16px}
 .tile{border:1px solid var(--line);border-radius:10px;padding:12px}.tile .label{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
 .big{font-size:28px;font-weight:700;font-variant-numeric:tabular-nums}
+.retro{border-left:4px solid var(--muted);padding:8px 14px;border-radius:6px;background:var(--bg);margin:0 0 10px}
 .rule{border-left:4px solid var(--flag);padding:8px 14px;background:var(--flagbg);border-radius:6px}
 .gradebox{display:flex;align-items:baseline;gap:14px;margin-bottom:12px}.gradebox .big{font-size:44px}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:20px}@media (max-width:760px){.grid2{grid-template-columns:1fr}}

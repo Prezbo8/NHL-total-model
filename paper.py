@@ -108,6 +108,7 @@ def report():
         print("no log yet")
         return
     d = pd.read_csv(LOG)
+    d = d[~d.logged_at.astype(str).str.contains("retroactively")]  # backfilled days don't count
     f = d[d.flag == True]
     s = f[f.result.notna()]
     print(f"games logged: {len(d)}   flagged overs: {len(f)}   settled: {len(s)}")

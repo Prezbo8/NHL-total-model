@@ -4,3 +4,11 @@ date,away,home,proj,proj_away,proj_home,cutoff,flag,p7,away_goalie,home_goalie,o
 2026-10-02,BOS,WPG,5.707,3.004,2.704,2.954,False,0.4372,Jeremy Swayman (Unconfirmed),Stuart Skinner (Unconfirmed),5.5,-125,5.5,-125,105,,,,,2026-10-02 01:57,,,,,,,,,,,,
 2026-10-02,STL,DAL,5.559,2.683,2.876,2.954,False,0.4238,Joel Hofer (Unconfirmed),Jake Oettinger (Unconfirmed),5.5,-120,5.5,-136,113,,,,,2026-10-02 01:57,,,,,,,,,,,,
 2026-10-02,ANA,VGK,6.074,2.844,3.23,2.954,False,0.4707,Lukas Dostal (Unconfirmed),Carter Hart (Unconfirmed),6.5,-109,6.5,-120,-100,,,,,2026-10-02 01:57,,,,,,,,,,,,
+2026-10-01,PHI,NJD,5.485,2.491,2.994,2.951,False,0.4178,unknown,unknown,5.5,-120,5.5,-120,100,,,,,2026-10-01 (added retroactively Oct 2 from pre-game data; line = opening line),,5.5,-120.0,-101.0,2.0,3.0,5.0,,,,,
+2026-10-01,TBL,NYR,5.889,3.165,2.724,2.951,False,0.4545,unknown,unknown,5.5,-132,5.5,-132,110,,,,,2026-10-01 (added retroactively Oct 2 from pre-game data; line = opening line),,5.5,-122.0,100.0,1.0,5.0,6.0,,,,,
+2026-10-01,BUF,CBJ,6.156,3.144,3.012,2.951,False,0.4789,unknown,unknown,5.5,-135,5.5,-135,115,,,,,2026-10-01 (added retroactively Oct 2 from pre-game data; line = opening line),,6.5,112.0,-133.0,3.0,6.0,9.0,,,,,
+2026-10-01,MIN,NSH,6.0,3.132,2.867,2.951,False,0.4646,unknown,unknown,6.5,110,6.5,110,-130,,,,,2026-10-01 (added retroactively Oct 2 from pre-game data; line = opening line),,6.5,106.0,-128.0,3.0,1.0,4.0,,,,,
+2026-10-01,SEA,CGY,5.64,2.871,2.769,2.951,False,0.4318,unknown,unknown,5.5,-115,5.5,-115,-105,,,,,2026-10-01 (added retroactively Oct 2 from pre-game data; line = opening line),,5.5,-125.0,105.0,6.0,1.0,7.0,,,,,
+2026-10-01,CHI,UTA,6.193,2.762,3.43,2.951,False,0.4823,unknown,unknown,5.5,-115,5.5,-115,-105,,,,,2026-10-01 (added retroactively Oct 2 from pre-game data; line = opening line),,6.5,-105.0,-117.0,0.0,6.0,6.0,,,,,
+2026-10-01,EDM,VAN,6.211,3.455,2.756,2.951,False,0.4839,unknown,unknown,6.5,-110,6.5,-110,-110,,,,,2026-10-01 (added retroactively Oct 2 from pre-game data; line = opening line),,6.5,-125.0,105.0,9.0,7.0,16.0,,,,,
+2026-10-01,FLA,SJS,6.019,3.068,2.952,2.951,True,0.4664,unknown,unknown,6.5,102,6.5,102,-122,DK NJ,6.5,-105.0,-115.0,2026-10-01 (added retroactively Oct 2 from pre-game data; line = opening line),,6.5,-105.0,-115.0,3.0,4.0,7.0,W,1.02,1.0,W,0.9523809523809523

@@ -18,18 +18,62 @@ tr.flagged td{background:var(--flagbg)}tr.total td{font-weight:700}
 .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:16px}
 .tile{border:1px solid var(--line);border-radius:10px;padding:12px}.tile .label{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
 .big{font-size:28px;font-weight:700;font-variant-numeric:tabular-nums}
+.retro{border-left:4px solid var(--muted);padding:8px 14px;border-radius:6px;background:var(--bg);margin:0 0 10px}
 .rule{border-left:4px solid var(--flag);padding:8px 14px;background:var(--flagbg);border-radius:6px}
 .gradebox{display:flex;align-items:baseline;gap:14px;margin-bottom:12px}.gradebox .big{font-size:44px}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:20px}@media (max-width:760px){.grid2{grid-template-columns:1fr}}
 .grid2 section{margin-top:0}ul.notes{margin:12px 0 0;padding-left:20px;color:var(--muted)}dt{font-weight:700;margin-top:10px}dd{margin:2px 0 0;color:var(--muted)}
 </style></head>
 <body><div class="wrap">
-<header><h1>NHL Total Model</h1><p>Over/under projections, OVER flags and live paper trading · updated Oct 02, 2026 12:30 PM</p></header>
+<header><h1>NHL Total Model</h1><p>Over/under projections, OVER flags and live paper trading · updated Oct 02, 2026 12:34 PM</p></header>
 
 <section><h2>The rule</h2><div class="rule"><b>OVER only</b>, consensus line <b>6 or 6.5</b> (never 5.5), and <b>both teams</b> projected
 as high-scoring (top 40% of last season's team projections). Bet it at the <b>best over</b> book.</div></section>
 
-<section><h2>Yesterday's results</h2><p class='muted'>No finished games yet. Each morning's run fills in the previous night's final scores here (first results: the Oct 2 games, after the Oct 3 morning run).</p></section>
+<section><h2>Yesterday's results</h2><p class='retro'><b>Retroactive:</b> this day was added after the fact from pre-game data only (ratings from earlier games, that day's projected starters, opening lines). It's shown for reference and does <b>not</b> count toward the paper trading record.</p><p class='muted'>2026-10-01 · 8 games · <b>6 of 8</b> went over the logged line ·
+      avg total <b>7.5</b> goals (model projected 5.9) · Flagged picks: <b>1-0-0</b>, +1.02u</p>
+      <div class='scroll'><table><thead><tr><th>Game</th><th>Proj</th><th>P(7+)</th><th>Line (logged → close)</th>
+      <th>Final</th><th>Goals</th><th>vs line</th><th>Pick result</th></tr></thead><tbody><tr class=''>
+          <td><b>EDM @ VAN</b> </td>
+          <td class='num'>6.21</td><td class='num'>48.4%</td>
+          <td class='num'>6.5 → 6.5</td>
+          <td class='num'>EDM 9 – 7 VAN</td>
+          <td class='num'><b>16</b></td><td><span class='pos'><b>OVER</b></span></td><td><span class='muted'>–</span></td></tr><tr class=''>
+          <td><b>CHI @ UTA</b> </td>
+          <td class='num'>6.19</td><td class='num'>48.2%</td>
+          <td class='num'>5.5 → 6.5 ↑</td>
+          <td class='num'>CHI 0 – 6 UTA</td>
+          <td class='num'><b>6</b></td><td><span class='pos'><b>OVER</b></span></td><td><span class='muted'>–</span></td></tr><tr class=''>
+          <td><b>BUF @ CBJ</b> </td>
+          <td class='num'>6.16</td><td class='num'>47.9%</td>
+          <td class='num'>5.5 → 6.5 ↑</td>
+          <td class='num'>BUF 3 – 6 CBJ</td>
+          <td class='num'><b>9</b></td><td><span class='pos'><b>OVER</b></span></td><td><span class='muted'>–</span></td></tr><tr class='flagged'>
+          <td><b>FLA @ SJS</b> <span class='flag'>OVER FLAG</span></td>
+          <td class='num'>6.02</td><td class='num'>46.6%</td>
+          <td class='num'>6.5 → 6.5</td>
+          <td class='num'>FLA 3 – 4 SJS</td>
+          <td class='num'><b>7</b></td><td><span class='pos'><b>OVER</b></span></td><td><span class='res W'>W</span> +1.02u <span class='muted'>(best book +0.95u)</span></td></tr><tr class=''>
+          <td><b>MIN @ NSH</b> </td>
+          <td class='num'>6.00</td><td class='num'>46.5%</td>
+          <td class='num'>6.5 → 6.5</td>
+          <td class='num'>MIN 3 – 1 NSH</td>
+          <td class='num'><b>4</b></td><td><span class='neg'><b>UNDER</b></span></td><td><span class='muted'>–</span></td></tr><tr class=''>
+          <td><b>TBL @ NYR</b> </td>
+          <td class='num'>5.89</td><td class='num'>45.5%</td>
+          <td class='num'>5.5 → 5.5</td>
+          <td class='num'>TBL 1 – 5 NYR</td>
+          <td class='num'><b>6</b></td><td><span class='pos'><b>OVER</b></span></td><td><span class='muted'>–</span></td></tr><tr class=''>
+          <td><b>SEA @ CGY</b> </td>
+          <td class='num'>5.64</td><td class='num'>43.2%</td>
+          <td class='num'>5.5 → 5.5</td>
+          <td class='num'>SEA 6 – 1 CGY</td>
+          <td class='num'><b>7</b></td><td><span class='pos'><b>OVER</b></span></td><td><span class='muted'>–</span></td></tr><tr class=''>
+          <td><b>PHI @ NJD</b> </td>
+          <td class='num'>5.49</td><td class='num'>41.8%</td>
+          <td class='num'>5.5 → 5.5</td>
+          <td class='num'>PHI 2 – 3 NJD</td>
+          <td class='num'><b>5</b></td><td><span class='neg'><b>UNDER</b></span></td><td><span class='muted'>–</span></td></tr></tbody></table></div></section>
 
 <section><h2>Latest slate</h2><p class='muted'>2026-10-02 · high-scoring = projected <b>2.95+</b> goals (marked <span class='hi'>+</span>) ·
       logged 2026-10-02 01:57</p>
