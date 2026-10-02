@@ -1,0 +1,153 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>NHL Total Model · 2026-10-02</title>
+<link rel="icon" href="https://assets.nhle.com/logos/nhl/svg/NHL_light.svg"><style>
+:root{--bg:#f3f5f8;--card:#fff;--ink:#0f1a2a;--muted:#5f6b7a;--line:#dfe4ea;--ice:#e8eef5;
+  --accent:#1f6feb;--accent-soft:#c9dbf7;--gold:#c99700;--gold-soft:#fff4cc;--red:#c8102e;--pos:#1a7f37;--neg:#c62828}
+@media (prefers-color-scheme:dark){:root{--bg:#0b1119;--card:#131c27;--ink:#e8edf3;--muted:#93a1b2;--line:#233040;--ice:#18222f;
+  --accent:#58a6ff;--accent-soft:#1d3554;--gold:#e3b341;--gold-soft:#2b2410;--red:#ff5a6e;--pos:#3fb950;--neg:#f85149;color-scheme:dark}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+.wrap{max-width:1180px;margin:0 auto;padding:0 16px 64px}
+/* hero: a rink seen from above - red center line, blue lines, faceoff circle */
+.hero{position:relative;overflow:hidden;margin:0 -16px;padding:34px 24px 30px;color:#fff;
+  background:linear-gradient(90deg,transparent calc(50% - 2px),rgba(200,16,46,.85) calc(50% - 2px),rgba(200,16,46,.85) calc(50% + 2px),transparent calc(50% + 2px)),
+    linear-gradient(90deg,transparent 30%,rgba(31,111,235,.75) 30%,rgba(31,111,235,.75) calc(30% + 6px),transparent calc(30% + 6px),
+      transparent calc(70% - 6px),rgba(31,111,235,.75) calc(70% - 6px),rgba(31,111,235,.75) 70%,transparent 70%),
+    radial-gradient(circle at 50% 50%,transparent 58px,rgba(31,111,235,.6) 59px,rgba(31,111,235,.6) 61px,transparent 62px),
+    linear-gradient(160deg,#0d2440,#0a1a2e 60%,#081422)}
+.hero h1{margin:0;font-size:clamp(28px,5vw,44px);letter-spacing:-.02em;position:relative}
+.hero p{margin:6px 0 0;color:#c9d6e6;position:relative}
+.hero .stats{display:flex;gap:12px;flex-wrap:wrap;margin-top:18px;position:relative}
+.hero .stat{background:rgba(255,255,255,.1);backdrop-filter:blur(4px);border:1px solid rgba(255,255,255,.18);border-radius:10px;padding:8px 14px}
+.hero .stat b{font-size:22px;display:block}.hero .stat span{font-size:12px;color:#c9d6e6;text-transform:uppercase;letter-spacing:.05em}
+section{margin-top:28px}
+h2{margin:0 0 4px;font-size:21px;letter-spacing:-.01em}
+.sub{margin:0 0 14px;color:var(--muted)}.muted{color:var(--muted)}
+.rule{background:var(--card);border:1px solid var(--line);border-left:5px solid var(--gold);border-radius:10px;padding:12px 16px}
+.retro{border-left:4px solid var(--muted);padding:8px 14px;border-radius:8px;background:var(--ice);margin:0 0 12px}
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:14px}
+.card{position:relative;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 14px 12px;overflow:hidden}
+.card.flagged{border:2px solid var(--gold);background:linear-gradient(180deg,var(--gold-soft),var(--card) 55%)}
+.flagbar{margin:-14px -14px 8px;padding:6px 14px;background:var(--gold);color:#1a1200;font-size:12px;font-weight:800;letter-spacing:.05em}
+.team{display:flex;align-items:center;gap:10px;padding:6px 0}
+.team+.team{border-top:1px dashed var(--line)}
+.logo{display:inline-block;flex:none}.logo img{width:100%;height:100%;display:block}
+.tname{flex:1;min-width:0}.full{font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.goalie{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bar{position:relative;height:6px;border-radius:3px;background:var(--ice);margin-top:5px}
+.bar .fill{height:100%;border-radius:3px;background:var(--accent-soft)}.bar .fill.hot{background:var(--accent)}
+.bar .cut{position:absolute;top:-3px;width:2px;height:12px;background:var(--ink);opacity:.55;border-radius:1px}
+.pg{text-align:right;min-width:62px}.pg b{font-size:20px;font-variant-numeric:tabular-nums}
+.hot-tag{display:block;font-size:10px;font-weight:800;color:var(--accent);letter-spacing:.06em}
+.score{font-size:28px;font-weight:800;min-width:40px;text-align:right;font-variant-numeric:tabular-nums;line-height:1.1}
+.score small{display:block;font-size:11px;font-weight:600;color:var(--muted);white-space:nowrap}
+.meta{display:flex;flex-wrap:wrap;gap:6px 16px;align-items:center;margin-top:10px;padding-top:10px;border-top:1px solid var(--line)}
+.kv{display:flex;flex-direction:column}.kv span{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+.kv b{font-variant-numeric:tabular-nums}.kv small{color:var(--muted);font-weight:500}
+.big-total{font-size:22px}
+.pill{display:inline-block;font-size:12px;font-weight:800;padding:3px 10px;border-radius:999px;background:var(--ice);letter-spacing:.03em}
+.pill.over{background:var(--pos);color:#fff}.pill.under{background:var(--neg);color:#fff}.muted-pill{color:var(--muted)}
+.res.W{color:var(--pos)}.res.L{color:var(--neg)}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:16px}
+.tile{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+.tile .label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+.num-big{font-size:28px;font-weight:800;font-variant-numeric:tabular-nums}
+.panel{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px}
+.scroll{overflow-x:auto}table{border-collapse:collapse;width:100%;font-size:14px}
+th,td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}
+th{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:700}
+.num{text-align:right;font-variant-numeric:tabular-nums}tr.total td{font-weight:800}
+.pos{color:var(--pos)}.neg{color:var(--neg)}td.matchup{display:flex;align-items:center;gap:4px}
+ul.notes{margin:12px 0 0;padding-left:20px;color:var(--muted)}
+dl{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;margin:12px 0 0}
+dl div{background:var(--ice);border-radius:10px;padding:10px 12px}dt{font-weight:800}dd{margin:2px 0 0;color:var(--muted)}
+footer{margin-top:32px;font-size:13px;color:var(--muted)}a{color:var(--accent)}
+.small{font-size:12px}
+.gb{display:inline-block;font-size:10px;font-weight:800;letter-spacing:.03em;padding:1px 6px;border-radius:999px;margin-left:4px;vertical-align:1px}
+.gb.ok{background:rgba(26,127,55,.15);color:var(--pos)}.gb.likely{background:rgba(201,151,0,.18);color:var(--gold)}
+.gb.proj{background:var(--ice);color:var(--muted)}.gb.chg{background:var(--neg);color:#fff}
+.goalie{white-space:normal}
+.b2b{display:inline-block;font-size:10px;font-weight:800;padding:1px 6px;border-radius:4px;background:var(--red);color:#fff;
+  margin-left:4px;vertical-align:2px;letter-spacing:.04em}
+details.why{margin-top:10px;border-top:1px solid var(--line);padding-top:8px}
+details.why summary{cursor:pointer;font-size:12px;font-weight:700;color:var(--accent);list-style:none}
+details.why summary::before{content:"▸ "}details.why[open] summary::before{content:"▾ "}
+details.why table{font-size:12px;margin-top:6px}details.why th,details.why td{padding:4px 6px}
+details.why td:first-child{display:flex;align-items:center;gap:4px}
+.small-hero{padding:24px 24px 20px}.small-hero h1{font-size:clamp(22px,4vw,32px)}
+.daynav{display:flex;justify-content:space-between;align-items:center;margin:16px 0 0;font-weight:700}
+ul.archive{list-style:none;margin:0;padding:0}ul.archive li{padding:8px 0;border-bottom:1px solid var(--line)}
+ul.archive li:last-child{border-bottom:none}
+</style></head>
+<body><div class="wrap"><header class='hero small-hero'><h1>Friday, October 2, 2026</h1>
+      <p>5 games · <b>0 flags</b></p></header>
+      <nav class='daynav'><a href='2026-10-01.html'>← Oct 1</a><a href='../index.html'>Dashboard</a><span></span></nav>
+      <section><div class='cards'><article class='card'><div class='team'>
+      <picture class='logo' style='width:36px;height:36px'><source srcset='https://assets.nhle.com/logos/nhl/svg/ANA_dark.svg' media='(prefers-color-scheme: dark)'><img src='https://assets.nhle.com/logos/nhl/svg/ANA_light.svg' alt='ANA' width='36' height='36' loading='lazy'></picture>
+      <div class='tname'><div class='full'>Anaheim Ducks </div><div class='goalie'>Lukas Dostal <span class='gb proj'>Projected</span></div>
+        <div class='bar' title='Anaheim Ducks: 2.84 projected goals (below the 2.95 cutoff)'><div class='fill' style='width:63.2%'></div><div class='cut' style='left:65.6%'></div></div></div>
+      <div class='pg'><b>2.84</b></div></div><div class='team'>
+      <picture class='logo' style='width:36px;height:36px'><source srcset='https://assets.nhle.com/logos/nhl/svg/VGK_dark.svg' media='(prefers-color-scheme: dark)'><img src='https://assets.nhle.com/logos/nhl/svg/VGK_light.svg' alt='VGK' width='36' height='36' loading='lazy'></picture>
+      <div class='tname'><div class='full'>Vegas Golden Knights </div><div class='goalie'>Carter Hart <span class='gb proj'>Projected</span></div>
+        <div class='bar' title='Vegas Golden Knights: 3.23 projected goals (high-scoring the 2.95 cutoff)'><div class='fill hot' style='width:71.8%'></div><div class='cut' style='left:65.6%'></div></div></div>
+      <div class='pg'><b>3.23</b><span class=hot-tag>HIGH</span></div></div>
+      <div class='meta'><div class='kv'><span>Proj total</span><b>6.07</b></div><div class='kv'><span>P(7+)</span><b>47%</b></div><div class='kv'><span>Line</span><b>6.5 → 6.5 <small>o-120</small></b></div></div><details class='why'><summary>Projection breakdown</summary>
+      <table><thead><tr><th>Team</th><th>5v5</th><th>PP</th><th>Other</th><th>Opp. goalie</th><th>B2B</th><th>Proj</th></tr></thead>
+      <tbody><tr><td><picture class='logo' style='width:18px;height:18px'><source srcset='https://assets.nhle.com/logos/nhl/svg/ANA_dark.svg' media='(prefers-color-scheme: dark)'><img src='https://assets.nhle.com/logos/nhl/svg/ANA_light.svg' alt='ANA' width='18' height='18' loading='lazy'></picture> ANA</td><td class='num'>1.93</td><td class='num'>0.47</td><td class='num'>0.39</td><td class='num'>+2.1%</td><td class='num'>–</td><td class='num'><b>2.84</b></td></tr><tr><td><picture class='logo' style='width:18px;height:18px'><source srcset='https://assets.nhle.com/logos/nhl/svg/VGK_dark.svg' media='(prefers-color-scheme: dark)'><img src='https://assets.nhle.com/logos/nhl/svg/VGK_light.svg' alt='VGK' width='18' height='18' loading='lazy'></picture> VGK</td><td class='num'>2.17</td><td class='num'>0.69</td><td class='num'>0.39</td><td class='num'>-0.9%</td><td class='num'>–</td><td class='num'><b>3.23</b></td></tr></tbody></table>
+      <p class='muted small'>Goals = (5v5 + power play + other situations) × opposing-goalie adjustment × back-to-back adjustment.
+      A + goalie adjustment means the opposing goalie has been below average.</p></details></article><article class='card'><div class='team'>
+      <picture class='logo' style='width:36px;height:36px'><source srcset='https://assets.nhle.com/logos/nhl/svg/WSH_dark.svg' media='(prefers-color-scheme: dark)'><img src='https://assets.nhle.com/logos/nhl/svg/WSH_light.svg' alt='WSH' width='36' height='36' loading='lazy'></picture>
+      <div class='tname'><div class='full'>Washington Capitals </div><div class='goalie'>Logan Thompson <span class='gb ok'>✓ Confirmed</span></div>
+        <div class='bar' title='Washington Capitals: 2.83 projected goals (below the 2.95 cutoff)'><div class='fill' style='width:63.0%'></div><div class='cut' style='left:65.6%'></div></div></div>
+      <div class='pg'><b>2.83</b></div></div><div class='team'>
+      <picture class='logo' style='width:36px;height:36px'><source srcset='https://assets.nhle.com/logos/nhl/svg/CAR_dark.svg' media='(prefers-color-scheme: dark)'><img src='https://assets.nhle.com/logos/nhl/svg/CAR_light.svg' alt='CAR' width='36' height='36' loading='lazy'></picture>
+      <div class='tname'><div class='full'>Carolina Hurricanes </div><div class='goalie'>Brandon Bussi <span class='gb ok'>✓ Confirmed</span><span class='gb chg' title='Projection was made with Pyotr Kochetkov in net'>Changed from Pyotr Kochetkov</span></div>
+        <div class='bar' title='Carolina Hurricanes: 2.88 projected goals (below the 2.95 cutoff)'><div class='fill' style='width:64.0%'></div><div class='cut' style='left:65.6%'></div></div></div>
+      <div class='pg'><b>2.88</b></div></div>
+      <div class='meta'><div class='kv'><span>Proj total</span><b>5.71</b></div><div class='kv'><span>P(7+)</span><b>44%</b></div><div class='kv'><span>Line</span><b>6.5 → 6.5 <small>o+104</small></b></div></div><details class='why'><summary>Projection breakdown</summary>
+      <table><thead><tr><th>Team</th><th>5v5</th><th>PP</th><th>Other</th><th>Opp. goalie</th><th>B2B</th><th>Proj</th></tr></thead>
+      <tbody><tr><td><picture class='logo' style='width:18px;height:18px'><source srcset='https://assets.nhle.com/logos/nhl/svg/WSH_dark.svg' media='(prefers-color-scheme: dark)'><img src='https://assets.nhle.com/logos/nhl/svg/WSH_light.svg' alt='WSH' width='18' height='18' loading='lazy'></picture> WSH</td><td class='num'>2.01</td><td class='num'>0.48</td><td class='num'>0.39</td><td class='num'>-2.2%</td><td class='num'>–</td><td class='num'><b>2.83</b></td></tr><tr><td><picture class='logo' style='width:18px;height:18px'><source srcset='https://assets.nhle.com/logos/nhl/svg/CAR_dark.svg' media='(prefers-color-scheme: dark)'><img src='https://assets.nhle.com/logos/nhl/svg/CAR_light.svg' alt='CAR' width='18' height='18' loading='lazy'></picture> CAR</td><td class='num'>2.23</td><td class='num'>0.61</td><td class='num'>0.39</td><td class='num'>-11.0%</td><td class='num'>–</td><td class='num'><b>2.88</b></td></tr></tbody></table>
+      <p class='muted small'>Goals = (5v5 + power play + other situations) × opposing-goalie adjustment × back-to-back adjustment.
+      A + goalie adjustment means the opposing goalie has been below average.</p></details></article><article class='card'><div class='team'>
+      <picture class='logo' style='width:36px;height:36px'><source srcset='https://assets.nhle.com/logos/nhl/svg/BOS_dark.svg' media='(prefers-color-scheme: dark)'><img src='https://assets.nhle.com/logos/nhl/svg/BOS_light.svg' alt='BOS' width='36' height='36' loading='lazy'></picture>
+      <div class='tname'><div class='full'>Boston Bruins </div><div class='goalie'>Jeremy Swayman <span class='gb ok'>✓ Confirmed</span></div>
+        <div class='bar' title='Boston Bruins: 3.00 projected goals (high-scoring the 2.95 cutoff)'><div class='fill hot' style='width:66.8%'></div><div class='cut' style='left:65.6%'></div></div></div>
+      <div class='pg'><b>3.00</b><span class=hot-tag>HIGH</span></div></div><div class='team'>
+      <picture class='logo' style='width:36px;height:36px'><source srcset='https://assets.nhle.com/logos/nhl/svg/WPG_dark.svg' media='(prefers-color-scheme: dark)'><img src='https://assets.nhle.com/logos/nhl/svg/WPG_light.svg' alt='WPG' width='36' height='36' loading='lazy'></picture>
+      <div class='tname'><div class='full'>Winnipeg Jets </div><div class='goalie'>Stuart Skinner <span class='gb likely'>Likely</span></div>
+        <div class='bar' title='Winnipeg Jets: 2.70 projected goals (below the 2.95 cutoff)'><div class='fill' style='width:60.1%'></div><div class='cut' style='left:65.6%'></div></div></div>
+      <div class='pg'><b>2.70</b></div></div>
+      <div class='meta'><div class='kv'><span>Proj total</span><b>5.71</b></div><div class='kv'><span>P(7+)</span><b>44%</b></div><div class='kv'><span>Line</span><b>5.5 → 5.5 <small>o-125</small></b></div></div><details class='why'><summary>Projection breakdown</summary>
+      <table><thead><tr><th>Team</th><th>5v5</th><th>PP</th><th>Other</th><th>Opp. goalie</th><th>B2B</th><th>Proj</th></tr></thead>
+      <tbody><tr><td><picture class='logo' style='width:18px;height:18px'><source srcset='https://assets.nhle.com/logos/nhl/svg/BOS_dark.svg' media='(prefers-color-scheme: dark)'><img src='https://assets.nhle.com/logos/nhl/svg/BOS_light.svg' alt='BOS' width='18' height='18' loading='lazy'></picture> BOS</td><td class='num'>2.14</td><td class='num'>0.54</td><td class='num'>0.39</td><td class='num'>-2.3%</td><td class='num'>–</td><td class='num'><b>3.00</b></td></tr><tr><td><picture class='logo' style='width:18px;height:18px'><source srcset='https://assets.nhle.com/logos/nhl/svg/WPG_dark.svg' media='(prefers-color-scheme: dark)'><img src='https://assets.nhle.com/logos/nhl/svg/WPG_light.svg' alt='WPG' width='18' height='18' loading='lazy'></picture> WPG</td><td class='num'>2.04</td><td class='num'>0.52</td><td class='num'>0.39</td><td class='num'>-8.8%</td><td class='num'>–</td><td class='num'><b>2.70</b></td></tr></tbody></table>
+      <p class='muted small'>Goals = (5v5 + power play + other situations) × opposing-goalie adjustment × back-to-back adjustment.
+      A + goalie adjustment means the opposing goalie has been below average.</p></details></article><article class='card'><div class='team'>
+      <picture class='logo' style='width:36px;height:36px'><source srcset='https://assets.nhle.com/logos/nhl/svg/STL_dark.svg' media='(prefers-color-scheme: dark)'><img src='https://assets.nhle.com/logos/nhl/svg/STL_light.svg' alt='STL' width='36' height='36' loading='lazy'></picture>
+      <div class='tname'><div class='full'>St. Louis Blues </div><div class='goalie'>Joel Hofer <span class='gb likely'>Likely</span></div>
+        <div class='bar' title='St. Louis Blues: 2.68 projected goals (below the 2.95 cutoff)'><div class='fill' style='width:59.6%'></div><div class='cut' style='left:65.6%'></div></div></div>
+      <div class='pg'><b>2.68</b></div></div><div class='team'>
+      <picture class='logo' style='width:36px;height:36px'><source srcset='https://assets.nhle.com/logos/nhl/svg/DAL_dark.svg' media='(prefers-color-scheme: dark)'><img src='https://assets.nhle.com/logos/nhl/svg/DAL_light.svg' alt='DAL' width='36' height='36' loading='lazy'></picture>
+      <div class='tname'><div class='full'>Dallas Stars </div><div class='goalie'>Jake Oettinger <span class='gb ok'>✓ Confirmed</span></div>
+        <div class='bar' title='Dallas Stars: 2.88 projected goals (below the 2.95 cutoff)'><div class='fill' style='width:63.9%'></div><div class='cut' style='left:65.6%'></div></div></div>
+      <div class='pg'><b>2.88</b></div></div>
+      <div class='meta'><div class='kv'><span>Proj total</span><b>5.56</b></div><div class='kv'><span>P(7+)</span><b>42%</b></div><div class='kv'><span>Line</span><b>5.5 → 5.5 <small>o-136</small></b></div></div><details class='why'><summary>Projection breakdown</summary>
+      <table><thead><tr><th>Team</th><th>5v5</th><th>PP</th><th>Other</th><th>Opp. goalie</th><th>B2B</th><th>Proj</th></tr></thead>
+      <tbody><tr><td><picture class='logo' style='width:18px;height:18px'><source srcset='https://assets.nhle.com/logos/nhl/svg/STL_dark.svg' media='(prefers-color-scheme: dark)'><img src='https://assets.nhle.com/logos/nhl/svg/STL_light.svg' alt='STL' width='18' height='18' loading='lazy'></picture> STL</td><td class='num'>1.89</td><td class='num'>0.50</td><td class='num'>0.39</td><td class='num'>-3.5%</td><td class='num'>–</td><td class='num'><b>2.68</b></td></tr><tr><td><picture class='logo' style='width:18px;height:18px'><source srcset='https://assets.nhle.com/logos/nhl/svg/DAL_dark.svg' media='(prefers-color-scheme: dark)'><img src='https://assets.nhle.com/logos/nhl/svg/DAL_light.svg' alt='DAL' width='18' height='18' loading='lazy'></picture> DAL</td><td class='num'>1.99</td><td class='num'>0.62</td><td class='num'>0.39</td><td class='num'>-4.4%</td><td class='num'>–</td><td class='num'><b>2.88</b></td></tr></tbody></table>
+      <p class='muted small'>Goals = (5v5 + power play + other situations) × opposing-goalie adjustment × back-to-back adjustment.
+      A + goalie adjustment means the opposing goalie has been below average.</p></details></article><article class='card'><div class='team'>
+      <picture class='logo' style='width:36px;height:36px'><source srcset='https://assets.nhle.com/logos/nhl/svg/NYR_dark.svg' media='(prefers-color-scheme: dark)'><img src='https://assets.nhle.com/logos/nhl/svg/NYR_light.svg' alt='NYR' width='36' height='36' loading='lazy'></picture>
+      <div class='tname'><div class='full'>New York Rangers <span class='b2b' title='Played yesterday: model cuts this team’s scoring ~8%'>B2B</span></div><div class='goalie'>Dylan Garand <span class='gb proj'>Projected</span><span class='gb chg' title='Projection was made with Igor Shesterkin in net'>Changed from Igor Shesterkin</span></div>
+        <div class='bar' title='New York Rangers: 2.53 projected goals (below the 2.95 cutoff)'><div class='fill' style='width:56.2%'></div><div class='cut' style='left:65.6%'></div></div></div>
+      <div class='pg'><b>2.53</b></div></div><div class='team'>
+      <picture class='logo' style='width:36px;height:36px'><source srcset='https://assets.nhle.com/logos/nhl/svg/DET_dark.svg' media='(prefers-color-scheme: dark)'><img src='https://assets.nhle.com/logos/nhl/svg/DET_light.svg' alt='DET' width='36' height='36' loading='lazy'></picture>
+      <div class='tname'><div class='full'>Detroit Red Wings </div><div class='goalie'>John Gibson <span class='gb likely'>Likely</span></div>
+        <div class='bar' title='Detroit Red Wings: 2.75 projected goals (below the 2.95 cutoff)'><div class='fill' style='width:61.0%'></div><div class='cut' style='left:65.6%'></div></div></div>
+      <div class='pg'><b>2.75</b></div></div>
+      <div class='meta'><div class='kv'><span>Proj total</span><b>5.28</b></div><div class='kv'><span>P(7+)</span><b>40%</b></div><div class='kv'><span>Line</span><b>6 → 5.5 <small>o-135</small></b></div></div><details class='why'><summary>Projection breakdown</summary>
+      <table><thead><tr><th>Team</th><th>5v5</th><th>PP</th><th>Other</th><th>Opp. goalie</th><th>B2B</th><th>Proj</th></tr></thead>
+      <tbody><tr><td><picture class='logo' style='width:18px;height:18px'><source srcset='https://assets.nhle.com/logos/nhl/svg/NYR_dark.svg' media='(prefers-color-scheme: dark)'><img src='https://assets.nhle.com/logos/nhl/svg/NYR_light.svg' alt='NYR' width='18' height='18' loading='lazy'></picture> NYR</td><td class='num'>1.92</td><td class='num'>0.54</td><td class='num'>0.39</td><td class='num'>-1.9%</td><td class='num'>-8.0%</td><td class='num'><b>2.53</b></td></tr><tr><td><picture class='logo' style='width:18px;height:18px'><source srcset='https://assets.nhle.com/logos/nhl/svg/DET_dark.svg' media='(prefers-color-scheme: dark)'><img src='https://assets.nhle.com/logos/nhl/svg/DET_light.svg' alt='DET' width='18' height='18' loading='lazy'></picture> DET</td><td class='num'>1.89</td><td class='num'>0.60</td><td class='num'>0.39</td><td class='num'>-4.1%</td><td class='num'>+6.5%</td><td class='num'><b>2.75</b></td></tr></tbody></table>
+      <p class='muted small'>Goals = (5v5 + power play + other situations) × opposing-goalie adjustment × back-to-back adjustment.
+      A + goalie adjustment means the opposing goalie has been below average.</p></details></article></div></section>
+<footer>Paper trading only, not betting advice · Team logos © NHL and its teams ·
+<a href="https://github.com/Prezbo8/nhl-total-model">github.com/Prezbo8/nhl-total-model</a></footer>
+</div></body></html>

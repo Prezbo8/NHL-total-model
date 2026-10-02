@@ -74,43 +74,123 @@ def goal_bar(value, cutoff, team):
             f"<div class='cut' style='left:{c:.1f}%'></div></div>")
 
 
-def team_row(abbr, proj, cutoff, goalie, score=None):
+GOALIE_RE = __import__("re").compile(r"^(.*) \((.*)\)$")
+
+
+def goalie_parts(g):
+    m = GOALIE_RE.match(str(g)) if isinstance(g, str) else None
+    return (m.group(1), m.group(2)) if m else (str(g) if isinstance(g, str) else "unknown", "")
+
+
+def goalie_html(logged, now):
+    """Starter with a status badge; red tag if the starter changed after the game was logged."""
+    now = now if isinstance(now, str) else logged
+    nm, status = goalie_parts(now)
+    st = status.lower()
+    badge = ("<span class='gb ok'>✓ Confirmed</span>" if "confirmed" in st and "un" not in st else
+             "<span class='gb likely'>Likely</span>" if "likely" in st else "<span class='gb proj'>Projected</span>")
+    old_nm, _ = goalie_parts(logged)
+    changed = (f"<span class='gb chg' title='Projection was made with {e(old_nm)} in net'>Changed from {e(old_nm)}</span>"
+               if old_nm != nm and old_nm != "unknown" else "")
+    return f"<div class='goalie'>{e(nm)} {badge}{changed}</div>"
+
+
+def team_row(abbr, proj, cutoff, goalie, goalie_now=None, b2b=False, score=None):
     hot = proj >= cutoff
     right = (f"<div class='score'>{score}<small>proj {proj:.2f}{' · HIGH' if hot else ''}</small></div>" if score is not None else
              f"<div class='pg'><b>{proj:.2f}</b>{'<span class=hot-tag>HIGH</span>' if hot else ''}</div>")
+    on_b2b = str(b2b).strip().lower() in ("true", "1", "1.0")  # CSV may hold bools, strings or floats
+    tag = "<span class='b2b' title='Played yesterday: model cuts this team’s scoring ~8%'>B2B</span>" if on_b2b else ""
     return f"""<div class='team'>
       {logo(abbr)}
-      <div class='tname'><div class='full'>{name(abbr)}</div><div class='goalie'>{e(goalie)}</div>
+      <div class='tname'><div class='full'>{name(abbr)} {tag}</div>{goalie_html(goalie, goalie_now)}
         {goal_bar(proj, cutoff, abbr)}</div>
       {right}</div>"""
+
+
+def breakdown(r, flagged):
+    if pd.isna(getattr(r, "away_ev", float("nan"))):
+        return ""
+    def row(side, abbr, proj):
+        g = lambda c: getattr(r, f"{side}_{c}")
+        adj = lambda v: f"{v * 100:+.1f}%" if abs(v) >= 0.0005 else "–"
+        return (f"<tr><td>{logo(abbr, 18)} {e(abbr)}</td><td class='num'>{g('ev'):.2f}</td><td class='num'>{g('pp'):.2f}</td>"
+                f"<td class='num'>{g('oth'):.2f}</td><td class='num'>{adj(g('gadj'))}</td><td class='num'>{adj(g('b2badj'))}</td>"
+                f"<td class='num'><b>{proj:.2f}</b></td></tr>")
+    return f"""<details class='why'{' open' if flagged else ''}><summary>{'Why it’s flagged' if flagged else 'Projection breakdown'}</summary>
+      <table><thead><tr><th>Team</th><th>5v5</th><th>PP</th><th>Other</th><th>Opp. goalie</th><th>B2B</th><th>Proj</th></tr></thead>
+      <tbody>{row('away', r.away, r.proj_away)}{row('home', r.home, r.proj_home)}</tbody></table>
+      <p class='muted small'>Goals = (5v5 + power play + other situations) × opposing-goalie adjustment × back-to-back adjustment.
+      A + goalie adjustment means the opposing goalie has been below average.</p></details>"""
+
+
+def game_card(r):
+    flagged = r.flag == True
+    final = not pd.isna(r.final_total)
+    ascore = int(r.away_score) if final else None
+    hscore = int(r.home_score) if final else None
+    rows = (team_row(r.away, r.proj_away, r.cutoff, r.away_goalie, getattr(r, "away_goalie_now", None), getattr(r, "away_b2b", False), ascore)
+            + team_row(r.home, r.proj_home, r.cutoff, r.home_goalie, getattr(r, "home_goalie_now", None), getattr(r, "home_b2b", False), hscore))
+    meta = []
+    if final:
+        vs = "<span class='pill muted-pill'>no line</span>"
+        if not pd.isna(r.bet_total):
+            t = r.bet_total
+            vs = (f"<span class='pill over'>OVER {line(t)}</span>" if r.final_total > t else
+                  f"<span class='pill under'>UNDER {line(t)}</span>" if r.final_total < t else f"<span class='pill'>PUSH {line(t)}</span>")
+        meta.append(f"<div class='kv'><span>Total</span><b class='big-total'>{int(r.final_total)}</b></div>{vs}")
+    meta.append(f"<div class='kv'><span>Proj total</span><b>{r.proj:.2f}</b></div>")
+    if final:
+        meta.append(f"<div class='kv'><span>Proj away / home</span><b>{r.proj_away:.2f} / {r.proj_home:.2f}</b></div>")
+    meta.append(f"<div class='kv'><span>P(7+)</span><b>{r.p7:.0%}</b></div>")
+    if pd.isna(r.bet_total):
+        meta.append("<div class='kv'><span>Line</span><b class='muted'>not posted</b></div>")
+    elif final and not pd.isna(r.close_total) and r.close_total != r.bet_total:
+        meta.append(f"<div class='kv'><span>Line moved</span><b>{line(r.bet_total)} → {line(r.close_total)} {'↑' if r.close_total > r.bet_total else '↓'}</b></div>")
+    else:
+        meta.append(f"<div class='kv'><span>Line</span><b>{line(r.open_total)} → {line(r.bet_total)} <small>o{price(r.bet_over)}</small></b></div>")
+    if not pd.isna(r.best_total):
+        meta.append(f"<div class='kv'><span>Best over</span><b>{e(r.best_book)} o{line(r.best_total)} {price(r.best_over)}</b></div>")
+    if flagged and not pd.isna(r.result):
+        meta.append(f"<div class='kv'><span>Pick</span><b class='res {e(r.result)}'>{e(r.result)} {r.profit:+.2f}u</b></div>")
+        if not pd.isna(r.profit_best):
+            meta.append(f"<div class='kv'><span>Best book</span><b>{r.profit_best:+.2f}u</b></div>")
+    bar = f"<div class='flagbar'>★ OVER FLAG · {'over' if final else 'bet over'} {line(r.bet_total)}</div>" if flagged else ""
+    return f"""<article class='card{' flagged' if flagged else ''}'>{bar}{rows}
+      <div class='meta'>{''.join(meta)}</div>{breakdown(r, flagged)}</article>"""
+
+
+def day_cards(g):
+    g = g.sort_values(["flag", "proj"], ascending=[False, False])
+    return f"<div class='cards'>{''.join(game_card(r) for r in g.itertuples())}</div>"
+
+
+def day_summary(g):
+    done = g[g.final_total.notna()]
+    flags = int((g.flag == True).sum())
+    parts = [f"{len(g)} games", f"<b>{flags} flag{'s' if flags != 1 else ''}</b>"]
+    if len(done):
+        wl = done[done.bet_total.notna()]
+        parts.append(f"<b>{(wl.final_total > wl.bet_total).sum()} of {len(wl)}</b> went over the line")
+        parts.append(f"avg <b>{done.final_total.mean():.1f}</b> goals (projected {done.proj.mean():.1f})")
+        fl = done[(done.flag == True) & done.result.notna()]
+        if len(fl):
+            parts.append(f"flags <b>{(fl.result == 'W').sum()}-{(fl.result == 'L').sum()}-{(fl.result == 'P').sum()}</b> ({fl.profit.sum():+.2f}u)")
+    return " · ".join(parts)
+
+
+RETRO_NOTE = ("<p class='retro'><b>Retroactive day:</b> added after the fact from pre-game data only (earlier games, that day's "
+              "projected starters, opening lines). Shown for reference; it does not count toward the paper trading record.</p>")
 
 
 def slate(d):
     if d.empty:
         return "<p class='muted'>No games logged yet.</p>"
     day = d.date.max()
-    g = d[d.date == day].sort_values(["flag", "proj"], ascending=[False, False])
-    cards = []
-    for r in g.itertuples():
-        flagged = r.flag == True
-        best = (f"<div class='kv'><span>Best over</span><b>{e(r.best_book)} o{line(r.best_total)} {price(r.best_over)}</b></div>"
-                if not pd.isna(r.best_total) else "")
-        lines = (f"<div class='kv'><span>Line</span><b>{line(r.open_total)} → {line(r.bet_total)}"
-                 f" <small>o{price(r.bet_over)}</small></b></div>" if not pd.isna(r.bet_total) else
-                 "<div class='kv'><span>Line</span><b class='muted'>not posted</b></div>")
-        cards.append(f"""<article class='card{' flagged' if flagged else ''}'>
-          {f"<div class='flagbar'>★ OVER FLAG · bet over {line(r.bet_total)}</div>" if flagged else ""}
-          {team_row(r.away, r.proj_away, r.cutoff, r.away_goalie)}
-          {team_row(r.home, r.proj_home, r.cutoff, r.home_goalie)}
-          <div class='meta'>
-            <div class='kv'><span>Proj total</span><b>{r.proj:.2f}</b></div>
-            <div class='kv'><span>P(7+)</span><b>{r.p7:.0%}</b></div>
-            {lines}{best}
-          </div></article>""")
-    flags = int((g.flag == True).sum())
-    return f"""<p class='sub'>{pd.Timestamp(day):%A, %B %-d} · {len(g)} games ·
-      <b>{flags} flag{'s' if flags != 1 else ''}</b> · bar tick = high-scoring cutoff ({g.cutoff.iloc[0]:.2f} goals)</p>
-      <div class='cards'>{''.join(cards)}</div>"""
+    g = d[d.date == day]
+    return f"""<p class='sub'>{pd.Timestamp(day):%A, %B %-d} · {day_summary(g)} · bar tick = high-scoring cutoff
+      ({g.cutoff.iloc[0]:.2f} goals){f" · starters as of {e(g.updated_at.dropna().max())}" if g.updated_at.notna().any() else ""}</p>
+      {day_cards(g)}"""
 
 
 def yesterday(d):
@@ -118,43 +198,56 @@ def yesterday(d):
     if done.empty:
         return "<p class='muted'>No finished games yet.</p>"
     day = done.date.max()
-    g = done[done.date == day].sort_values(["flag", "final_total"], ascending=[False, False])
-    cards, overs, n_line = [], 0, 0
-    for r in g.itertuples():
-        flagged = r.flag == True
-        vs = "<span class='pill muted-pill'>no line</span>"
-        if not pd.isna(r.bet_total):
-            n_line += 1
-            if r.final_total > r.bet_total:
-                vs, overs = f"<span class='pill over'>OVER {line(r.bet_total)}</span>", overs + 1
-            elif r.final_total < r.bet_total:
-                vs = f"<span class='pill under'>UNDER {line(r.bet_total)}</span>"
-            else:
-                vs = f"<span class='pill'>PUSH {line(r.bet_total)}</span>"
-        moved = ""
-        if not pd.isna(r.close_total) and not pd.isna(r.bet_total) and r.close_total != r.bet_total:
-            moved = f"<div class='kv'><span>Line moved</span><b>{line(r.bet_total)} → {line(r.close_total)} {'↑' if r.close_total > r.bet_total else '↓'}</b></div>"
-        pick = ""
-        if flagged and not pd.isna(r.result):
-            pick = (f"<div class='kv'><span>Pick</span><b class='res {e(r.result)}'>{e(r.result)} {r.profit:+.2f}u</b></div>"
-                    + (f"<div class='kv'><span>Best book</span><b>{r.profit_best:+.2f}u</b></div>" if not pd.isna(r.profit_best) else ""))
-        cards.append(f"""<article class='card{' flagged' if flagged else ''}'>
-          {f"<div class='flagbar'>★ OVER FLAG · over {line(r.bet_total)}</div>" if flagged else ""}
-          {team_row(r.away, r.proj_away, r.cutoff, r.away_goalie, int(r.away_score))}
-          {team_row(r.home, r.proj_home, r.cutoff, r.home_goalie, int(r.home_score))}
-          <div class='meta'>
-            <div class='kv'><span>Total</span><b class='big-total'>{int(r.final_total)}</b></div>{vs}
-            <div class='kv'><span>Proj total</span><b>{r.proj:.2f}</b></div>
-            <div class='kv'><span>Proj away / home</span><b>{r.proj_away:.2f} / {r.proj_home:.2f}</b></div>{moved}{pick}
-          </div></article>""")
-    note = ("<p class='retro'><b>Retroactive day:</b> added after the fact from pre-game data only (earlier games, that day's "
-            "projected starters, opening lines). Shown for reference; it does not count toward the paper trading record.</p>"
-            if retro(g).any() else "")
-    fl = g[(g.flag == True) & g.result.notna()]
-    return f"""{note}<p class='sub'>{pd.Timestamp(day):%A, %B %-d} · <b>{overs} of {n_line}</b> went over the line ·
-      avg <b>{g.final_total.mean():.1f}</b> goals (projected {g.proj.mean():.1f})
-      {f" · flags <b>{(fl.result == 'W').sum()}-{(fl.result == 'L').sum()}-{(fl.result == 'P').sum()}</b> ({fl.profit.sum():+.2f}u)" if len(fl) else ""}</p>
-      <div class='cards'>{''.join(cards)}</div>"""
+    g = d[d.date == day]
+    return f"""{RETRO_NOTE if retro(g).any() else ""}<p class='sub'>{pd.Timestamp(day):%A, %B %-d} · {day_summary(g)}
+      · <a href='days/{e(day)}.html'>day page →</a></p>{day_cards(g)}"""
+
+
+def accuracy(d):
+    s = d[d.final_total.notna()].copy()
+    if s.empty:
+        return "<p class='muted'>No finished games yet.</p>"
+    s["band"] = pd.cut(s.proj, [0, 5.5, 6.0, 6.5, 99], labels=["under 5.5", "5.5 – 6.0", "6.0 – 6.5", "6.5+"], right=False)
+    rows = []
+    for band, x in s.groupby("band", observed=True):
+        rows.append(f"<tr><td>{band}</td><td class='num'>{len(x)}</td><td class='num'>{x.proj.mean():.2f}</td>"
+                    f"<td class='num'>{x.final_total.mean():.2f}</td><td class='num'>{x.p7.mean():.0%}</td>"
+                    f"<td class='num'>{(x.final_total >= 7).mean():.0%}</td></tr>")
+    team_err = pd.concat([(s.away_score - s.proj_away).abs(), (s.home_score - s.proj_home).abs()]).mean()
+    n_retro = int(retro(s).sum())
+    return f"""<div class='tiles'>
+      <div class='tile'><div class='label'>Games settled</div><div class='num-big'>{len(s)}</div><div class='muted'>{n_retro} retroactive</div></div>
+      <div class='tile'><div class='label'>Avg projected total</div><div class='num-big'>{s.proj.mean():.2f}</div><div class='muted'>actual {s.final_total.mean():.2f}</div></div>
+      <div class='tile'><div class='label'>Model P(7+)</div><div class='num-big'>{s.p7.mean():.0%}</div><div class='muted'>actual 7+ rate {(s.final_total >= 7).mean():.0%}</div></div>
+      <div class='tile'><div class='label'>Team goals error</div><div class='num-big'>{team_err:.2f}</div><div class='muted'>avg miss per team</div></div></div>
+      <div class='scroll'><table><thead><tr><th>Projected total</th><th>Games</th><th>Avg proj</th><th>Avg goals</th>
+      <th>Model P(7+)</th><th>Actual 7+</th></tr></thead><tbody>{''.join(rows)}</tbody></table></div>
+      <ul class='notes'><li>The test that matters is <b>Model P(7+) vs Actual 7+</b>: if the model is calibrated they match, and
+      higher projection bands should score more. Projected totals run a little low by design; P(7+) converts them using history.</li>
+      <li>Single-game misses are big in hockey, so judge this after a few hundred games, not a few nights.</li></ul>"""
+
+
+def archive(d):
+    if d.empty:
+        return ""
+    rows = []
+    for day in sorted(d.date.unique(), reverse=True):
+        g = d[d.date == day]
+        rows.append(f"<li><a href='days/{e(day)}.html'><b>{pd.Timestamp(day):%a %b %-d}</b></a> · {day_summary(g)}"
+                    f"{' · <i>retroactive</i>' if retro(g).any() else ''}</li>")
+    return f"<ul class='archive'>{''.join(rows)}</ul>"
+
+
+def day_page(d, day, days):
+    g = d[d.date == day]
+    i = days.index(day)
+    prev_ = f"<a href='{days[i - 1]}.html'>← {pd.Timestamp(days[i - 1]):%b %-d}</a>" if i > 0 else "<span></span>"
+    next_ = f"<a href='{days[i + 1]}.html'>{pd.Timestamp(days[i + 1]):%b %-d} →</a>" if i < len(days) - 1 else "<span></span>"
+    body = f"""<header class='hero small-hero'><h1>{pd.Timestamp(day):%A, %B %-d, %Y}</h1>
+      <p>{day_summary(g)}</p></header>
+      <nav class='daynav'>{prev_}<a href='../index.html'>Dashboard</a>{next_}</nav>
+      {RETRO_NOTE if retro(g).any() else ""}<section>{day_cards(g)}</section>"""
+    return shell(f"NHL Total Model · {day}", body)
 
 
 def record(d):
@@ -267,18 +360,44 @@ ul.notes{margin:12px 0 0;padding-left:20px;color:var(--muted)}
 dl{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;margin:12px 0 0}
 dl div{background:var(--ice);border-radius:10px;padding:10px 12px}dt{font-weight:800}dd{margin:2px 0 0;color:var(--muted)}
 footer{margin-top:32px;font-size:13px;color:var(--muted)}a{color:var(--accent)}
+.small{font-size:12px}
+.gb{display:inline-block;font-size:10px;font-weight:800;letter-spacing:.03em;padding:1px 6px;border-radius:999px;margin-left:4px;vertical-align:1px}
+.gb.ok{background:rgba(26,127,55,.15);color:var(--pos)}.gb.likely{background:rgba(201,151,0,.18);color:var(--gold)}
+.gb.proj{background:var(--ice);color:var(--muted)}.gb.chg{background:var(--neg);color:#fff}
+.goalie{white-space:normal}
+.b2b{display:inline-block;font-size:10px;font-weight:800;padding:1px 6px;border-radius:4px;background:var(--red);color:#fff;
+  margin-left:4px;vertical-align:2px;letter-spacing:.04em}
+details.why{margin-top:10px;border-top:1px solid var(--line);padding-top:8px}
+details.why summary{cursor:pointer;font-size:12px;font-weight:700;color:var(--accent);list-style:none}
+details.why summary::before{content:"▸ "}details.why[open] summary::before{content:"▾ "}
+details.why table{font-size:12px;margin-top:6px}details.why th,details.why td{padding:4px 6px}
+details.why td:first-child{display:flex;align-items:center;gap:4px}
+.small-hero{padding:24px 24px 20px}.small-hero h1{font-size:clamp(22px,4vw,32px)}
+.daynav{display:flex;justify-content:space-between;align-items:center;margin:16px 0 0;font-weight:700}
+ul.archive{list-style:none;margin:0;padding:0}ul.archive li{padding:8px 0;border-bottom:1px solid var(--line)}
+ul.archive li:last-child{border-bottom:none}
 """
+
+
+def shell(title, body):
+    return f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>{e(title)}</title>
+<link rel="icon" href="https://assets.nhle.com/logos/nhl/svg/NHL_light.svg"><style>{CSS}</style></head>
+<body><div class="wrap">{body}
+<footer>Paper trading only, not betting advice · Team logos © NHL and its teams ·
+<a href="https://github.com/Prezbo8/nhl-total-model">github.com/Prezbo8/nhl-total-model</a></footer>
+</div></body></html>"""
 
 
 def build():
     d = pd.read_csv(paper.LOG) if os.path.exists(paper.LOG) else pd.DataFrame(columns=paper.COLS)
+    for c in paper.COLS:
+        if c not in d:
+            d[c] = None
     live = d[~retro(d)]
     today = d[d.date == d.date.max()] if len(d) else d
     settled = live[(live.flag == True) & live.result.notna()]
-    page = f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1"><title>NHL Total Model</title>
-<link rel="icon" href="https://assets.nhle.com/logos/nhl/svg/NHL_light.svg"><style>{CSS}</style></head>
-<body><div class="wrap">
+    body = f"""
 <header class="hero">
   <h1>NHL Total Model</h1>
   <p>Over/under projections, OVER flags and live paper trading · updated {datetime.now():%b %-d, %Y %-I:%M %p} ET</p>
@@ -290,13 +409,18 @@ def build():
 </header>
 
 <section><div class="rule"><b>The rule:</b> bet the <b>OVER</b> only when the consensus line is <b>6 or 6.5</b> (never 5.5) and
-<b>both teams</b> are projected high-scoring (bar past the tick). Take it at the <b>best over</b> book.</div></section>
+<b>both teams</b> are projected high-scoring (bar past the tick). Take it at the <b>best over</b> book. Check the goalies:
+a <span class='gb chg'>Changed</span> tag means the starter differs from the one the projection used.</div></section>
 
 <section><h2>Yesterday's results</h2>{yesterday(d)}</section>
 
 <section><h2>Today's slate</h2>{slate(d)}</section>
 
 <section><h2>Paper trading record</h2>{record(d)}</section>
+
+<section><h2>Projection accuracy</h2><div class="panel">{accuracy(d)}</div></section>
+
+<section><h2>Archive</h2><div class="panel">{archive(d)}</div></section>
 
 <section><h2>Backtest · frozen rule, 2020+ data only</h2><div class="panel">{backtest()}</div></section>
 
@@ -306,19 +430,22 @@ def build():
 goals saved above expected scales goals allowed, and <b>back-to-backs</b> cut the tired team's scoring ~8% (opponent +6.5%).
 Data from the 2020-21 season onward only (MoneyPuck, NHL API, DailyFaceoff, Action Network). Runs on GitHub Actions at 11 AM and 5 PM ET.</p>
 <dl>
-<div><dt>Projected goals bar</dt><dd>Each team's projected goals tonight on a 0–4.5 scale. The tick marks the high-scoring cutoff; a solid bar means past it.</dd></div>
+<div><dt>Projected goals bar</dt><dd>Each team's projected goals on a 0–4.5 scale. The tick marks the high-scoring cutoff; a solid bar means past it.</dd></div>
 <div><dt>P(7+)</dt><dd>Model's chance of 7+ total goals: wins an over 6.5 and an over 6 (exactly 6 pushes an over 6). NHL average ≈ 45%.</dd></div>
 <div><dt>OVER FLAG</dt><dd>Both teams past the cutoff and the line is 6 or 6.5. These are the picks that count in the record.</dd></div>
-<div><dt>Best over</dt><dd>Best-value over at 6 or 6.5 across DraftKings, FanDuel, BetRivers and BetMGM.</dd></div>
-</dl></div></section>
-
-<footer>Paper trading only, not betting advice · Team logos © NHL and its teams ·
-<a href="https://github.com/Prezbo8/nhl-total-model">github.com/Prezbo8/nhl-total-model</a></footer>
-</div></body></html>"""
+<div><dt>Goalie badges</dt><dd>✓ Confirmed / Likely / Projected starter, from DailyFaceoff, refreshed every run. "Changed" = different from the starter the projection used.</dd></div>
+<div><dt>B2B</dt><dd>Team played yesterday: its projected scoring is cut ~8% and its opponent's raised ~6.5%.</dd></div>
+<div><dt>Breakdown</dt><dd>Each team's projection split into 5-on-5, power play, other situations, and the goalie / back-to-back adjustments.</dd></div>
+</dl></div></section>"""
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
     with open(OUT, "w") as f:
-        f.write(page)
-    print(f"wrote {OUT}")
+        f.write(shell("NHL Total Model", body))
+    days = sorted(d.date.unique())
+    os.makedirs(os.path.join(os.path.dirname(OUT), "days"), exist_ok=True)
+    for day in days:
+        with open(os.path.join(os.path.dirname(OUT), "days", f"{day}.html"), "w") as f:
+            f.write(day_page(d, day, days))
+    print(f"wrote {OUT} + {len(days)} day pages")
 
 
 if __name__ == "__main__":

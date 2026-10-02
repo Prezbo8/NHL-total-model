@@ -380,7 +380,7 @@ def today(day=None):
         aname = f'{g["awayTeam"]["placeName"]["default"]} {g["awayTeam"]["commonName"]["default"]}'
         hg, hp, hs = starter(h, hname)
         ag, ap, as_ = starter(a, aname)
-        lh, la = project(h, a, hp, ap, h in tired, a in tired)
+        lh, la, det = project(h, a, hp, ap, h in tired, a in tired, detail=True)
         x = lh + la
         p7 = p_from(cal, 7, x)
         ln = lines.get((h, a), {})
@@ -414,7 +414,11 @@ def today(day=None):
                          "bet_under": cur["under"] if cur else None,
                          "best_book": best[1] if best else None, "best_total": best[2] if best else None,
                          "best_over": best[3] if best else None, "best_under": best[4] if best else None,
-                         "logged_at": pd.Timestamp.now().strftime("%Y-%m-%d %H:%M")})
+                         "logged_at": pd.Timestamp.now().strftime("%Y-%m-%d %H:%M"),
+                         "away_b2b": a in tired, "home_b2b": h in tired,
+                         "away_goalie_now": f"{ag} ({as_})", "home_goalie_now": f"{hg} ({hs})",
+                         "updated_at": pd.Timestamp.now().strftime("%Y-%m-%d %H:%M"),
+                         **{f"{s}_{c}": round(v, 4) for s in ("away", "home") for c, v in det[s].items()}})
     print("\n(goalie % = share of expected goals stopped beyond average; higher = better)")
     print("OVER FLAG = both teams high-scoring (marked +) and the line is 6 or 6.5. Overs only, never 5.5.")
     print("Always bet the 'best over' book: line shopping added ~+2 pts ROI in the backtest.")

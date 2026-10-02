@@ -54,7 +54,7 @@ def backfill(day):
             return (f"{name} ({status})", ids.get(str(name).lower())) if name else ("unknown", None)
         hg, hp = starter(g["homeTeam"])
         ag, ap = starter(g["awayTeam"])
-        lh, la = project(h, a, hp, ap, h in tired, a in tired)
+        lh, la, det = project(h, a, hp, ap, h in tired, a in tired, detail=True)
         x = lh + la
         o = opens.get((h, a))
         flag = bool(lh >= cutoff and la >= cutoff and o is not None and o["total"] in (6.0, 6.5))
@@ -75,7 +75,9 @@ def backfill(day):
                      "best_book": best[1] if flag and best else None, "best_total": best[2] if flag and best else None,
                      "best_over": best[3] if flag and best else None, "best_under": best[4] if flag and best else None,
                      "logged_at": f"{day} (added retroactively Oct 2 from pre-game data; line = opening line)",
-                     "flagged_at": None})
+                     "flagged_at": None, "away_b2b": a in tired, "home_b2b": h in tired,
+                     "away_goalie_now": ag, "home_goalie_now": hg, "updated_at": None,
+                     **{f"{s}_{c}": round(v, 4) for s in ("away", "home") for c, v in det[s].items()}})
     log = pd.read_csv(paper.LOG)
     log = log[log.date != day]
     pd.concat([log, pd.DataFrame(rows)], ignore_index=True).reindex(columns=paper.COLS).to_csv(paper.LOG, index=False)

@@ -23,7 +23,11 @@ COLS = ["date", "away", "home", "proj", "proj_away", "proj_home", "cutoff", "fla
         "away_goalie", "home_goalie", "open_total", "open_over", "bet_total", "bet_over", "bet_under", "best_book", "best_total", "best_over", "best_under",
         "logged_at", "flagged_at",
         "close_total", "close_over", "close_under", "away_score", "home_score", "final_total",
-        "result", "profit", "clv", "result_best", "profit_best"]
+        "result", "profit", "clv", "result_best", "profit_best",
+        # context for the dashboard: back-to-backs, latest starters, projection breakdown
+        "away_b2b", "home_b2b", "away_goalie_now", "home_goalie_now", "updated_at"] + [
+        f"{s}_{c}" for s in ("away", "home") for c in ("ev", "pp", "oth", "gadj", "b2badj")]
+BREAKDOWN = [f"{s}_{c}" for s in ("away", "home") for c in ("ev", "pp", "oth", "gadj", "b2badj")]
 
 
 def log_games(rows):
@@ -42,12 +46,23 @@ def log_games(rows):
     if len(old):
         old_keys = key(old)
         added = new[~key(new).isin(old_keys)]
-        for _, r in new[key(new).isin(old_keys) & new.flag].iterrows():
+        for c in COLS:
+            if c not in old:
+                old[c] = None
+        for c in ("away_goalie_now", "home_goalie_now", "updated_at"):
+            old[c] = old[c].astype(object)
+        for _, r in new[key(new).isin(old_keys)].iterrows():
             i = old.index[old_keys == key(pd.DataFrame([r])).iloc[0]][0]
-            if old.at[i, "flag"] != True:  # newly qualifies: flag it at today's current line
+            # always refresh: latest starters, back-to-backs (the bet itself never changes)
+            for c in ("away_goalie_now", "home_goalie_now", "away_b2b", "home_b2b", "updated_at"):
+                old.loc[i, c] = r[c]
+            if pd.isna(old.at[i, "away_ev"]):  # rows logged before breakdowns existed
+                for c in BREAKDOWN:
+                    old.loc[i, c] = r[c]
+            if r.flag and old.at[i, "flag"] != True:  # newly qualifies: flag it at today's current line
                 for c in ("proj", "proj_away", "proj_home", "p7", "away_goalie", "home_goalie",
                           "bet_total", "bet_over", "bet_under", "best_book", "best_total", "best_over", "best_under",
-                          "flag", "flagged_at"):
+                          "flag", "flagged_at") + tuple(BREAKDOWN):
                     old.loc[i, c] = r[c]
                 upgraded += 1
     out = pd.concat([old, added], ignore_index=True) if len(old) else added

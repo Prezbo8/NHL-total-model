@@ -69,17 +69,24 @@ def walk_split(games, k=m.K, w=m.W_GOALS, regress=m.REGRESS, known_starters=True
     T5 = t5  # league 5v5 seconds per game, updated as games come in
     rows = []
 
-    def project(home, away, home_goalie, away_goalie, h_b2b=False, a_b2b=False):
-        """Projected (home goals, away goals) from the ratings as they stand right now."""
+    def project(home, away, home_goalie, away_goalie, h_b2b=False, a_b2b=False, detail=False):
+        """Projected (home goals, away goals) from the ratings as they stand right now.
+        detail=True also returns each side's parts: 5v5, power play, other situations,
+        and the opposing goalie / back-to-back adjustments (as fractions, e.g. -0.05)."""
         g = {key: {t: R[key].get(t) for t in (home, away)} for key in R}
-        def goals(att, dfn):
+        def parts(att, dfn):
             ev = g["off5"][att] * g["def5"][dfn] / R["def5"].lg * T5
             pp_time = g["drawn"][att] * g["taken"][dfn] / R["taken"].lg
             pp = g["pp"][att] * g["pk"][dfn] / R["pk"].lg * pp_time
-            return ev + pp + other / 2
+            return ev, pp, other / 2
         fh, fa = m.b2b_factors(h_b2b, a_b2b)
-        return (goals(home, away) * (1 - gs.skill(away_goalie)) * fh,
-                goals(away, home) * (1 - gs.skill(home_goalie)) * fa)
+        out, det = [], {}
+        for side, att, dfn, goalie, f in (("home", home, away, away_goalie, fh), ("away", away, home, home_goalie, fa)):
+            ev, pp, oth = parts(att, dfn)
+            gadj = -gs.skill(goalie)
+            out.append((ev + pp + oth) * (1 + gadj) * f)
+            det[side] = {"ev": ev, "pp": pp, "oth": oth, "gadj": gadj, "b2badj": f - 1}
+        return (out[0], out[1], det) if detail else (out[0], out[1])
 
     last = games.season.max()
     for season, sg in games.groupby("season", sort=True):
