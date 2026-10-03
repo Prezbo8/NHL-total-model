@@ -53,7 +53,8 @@ def _send(table, rows, on_conflict=None, tries=3):
     q = f"?on_conflict={on_conflict}" if on_conflict else ""
     body = json.dumps([clean(r) for r in rows]).encode()
     req = urllib.request.Request(f"{URL}/rest/v1/{table}{q}", data=body, method="POST", headers={
-        "apikey": KEY, "Authorization": f"Bearer {KEY}", "Content-Type": "application/json",
+        "apikey": KEY, **({"Authorization": f"Bearer {KEY}"} if KEY.startswith("eyJ") else {}),  # new sb_secret_ keys: apikey only
+        "Content-Type": "application/json",
         "Prefer": ("resolution=merge-duplicates," if on_conflict else "") + "return=minimal"})
     for i in range(tries):
         try:
