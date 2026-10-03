@@ -25,10 +25,10 @@ concurrency:
 
 jobs:
   keep:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04   # pinned: ubuntu-latest moves to Ubuntu 26 on Oct 19, 2026
     timeout-minutes: 355
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           sparse-checkout: .github
       - name: Start the daily run at each slot, then hand off to a fresh keeper

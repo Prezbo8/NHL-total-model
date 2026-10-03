@@ -1,0 +1,10 @@
+name: Temporary check (keeper's checkout step on v7)
+on: workflow_dispatch
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: .github
+      - run: python3 .github/scripts/next_slot.py
