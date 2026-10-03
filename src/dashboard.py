@@ -824,6 +824,9 @@ body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 -apple-system
       transparent calc(70% - 6px),rgba(31,111,235,.75) calc(70% - 6px),rgba(31,111,235,.75) 70%,transparent 70%),
     radial-gradient(circle at 50% 50%,transparent 58px,rgba(31,111,235,.6) 59px,rgba(31,111,235,.6) 61px,transparent 62px),
     linear-gradient(160deg,#0d2440,#0a1a2e 60%,#081422)}
+.lastrun{position:absolute;top:14px;right:18px;text-align:right;font-size:11px;line-height:1.35;color:#c9d6e6;z-index:2}
+.lastrun b{display:block;font-size:13px;color:#fff;font-weight:700}.lastrun .tip{border-bottom-color:rgba(255,255,255,.45)}
+@media (max-width:600px){.lastrun{position:static;text-align:left;margin-top:8px}}
 .hero h1{margin:0;font-size:clamp(28px,5vw,44px);letter-spacing:-.02em;position:relative}
 .hero p{margin:6px 0 0;color:#c9d6e6;position:relative}
 .hero .stats{display:flex;gap:12px;flex-wrap:wrap;margin-top:18px;position:relative}
@@ -983,10 +986,26 @@ def shell(title, body, root=""):
 </div></body></html>"""
 
 
+def last_run():
+    """'Sat, Oct 3 · 5:17 PM EDT' from the last model run (data/last_run.txt); falls back to the log's latest update."""
+    try:
+        t = pd.Timestamp(open(paths.data("last_run.txt")).read().strip().rsplit(" ", 1)[0])
+        tz = open(paths.data("last_run.txt")).read().strip().rsplit(" ", 1)[1]
+    except (OSError, ValueError, IndexError):
+        u = paper.read_log().updated_at.dropna()
+        if u.empty:
+            return ""
+        t, tz = pd.Timestamp(u.max()), "ET"
+    return f"{t:%a, %b %-d} · {t:%-I:%M %p} {tz}"
+
+
 def build():
     d = paper.read_log()
+    lr = last_run()
+    stamp = (f"<div class='lastrun'>{tip('Last model run', 'When the model last ran: re-checked goalies, lineups, injuries and lines, and re-projected every game that had not started. It runs every hour from 11:17 AM to 10:17 PM Eastern and 15 minutes before each game.', 'tr down')}"
+             f"<b>{e(lr)}</b></div>") if lr else ""
     body = f"""
-<header class="hero"><h1>NHL Total Model</h1></header>
+<header class="hero"><h1>NHL Total Model</h1>{stamp}</header>
 
 <section><h2>Today's slate</h2>{slate(d)}</section>
 

@@ -2,7 +2,7 @@ name: Keeper (runs the daily job on time)
 
 # GitHub's own schedule is unreliable for this repo (scheduled runs fire late or not at all), so this
 # workflow stays running and starts "Daily NHL run" every hour at :17 from 11:17 AM to 10:17 PM
-# Eastern. GitHub stops a run after 6 hours, so before that it starts a fresh copy of itself.
+# Eastern, plus 15 minutes before each game (times from .github/scripts/next_slot.py). GitHub stops a run after 6 hours, so before that it starts a fresh copy of itself.
 # Only one keeper runs at a time (concurrency), so the chain can't duplicate. The schedule below just
 # restarts the chain if it ever breaks (when GitHub's scheduler does fire).
 on:

@@ -497,6 +497,8 @@ def today(day=None):
           " (+2 pts more with line shopping). Small, unproven edge: judge it on live paper trading.")
     print("\nTODAY'S FLAGS: " + ("; ".join(flagged) if flagged else "none"))
     if day == date.today().isoformat():  # never log past dates: that would be hindsight
+        with open(paths.data("last_run.txt"), "w") as f:  # shown on the dashboard
+            f.write(pd.Timestamp.now(tz="America/New_York").strftime("%Y-%m-%d %H:%M %Z") + "\n")
         import paper
         added, upgraded = paper.log_games(log_rows)
         print(f"(paper log: {added} new games, {upgraded} newly flagged, in {paper.LOG})")
