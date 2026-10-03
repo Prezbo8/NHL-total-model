@@ -55,7 +55,7 @@ def season_of(day):
 
 
 def walk_split(games, k=m.K, w=m.W_GOALS, regress=m.REGRESS, known_starters=True, with_projector=False, roster_w=0.0,
-               live_season=None, use_speed=True):
+               live_season=None, use_speed=True, record_detail=False):
     """live_season: the season being projected. If it's newer than the data (e.g. opening day, before any
     of its games exist), last season's ratings are rolled over into this season's starting ratings."""
     starter, by_game, gg = m.load_goalies()
@@ -75,7 +75,7 @@ def walk_split(games, k=m.K, w=m.W_GOALS, regress=m.REGRESS, known_starters=True
         r.lg = lg_init[key]
     other = avg("o_goalsFor") + avg("o_goalsAgainst")
     T5 = t5  # league 5v5 seconds per game, updated as games come in
-    rows = []
+    rows, details = [], []
     zspeed = speed.z_prev(games) if use_speed else {}
 
     def project(home, away, home_goalie, away_goalie, h_b2b=False, a_b2b=False, detail=False, season=None):
@@ -115,8 +115,11 @@ def walk_split(games, k=m.K, w=m.W_GOALS, regress=m.REGRESS, known_starters=True
                     return starter.get((r.gameId, team))
                 rr = recent.get(team)
                 return max(set(rr), key=rr.count) if rr else None
-            lam_h, lam_a = project(r.home, r.away, pick(r.home), pick(r.away), r.h_b2b, r.a_b2b, season=season)
+            lam_h, lam_a, det = project(r.home, r.away, pick(r.home), pick(r.away), r.h_b2b, r.a_b2b, detail=True, season=season)
             rows.append((r.gameId, season, r.gameDate, r.home, r.away, lam_h + lam_a, r.total, lam_h, lam_a))
+            if record_detail:  # per-team breakdown, for analysis (e.g. tier cutoffs)
+                details.append({"gameId": r.gameId, "season": season,
+                                 **{f"{sd}_{k}": v for sd in ("home", "away") for k, v in det[sd].items()}})
             # update: offense = blend of goals and xG, defense = xG only (goalie handled separately)
             bl = lambda gl, x: w * gl + (1 - w) * x
             row = r._asdict()
@@ -145,4 +148,6 @@ def walk_split(games, k=m.K, w=m.W_GOALS, regress=m.REGRESS, known_starters=True
         gs.new_season()
     proj = pd.DataFrame(rows, columns=["gameId", "season", "gameDate", "home", "away", "proj", "total", "lam_h", "lam_a"])
     project.goalie_skill = gs.skill
+    if record_detail:
+        proj = proj.merge(pd.DataFrame(details), on=["gameId", "season"])
     return (proj, project) if with_projector else proj

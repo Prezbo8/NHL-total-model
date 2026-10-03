@@ -34,13 +34,13 @@ TIPS = {
     "Pick": "Result of the OVER FLAG bet at the logged consensus line, in units (1 unit risked).",
     "Best book": "Same pick at the best sportsbook price (the 'Best over' book), in units.",
     "Team": "Team, away first then home.",
-    "5v5": "Projected even-strength (5-on-5) goals: team's 5v5 attack × opponent's 5v5 defense × 5v5 minutes.",
-    "PP": "Projected power-play goals: PP efficiency × opponent's penalty kill × power-play time (penalties drawn × opponent's penalties taken).",
-    "Oth": "Other situations (4-on-4, 3-on-3 overtime, empty nets, 5-on-3): league average, same for every team.",
-    "Gl": "Opposing-goalie adjustment. + = facing a below-average goalie (more goals), − = facing an above-average goalie.",
-    "B2B": "Back-to-back adjustment: −8% if this team played yesterday, +6.5% if its opponent did.",
-    "Spd": "Team skating speed: how often each team hit 20+ mph last season, vs the league. Fast teams score ~2% more per step up and hold opponents ~1.7% lower, so it shifts each team's projection but barely moves the game total.",
-    "Inj": "Injury adjustment: this team's injured players (less scoring) plus the opponent's injured defenders (more scoring). – = game logged before injuries were tracked.",
+    "5v5": "Goals this team should score at full strength (5 skaters vs 5). Most of a team's goals come from here.",
+    "PP": "Goals this team should score on the power play: how good its power play is, how bad the other team's penalty kill is, and how many penalties are expected.",
+    "Oth": "Goals from everything else (4-on-4, overtime, empty nets). Same league-average number for every team, so it has no colors.",
+    "Gl": "How the other team's goalie changes this team's scoring. + = weak goalie, more goals. − = strong goalie, fewer goals.",
+    "B2B": "Tired legs: a team that played yesterday scores 8% less. A team whose opponent played yesterday scores 6.5% more.",
+    "Spd": "How fast this team skates compared with the opponent (20+ mph bursts last season). Fast teams score a bit more and allow a bit less.",
+    "Inj": "Injuries and scratches: this team's missing scorers (fewer goals) plus the other team's missing defenders (more goals).",
     "Proj": "Projected goals = (5v5 + PP + Oth) × goalie × back-to-back × team speed × injury adjustments.",
     "HIGH": "Projected 2.95+ goals (top 40% of last season's team projections). An OVER FLAG needs both teams HIGH.",
     "Confirmed": "Starter confirmed (DailyFaceoff). Refreshed every run.",
@@ -53,6 +53,36 @@ TIPS = {
     "Lean": "Trend lean: OVER/UNDER when both teams' last-10 7+ rates and the head-to-head 7+ rate run clearly above/below the league's ~45%. Weak signal: it supports or questions the model's pick, it doesn't make one.",
     "B2B tag": "Played yesterday: the model cuts this team's scoring ~8% and raises its opponent's ~6.5%.",
 }
+
+
+# Breakdown tiers (scoring side; higher = better for an over): trash/bad/mid/good/great cutoffs.
+# 5v5, PP, Gl, Spd = quintiles of 2024-26 team-games; B2B is discrete; Inj is a judgment call (live log only).
+TIERS = {"ev": (1.83, 1.94, 2.05, 2.19), "pp": (0.46, 0.53, 0.59, 0.65), "gadj": (-0.052, -0.030, -0.014, 0.004),
+         "spd": (-0.019, -0.006, 0.005, 0.018), "inj": (-0.02, -0.005, 0.005, 0.015)}
+TIER_NAMES = ("trash", "bad", "mid", "good", "great")
+
+
+def _tier_lines(stat, pct):
+    f = (lambda v: f"{v * 100:+.1f}%") if pct else (lambda v: f"{v:.2f}")
+    c = TIERS[stat]
+    return (f"\n\nGreat: above {f(c[3])}\nGood: {f(c[2])} to {f(c[3])}\nMid: {f(c[1])} to {f(c[2])}"
+            f"\nBad: {f(c[0])} to {f(c[1])}\nTrash: below {f(c[0])}")
+
+
+for _col, _stat, _pct in (("5v5", "ev", False), ("PP", "pp", False), ("Gl", "gadj", True), ("Spd", "spd", True), ("Inj", "inj", True)):
+    TIPS[_col] += _tier_lines(_stat, _pct)
+TIPS["B2B"] += "\n\nGreat: +6.5% (opponent tired)\nMid: no back-to-back\nBad: −2% (both tired)\nTrash: −8% (this team tired)"
+
+
+def tier(stat, v):
+    """'great'/'good'/'mid'/'bad'/'trash' for a breakdown value, '' when not tiered or missing."""
+    if pd.isna(v):
+        return ""
+    if stat == "b2badj":
+        return "great" if v > 0.01 else "trash" if v < -0.05 else "bad" if v < -0.005 else "mid"
+    if stat not in TIERS:
+        return ""
+    return TIER_NAMES[sum(v > c for c in TIERS[stat])]
 
 
 def tip(label, text=None, cls=""):
@@ -374,9 +404,12 @@ def day_table(g):
             cells = f"<td class='gl gcol'>{goalie_compact(g_('goalie'), g_('goalie_now'))}</td>"
             if pd.isna(g_("ev")):
                 return cells + "<td class='num muted bcol' colspan='7'>n/a</td>"
-            return cells + (f"<td class='num bcol'>{g_('ev'):.2f}</td><td class='num'>{g_('pp'):.2f}</td><td class='num'>{g_('oth'):.2f}</td>"
-                            f"<td class='num'>{adj(g_('gadj'))}</td><td class='num'>{adj(g_('b2badj'))}</td><td class='num'>{adj(g_('spd'))}</td>"
-                            f"<td class='num'>{adj(g_('inj'))}</td>")
+            def td(stat, text, extra=""):
+                t = tier(stat, g_(stat))
+                return f"<td class='num{extra}{' t-' + t if t else ''}'{f' title={chr(39)}{t}{chr(39)}' if t else ''}>{text}</td>"
+            return cells + (td("ev", f"{g_('ev'):.2f}", " bcol") + td("pp", f"{g_('pp'):.2f}") + td("oth", f"{g_('oth'):.2f}")
+                            + td("gadj", adj(g_("gadj"))) + td("b2badj", adj(g_("b2badj"))) + td("spd", adj(g_("spd")))
+                            + td("inj", adj(g_("inj"))))
 
         star = f"<span class='flagpill'>{tip('★ FLAG', TIPS['OVER FLAG'])}</span>" if flagged else ""
         if final_day:
@@ -402,7 +435,8 @@ def day_table(g):
         home = team("home", r.home, r.proj_home, r.home_score if final else None) + detail("home")
         body.append(f"<tbody class='game {cls}'><tr class='away'>{away}</tr><tr class='home'>{home}</tr>"
                     + (f"<tr class='srcrow'><td colspan='22'>{ctx}</td></tr>" if ctx else "") + "</tbody>")
-    return (f"<div class='gtable'><table class='gt'>{cols}<thead>{sections}<tr>{head}</tr></thead>{''.join(body)}</table></div>"
+    key = ("<div class='tier-key'>Breakdown (for scoring):" + "".join(f"<span class='t-{t}'>{t}</span>" for t in reversed(TIER_NAMES)) + "</div>")
+    return (f"{key}<div class='gtable'><table class='gt'>{cols}<thead>{sections}<tr>{head}</tr></thead>{''.join(body)}</table></div>"
             "<p class='muted small legend'>Two rows per game (away, then home). <span style='color:var(--accent)'>●</span> = team projected "
             "high-scoring. Proj = (5v5 + PP + Oth) × goalie (Gl) × back-to-back (B2B) × team speed (Spd) × injuries (Inj). "
             "Hover or tap any underlined label for an explanation.</p>")
@@ -559,15 +593,22 @@ def backtest():
 
 
 SCRIPT = """<script>
-// keep hover explanations on screen: anchor them left/right when near an edge
+// one floating explanation box, placed next to the hovered/tapped label (fixed, so tables can't clip it)
+const box = document.createElement("div"); box.id = "tipbox"; document.body.appendChild(box);
 document.addEventListener("mouseover", show); document.addEventListener("focusin", show);
+document.addEventListener("mouseout", hide); document.addEventListener("focusout", hide);
+window.addEventListener("scroll", () => box.classList.remove("on"), {passive: true});
 function show(ev) {
   const t = ev.target.closest && ev.target.closest(".tip"); if (!t) return;
-  const r = t.getBoundingClientRect(), w = Math.min(250, window.innerWidth - 24);
-  t.classList.remove("tl", "tr");
-  if (r.left + r.width / 2 - w / 2 < 8) t.classList.add("tl");
-  else if (r.left + r.width / 2 + w / 2 > window.innerWidth - 8) t.classList.add("tr");
-  t.classList.toggle("down", r.top < 140);
+  box.textContent = t.dataset.tip; box.classList.add("on");
+  const r = t.getBoundingClientRect(), b = box.getBoundingClientRect();
+  const left = Math.max(8, Math.min(r.left + r.width / 2 - b.width / 2, window.innerWidth - b.width - 8));
+  const top = r.top - b.height - 8 >= 8 ? r.top - b.height - 8 : r.bottom + 8;
+  box.style.left = left + "px"; box.style.top = top + "px";
+}
+function hide(ev) {
+  const t = ev.target.closest && ev.target.closest(".tip");
+  if (t && !(ev.relatedTarget && t.contains(ev.relatedTarget))) box.classList.remove("on");
 }
 </script>
 """
@@ -679,6 +720,11 @@ table.gt{font-size:12.5px;border-collapse:separate;border-spacing:0;width:100%;t
 .gt tbody.flagged td{background:var(--gold-soft)}
 .gt tbody.flagged tr.away td:first-child,.gt tbody.flagged tr.home td:first-child{box-shadow:inset 4px 0 0 var(--gold)}
 .gt td.tm,.gt thead tr:not(.sec) th:first-child{padding-left:10px}.gt td.tm img,.gt td.tm picture{vertical-align:middle;margin-right:6px}
+.gt tbody td.t-great,.tier-key .t-great{background:rgba(22,163,74,.50)}.gt tbody td.t-good,.tier-key .t-good{background:rgba(22,163,74,.22)}
+.gt tbody td.t-bad,.tier-key .t-bad{background:rgba(220,38,38,.22)}.gt tbody td.t-trash,.tier-key .t-trash{background:rgba(220,38,38,.50)}
+.tier-key{display:flex;gap:6px;flex-wrap:wrap;align-items:center;font-size:12px;color:var(--muted);margin:6px 0}
+.tier-key span{padding:1px 8px;border-radius:4px;color:var(--ink)}
+.tier-key .t-mid{border:1px solid var(--line)}
 .gt td.proj{font-weight:800;font-size:13px}.gt td.proj.hot{color:var(--accent)}
 .hot-dot{display:inline-block;width:10px;text-align:right;color:var(--accent);font-size:9px;vertical-align:2px}.hot-dot.off{visibility:hidden}
 /* every column gets its own border; sections get a stronger one */
@@ -710,13 +756,10 @@ table.gt{font-size:12.5px;border-collapse:separate;border-spacing:0;width:100%;t
 .lean.over{background:rgba(26,127,55,.16);color:var(--pos)}.lean.under{background:rgba(198,40,40,.14);color:var(--neg)}
 .lineup-src{margin-top:6px;font-size:11px;color:var(--muted);line-height:1.35}
 .tip{position:relative;cursor:help;border-bottom:1px dotted currentColor;outline:none}
-.tip::after{content:attr(data-tip);position:absolute;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%);
-  width:max-content;max-width:250px;white-space:normal;text-transform:none;letter-spacing:0;font-size:12px;font-weight:500;
-  line-height:1.4;text-align:left;color:#f2f5f9;background:#0f1a2a;border:1px solid rgba(255,255,255,.18);padding:7px 10px;
-  border-radius:8px;box-shadow:0 8px 22px rgba(0,0,0,.3);opacity:0;visibility:hidden;transition:opacity .12s;z-index:60;pointer-events:none}
-.tip:hover::after,.tip:focus::after,.tip:focus-within::after{opacity:1;visibility:visible}
-.tip.tl::after{left:0;transform:none}.tip.tr::after{left:auto;right:0;transform:none}
-.tip.down::after{bottom:auto;top:calc(100% + 8px)}
+#tipbox{position:fixed;left:0;top:0;max-width:260px;white-space:pre-line;font-size:12px;font-weight:500;line-height:1.4;
+  text-align:left;color:#f2f5f9;background:#0f1a2a;border:1px solid rgba(255,255,255,.18);padding:7px 10px;border-radius:8px;
+  box-shadow:0 8px 22px rgba(0,0,0,.3);opacity:0;visibility:hidden;transition:opacity .12s;z-index:100;pointer-events:none}
+#tipbox.on{opacity:1;visibility:visible}
 .tip.injwrap{display:block;border-bottom:none}.tip.injwrap .injuries{text-decoration:underline dotted;text-underline-offset:2px}
 .gb .tip,.b2b .tip,.flagbar .tip,.hot-tag .tip{border-bottom-color:rgba(127,127,127,.6)}
 ul.archive{list-style:none;margin:0;padding:0}ul.archive li{padding:8px 0;border-bottom:1px solid var(--line)}
