@@ -51,6 +51,9 @@ TIPS = {
     "Trends": "Each team's last 10 games: average total goals and how many went 7+ (over 6.5). Context only: tested on 2023-26, recent form adds almost nothing beyond the projection (the model already uses it).",
     "H2H": "Head-to-head since 2020-21: meetings, average total, how many went 7+, and the last 3 scores. Context only: tested on 2023-26, it adds very little beyond the projection.",
     "Lean": "Trend lean: OVER/UNDER when both teams' last-10 7+ rates and the head-to-head 7+ rate run clearly above/below the league's ~45%. Weak signal: it supports or questions the model's pick, it doesn't make one.",
+    "SLAM": "Flagged over where both teams are good or great at 5-on-5. Went over 54% (opening line) / 57% (closing line) in 2021-26.",
+    "1U": "Flagged over, but not both teams good at 5-on-5. Went over 53% in 2021-26.",
+    "AVOID": "Not flagged, or flagged but both teams face strong goalies. These went over only 45-49% in 2021-26.",
     "B2B tag": "Played yesterday: the model cuts this team's scoring ~8% and raises its opponent's ~6.5%.",
 }
 
@@ -83,6 +86,18 @@ def tier(stat, v):
     if stat not in TIERS:
         return ""
     return TIER_NAMES[sum(v > c for c in TIERS[stat])]
+
+
+def call(r, flagged):
+    """'SLAM' / '1U' / 'AVOID' for a game. Tested 2021-26 at 6/6.5 lines (over %, open / close):
+    flagged + both teams good/great at 5v5 54% / 57%; other flagged 53% / 53%; flagged but both teams
+    facing strong goalies (Gl bad/trash) 46% / 45%; not flagged 47% / 49%."""
+    if not flagged:
+        return "AVOID"
+    both = lambda stat, ts: all(tier(stat, getattr(r, f"{s}_{stat}", float("nan"))) in ts for s in ("away", "home"))
+    if both("gadj", ("bad", "trash")):
+        return "AVOID"
+    return "SLAM" if both("ev", ("good", "great")) else "1U"
 
 
 def tip(label, text=None, cls=""):
@@ -412,6 +427,8 @@ def day_table(g):
                             + td("inj", adj(g_("inj"))))
 
         star = f"<span class='flagpill'>{tip('★ FLAG', TIPS['OVER FLAG'])}</span>" if flagged else ""
+        c = call(r, flagged)
+        callpill = f"<span class='callpill c-{c.lower()}'>{tip(('🔨 ' if c == 'SLAM' else '') + c, TIPS[c])}</span>"
         if final_day:
             t = r.bet_total
             vs = ("<span class='pill muted-pill'>no line</span>" if pd.isna(t) else
@@ -429,7 +446,7 @@ def day_table(g):
             ln = ("<span class='muted'>not posted</span>" if pd.isna(r.bet_total) else
                   f"{line(r.open_total)} → {line(r.bet_total)} <span class='muted'>o{price(r.bet_over)}</span>")
             game = (f"<td class='num gcol big-total' rowspan='2'>{r.proj:.2f}</td><td class='num p7' rowspan='2'>{r.p7:.0%}</td>"
-                    f"<td rowspan='2'>{star}{'<br>' if star else ''}{ln}</td>")
+                    f"<td rowspan='2'>{callpill}<br>{ln}</td>")
         ctx = ""  # lineup source and trends / H2H are logged but not shown
         away = team("away", r.away, r.proj_away, r.away_score if final else None) + game + detail("away")
         home = team("home", r.home, r.proj_home, r.home_score if final else None) + detail("home")
@@ -749,6 +766,9 @@ table.gt{font-size:12.5px;border-collapse:separate;border-spacing:0;width:100%;t
 .gt .outlist .ip{color:var(--neg)}.gt .outlist .ip b{font-weight:700;white-space:nowrap}.gt .outlist .ip.dtd{color:var(--muted)}
 .gt .itag{font-size:9.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.03em}
 .gt .pill{font-size:11px;padding:2px 7px}
+.callpill{display:inline-block;font-size:10px;font-weight:800;padding:1px 8px;border-radius:999px;margin-bottom:2px;letter-spacing:.04em}
+.callpill.c-slam{background:var(--gold);color:#1a1200}.callpill.c-1u{border:1.5px solid var(--gold);color:var(--ink)}
+.callpill.c-avoid{border:1px solid var(--line);color:var(--muted);font-weight:700}.callpill .tip{border-bottom:none}
 .flagpill{display:inline-block;background:var(--gold);color:#1a1200;font-size:10px;font-weight:800;padding:1px 7px;border-radius:999px;margin-bottom:2px}
 .gt tr.srcrow td{padding:0 8px 6px 38px;white-space:nowrap}.gt tr.srcrow .lineup-src{margin-top:1px;font-size:10.5px}
 .gt .trends{font-size:11px;color:var(--ink);line-height:1.5}.gt .trends b{font-weight:700}
