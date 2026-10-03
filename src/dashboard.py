@@ -341,18 +341,17 @@ def day_table(g):
         head += (f"<th class='gcol ctr'>{tip('Proj total')}</th><th class='ctr'>{tip('P(7+)')}</th>"
                  f"<th class='ctr'>{tip('Line', 'Consensus total: opening line → now, and the over price (−120 = risk 120 to win 100). ★ FLAG = the model’s over pick.')}</th>")
     head += (f"<th class='gcol'>{tip('Goalie', 'Starting goalie: ✓ confirmed, Likely, or Proj (not announced). ⇄ = changed after the game was logged.')}</th>"
-             f"<th>{tip('Out', 'Every injured, suspended or scratched regular, already taken out of the projection, biggest impact first: GF = change to his team scoring, GA = change to goals against. SCRATCH = not in tonight lineup, IR = injured reserve. DTD = day-to-day, not adjusted.')}</th>"
              f"<th class='num bcol'>{tip('5v5')}</th><th class='num'>{tip('PP')}</th><th class='num'>{tip('Oth')}</th>"
              f"<th class='num'>{tip('Gl', cls='tr')}</th><th class='num'>{tip('B2B', cls='tr')}</th><th class='num'>{tip('Spd', cls='tr')}</th>"
              f"<th class='num'>{tip('Inj', cls='tr')}</th>")
     # fixed widths (%), same section sizes in both tables so they line up:
-    # Team 16 | Game/Result 30 | Goalies & lineups 28 | Breakdown 26
-    widths = ([8.5, 2.5, 5] if final_day else [9.5, 6.5]) \
-        + ([7, 4, 4, 7, 8] if final_day else [8, 6, 16]) + [13, 14] + [3.6, 3.1, 3.1, 4.4, 4.2, 4.0, 4.6]
+    # Team 18 | Game/Result 34 | Goalies 17 | Breakdown 31
+    widths = ([9, 3.5, 5.5] if final_day else [10, 8]) \
+        + ([8.5, 5.5, 5, 7, 8] if final_day else [10, 8, 16]) + [17] + [4.4, 3.9, 3.9, 5.2, 4.8, 4.4, 4.4]
     cols = "<colgroup>" + "".join(f"<col style='width:{w:.3f}%'>" for w in widths) + "</colgroup>"
     sections = (f"<tr class='sec'><th colspan='{3 if final_day else 2}'>Team</th>"
                 f"<th class='gcol' colspan='{5 if final_day else 3}'>{'Result' if final_day else 'Game'}</th>"
-                f"<th class='gcol' colspan='2'>Goalies &amp; lineups</th><th class='bcol' colspan='7'>Projection breakdown</th></tr>")
+                f"<th class='gcol'>Goalies</th><th class='bcol' colspan='7'>Projection breakdown</th></tr>")
     body = []
     for i, r in enumerate(g.itertuples()):
         flagged, final = bool(r.flag), not pd.isna(r.final_total)
@@ -372,8 +371,7 @@ def day_table(g):
             g_ = lambda c: getattr(r, f"{side}_{c}", float("nan"))
             def adj(v):
                 return "–" if pd.isna(v) or abs(v) < 0.0005 else f"{v * 100:+.1f}%"
-            cells = (f"<td class='gl gcol'>{goalie_compact(g_('goalie'), g_('goalie_now'))}</td>"
-                     f"<td class='outs'>{injury_full(g_('out'), g_('dtd'))}</td>")
+            cells = f"<td class='gl gcol'>{goalie_compact(g_('goalie'), g_('goalie_now'))}</td>"
             if pd.isna(g_("ev")):
                 return cells + "<td class='num muted bcol' colspan='7'>n/a</td>"
             return cells + (f"<td class='num bcol'>{g_('ev'):.2f}</td><td class='num'>{g_('pp'):.2f}</td><td class='num'>{g_('oth'):.2f}</td>"
