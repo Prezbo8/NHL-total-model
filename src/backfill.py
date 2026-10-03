@@ -18,6 +18,7 @@ import grade
 import model as m
 import odds
 import paper
+import speed
 import split_model as sm
 import trends
 
@@ -28,6 +29,7 @@ def backfill(day):
     games = sm.load_split()
     games = games[games.gameDate < int(day.replace("-", ""))]          # nothing from that day or later
     season = sm.season_of(d0)
+    speed.refresh(season - 1)
     proj, project = sm.walk_split(games, known_starters=False, with_projector=True, live_season=season)
     cal = m.fit_calibration(proj[proj.season.between(2022, season - 1)])
     prev = proj[proj.season == season - 1]
@@ -56,7 +58,7 @@ def backfill(day):
             return (f"{name} ({status})", ids.get(str(name).lower())) if name else ("unknown", None)
         hg, hp = starter(g["homeTeam"])
         ag, ap = starter(g["awayTeam"])
-        lh, la, det = project(h, a, hp, ap, h in tired, a in tired, detail=True)
+        lh, la, det = project(h, a, hp, ap, h in tired, a in tired, detail=True, season=season)
         x = lh + la
         o = opens.get((h, a))
         flag = bool(lh >= cutoff and la >= cutoff and o is not None and o["total"] in (6.0, 6.5))

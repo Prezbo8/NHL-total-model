@@ -33,6 +33,9 @@ G_DECAY = 0.7   # how much of a goalie's past seasons carries into the next one
 # back-to-backs (team played yesterday), measured on 2022-24 seasons vs projections
 B2B_TIRED = 0.92     # tired team scores ~8% fewer goals than projected
 B2B_VS_TIRED = 1.065  # its opponent scores ~6.5% more
+# team skating speed (previous season's 20+ mph bursts per game, z-score), fitted on 2022-26 (5,248 games)
+SPEED_OWN = 0.020    # +2.0% own scoring per SD of own speed (±0.6%)
+SPEED_OPP = -0.017   # -1.7% to the opponent's scoring per SD (±0.6%); net on a total +0.4% per SD
 
 
 def load_goalies():
@@ -329,6 +332,11 @@ def today(day=None):
     games = sm.load_split()
     season = sm.season_of(date.fromisoformat(day))  # from the date, not the data (opening day has no games yet)
     goalies.refresh([season])
+    try:  # team skating speed: this season uses LAST season's numbers (fetched once per season)
+        import speed
+        speed.refresh(season - 1)
+    except Exception as e:
+        print(f"(couldn't refresh team speed: {e}; using saved speed data)")
     proj, project = sm.walk_split(games, known_starters=False, with_projector=True, live_season=season)
     cal = fit_calibration(proj[proj.season.between(2022, season - 1)])
     prev = proj[proj.season == season - 1]
@@ -428,7 +436,7 @@ def today(day=None):
         aname = f'{g["awayTeam"]["placeName"]["default"]} {g["awayTeam"]["commonName"]["default"]}'
         hg, hp, hs = starter(h, hname)
         ag, ap, as_ = starter(a, aname)
-        lh, la, det = project(h, a, hp, ap, h in tired, a in tired, detail=True)
+        lh, la, det = project(h, a, hp, ap, h in tired, a in tired, detail=True, season=season)
         ih, ia = inj.get(h, no_inj), inj.get(a, no_inj)
         fh_inj, fa_inj = ih["off"] * ia["def"], ia["off"] * ih["def"]  # own injuries + opponent's injured defenders
         lh, la = lh * fh_inj, la * fa_inj
@@ -485,7 +493,7 @@ def today(day=None):
     print("\n(goalie % = share of expected goals stopped beyond average; higher = better)")
     print("OVER FLAG = both teams high-scoring (marked +) and the line is 6 or 6.5. Overs only, never 5.5.")
     print("Always bet the 'best over' book: line shopping added ~+2 pts ROI in the backtest.")
-    print("Model uses 2020-21 onward only. Tested 2021-26: +0.5% ROI at open, +2.3% at close, 53-55% wins"
+    print("Model uses 2020-21 onward only. Tested 2021-26: +1.3% ROI at open, +2.4% at close, 53-55% wins"
           " (+2 pts more with line shopping). Small, unproven edge: judge it on live paper trading.")
     print("\nTODAY'S FLAGS: " + ("; ".join(flagged) if flagged else "none"))
     if day == date.today().isoformat():  # never log past dates: that would be hindsight

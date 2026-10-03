@@ -15,9 +15,9 @@ from teams import TEAMS
 OUT = os.path.join(paths.DOCS_DIR, "index.html")
 
 # backtest numbers (strict 2020-21+ data, frozen rule) from history.py / compare.py, Oct 2 2026
-BACKTEST = [  # season, open bets, open ROI, close bets, close ROI  (calibrated goalies, G_SHRINK=200; Oct 2 2026)
-    ("2021-22", 428, -1.8, 434, 0.2), ("2022-23", None, None, 256, 4.5), ("2023-24", 11, 1.1, 19, -10.6),
-    ("2024-25", 44, 6.6, 44, 10.4), ("2025-26", 137, 5.7, 150, 3.5),
+BACKTEST = [  # season, open bets, open ROI, close bets, close ROI  (calibrated goalies + team speed; Oct 3 2026)
+    ("2021-22", 428, -1.8, 434, 0.2), ("2022-23", None, None, 229, 2.0), ("2023-24", 4, -50.0, 9, -25.0),
+    ("2024-25", 44, 16.5, 44, 22.5), ("2025-26", 109, 9.1, 124, 5.7),
 ]
 
 SCALE = 4.5  # projected-goal bars run 0 -> 4.5 goals
@@ -39,8 +39,9 @@ TIPS = {
     "Oth": "Other situations (4-on-4, 3-on-3 overtime, empty nets, 5-on-3): league average, same for every team.",
     "Gl": "Opposing-goalie adjustment. + = facing a below-average goalie (more goals), − = facing an above-average goalie.",
     "B2B": "Back-to-back adjustment: −8% if this team played yesterday, +6.5% if its opponent did.",
+    "Spd": "Team skating speed: how often each team hit 20+ mph last season, vs the league. Fast teams score ~2% more per step up and hold opponents ~1.7% lower, so it shifts each team's projection but barely moves the game total.",
     "Inj": "Injury adjustment: this team's injured players (less scoring) plus the opponent's injured defenders (more scoring). – = game logged before injuries were tracked.",
-    "Proj": "Projected goals = (5v5 + PP + Oth) × goalie × back-to-back × injury adjustments.",
+    "Proj": "Projected goals = (5v5 + PP + Oth) × goalie × back-to-back × team speed × injury adjustments.",
     "HIGH": "Projected 2.95+ goals (top 40% of last season's team projections). An OVER FLAG needs both teams HIGH.",
     "Confirmed": "Starter confirmed (DailyFaceoff). Refreshed every run.",
     "Likely": "Starter expected but not confirmed yet (DailyFaceoff).",
@@ -127,6 +128,28 @@ def goalie_html(logged, now):
     return f"<div class='goalie'>{e(nm)} {badge}{changed}</div>"
 
 
+def injury_full(out, dtd):
+    """Table Out column: EVERY missing player with his effect (wraps), then day-to-day names."""
+    lines = []
+    if isinstance(out, str) and out:
+        ps = []
+        for it in out.split("; "):
+            name, d_off, d_def = (it.split("|") + ["0", "0"])[:3]
+            ps.append((name, float(d_off or 0), float(d_def or 0)))
+        ps.sort(key=lambda p: -max(abs(p[1]), abs(p[2])))  # biggest impact first
+        for name, d_off, d_def in ps:
+            tag = ""
+            if name.endswith(")") and " (" in name:
+                name, tag = name.rsplit(" (", 1)
+                tag = f" <span class='itag'>{e(tag[:-1])}</span>"
+            effect = f"{-d_off * 100:+.1f}% GF" if abs(d_off) >= abs(d_def) else f"{d_def * 100:+.1f}% GA"
+            tipt = f"{name}: team scoring {-d_off * 100:+.1f}%, opponent scoring {d_def * 100:+.1f}%"
+            lines.append(f"<span class='ip' title='{e(tipt)}'>{e(short_name(name))}{tag} <b>{effect}</b></span>")
+    if isinstance(dtd, str) and dtd:
+        lines.append(f"<span class='ip dtd' title='Day-to-day: usually plays, not adjusted'>DTD: {e(', '.join(short_name(n) for n in dtd.split(', ')))}</span>")
+    return f"<div class='outlist'>{''.join(lines)}</div>" if lines else "<span class='muted'>–</span>"
+
+
 def injury_html(out, dtd):
     """'Out: Hyman −3.0%, Nugent-Hopkins −2.0%' (impact on the team's scoring) and day-to-day names."""
     parts, players_out = [], []
@@ -211,6 +234,7 @@ def breakdown(r, flagged):
         adj = lambda v: f"{v * 100:+.1f}%" if abs(v) >= 0.0005 else "–"
         return (f"<tr><td>{logo(abbr, 18)} {e(abbr)}</td><td class='num'>{g('ev'):.2f}</td><td class='num'>{g('pp'):.2f}</td>"
                 f"<td class='num'>{g('oth'):.2f}</td><td class='num'>{adj(g('gadj'))}</td><td class='num'>{adj(g('b2badj'))}</td>"
+                f"<td class='num'>{'–' if pd.isna(g('spd')) else adj(g('spd'))}</td>"
                 f"<td class='num'>{'–' if pd.isna(g('inj')) else adj(g('inj'))}</td>"
                 f"<td class='num'><b>{proj:.2f}</b></td></tr>")
     return f"""<div class='why'><div class='why-h'>{'Why it’s flagged' if flagged else 'Projection breakdown'}</div>
@@ -317,17 +341,18 @@ def day_table(g):
         head += (f"<th class='num gcol'>{tip('Proj total')}</th><th class='num'>{tip('P(7+)')}</th>"
                  f"<th>{tip('Line', 'Consensus total: opening line → now, and the over price (−120 = risk 120 to win 100). ★ FLAG = the model’s over pick.')}</th>")
     head += (f"<th class='gcol'>{tip('Goalie', 'Starting goalie: ✓ confirmed, Likely, or Proj (not announced). ⇄ = changed after the game was logged.')}</th>"
-             f"<th>{tip('Out', 'Injured, suspended or scratched regulars already taken out of the projection (GF = his team scoring, GA = goals against). DTD = day-to-day, not adjusted. Hover a row for the full list.')}</th>"
+             f"<th>{tip('Out', 'Every injured, suspended or scratched regular, already taken out of the projection, biggest impact first: GF = change to his team scoring, GA = change to goals against. SCRATCH = not in tonight lineup, IR = injured reserve. DTD = day-to-day, not adjusted.')}</th>"
              f"<th class='num bcol'>{tip('5v5')}</th><th class='num'>{tip('PP')}</th><th class='num'>{tip('Oth')}</th>"
-             f"<th class='num'>{tip('Gl', cls='tr')}</th><th class='num'>{tip('B2B', cls='tr')}</th><th class='num'>{tip('Inj', cls='tr')}</th>")
+             f"<th class='num'>{tip('Gl', cls='tr')}</th><th class='num'>{tip('B2B', cls='tr')}</th><th class='num'>{tip('Spd', cls='tr')}</th>"
+             f"<th class='num'>{tip('Inj', cls='tr')}</th>")
     # fixed widths (%), same section sizes in both tables so they line up:
     # Team 16 | Game/Result 30 | Goalies & lineups 28 | Breakdown 26
     widths = ([8.5, 2.5, 5] if final_day else [9.5, 6.5]) \
-        + ([7, 4, 4, 7, 8] if final_day else [8, 6, 16]) + [16.5, 11.5] + [26 / 6] * 6
+        + ([7, 4, 4, 7, 8] if final_day else [8, 6, 16]) + [13, 15] + [3.6, 3.4, 3.4, 4.4, 3.8, 3.6, 3.8]
     cols = "<colgroup>" + "".join(f"<col style='width:{w:.3f}%'>" for w in widths) + "</colgroup>"
     sections = (f"<tr class='sec'><th colspan='{3 if final_day else 2}'>Team</th>"
                 f"<th class='gcol' colspan='{5 if final_day else 3}'>{'Result' if final_day else 'Game'}</th>"
-                f"<th class='gcol' colspan='2'>Goalies &amp; lineups</th><th class='bcol' colspan='6'>Projection breakdown</th></tr>")
+                f"<th class='gcol' colspan='2'>Goalies &amp; lineups</th><th class='bcol' colspan='7'>Projection breakdown</th></tr>")
     body = []
     for i, r in enumerate(g.itertuples()):
         flagged, final = bool(r.flag), not pd.isna(r.final_total)
@@ -348,11 +373,12 @@ def day_table(g):
             def adj(v):
                 return "–" if pd.isna(v) or abs(v) < 0.0005 else f"{v * 100:+.1f}%"
             cells = (f"<td class='gl gcol'>{goalie_compact(g_('goalie'), g_('goalie_now'))}</td>"
-                     f"<td class='outs'>{injury_html(g_('out'), g_('dtd'))}</td>")
+                     f"<td class='outs'>{injury_full(g_('out'), g_('dtd'))}</td>")
             if pd.isna(g_("ev")):
-                return cells + "<td class='num muted bcol' colspan='6'>n/a</td>"
+                return cells + "<td class='num muted bcol' colspan='7'>n/a</td>"
             return cells + (f"<td class='num bcol'>{g_('ev'):.2f}</td><td class='num'>{g_('pp'):.2f}</td><td class='num'>{g_('oth'):.2f}</td>"
-                            f"<td class='num'>{adj(g_('gadj'))}</td><td class='num'>{adj(g_('b2badj'))}</td><td class='num'>{adj(g_('inj'))}</td>")
+                            f"<td class='num'>{adj(g_('gadj'))}</td><td class='num'>{adj(g_('b2badj'))}</td><td class='num'>{adj(g_('spd'))}</td>"
+                            f"<td class='num'>{adj(g_('inj'))}</td>")
 
         star = f"<span class='flagpill'>{tip('★ FLAG', TIPS['OVER FLAG'])}</span>" if flagged else ""
         if final_day:
@@ -380,7 +406,7 @@ def day_table(g):
                     + (f"<tr class='srcrow'><td colspan='22'>{ctx}</td></tr>" if ctx else "") + "</tbody>")
     return (f"<div class='gtable'><table class='gt'>{cols}<thead>{sections}<tr>{head}</tr></thead>{''.join(body)}</table></div>"
             "<p class='muted small legend'>Two rows per game (away, then home). <span style='color:var(--accent)'>●</span> = team projected "
-            "high-scoring. Proj = (5v5 + PP + Oth) × goalie (Gl) × back-to-back (B2B) × injuries (Inj). "
+            "high-scoring. Proj = (5v5 + PP + Oth) × goalie (Gl) × back-to-back (B2B) × team speed (Spd) × injuries (Inj). "
             "Hover or tap any underlined label for an explanation.</p>")
 
 
@@ -521,13 +547,15 @@ def backtest():
       <th>{tip('ROI at open', 'Profit per unit risked betting at the opening line.', 'down')}</th>
       <th>{tip('Bets at close', 'Flagged overs if bet at the closing line (right before puck drop). Counts differ because lines move into or out of 6/6.5.', 'down')}</th>
       <th>{tip('ROI at close', 'Profit per unit risked betting at the closing line.', 'down tr')}</th></tr></thead>
-      <tbody>{rows}<tr class='total'><td>2021–26</td><td class='num'>620</td><td class='num pos'>+0.5%</td>
-      <td class='num'>903</td><td class='num pos'>+2.3%</td></tr></tbody></table></div>
+      <tbody>{rows}<tr class='total'><td>2021–26</td><td class='num'>585</td><td class='num pos'>+1.3%</td>
+      <td class='num'>840</td><td class='num pos'>+2.4%</td></tr></tbody></table></div>
       <ul class='notes'>
         <li><b>Open</b> = betting the first line books post; <b>close</b> = the final line before puck drop. Counts differ
             because lines move into or out of 6 / 6.5 during the day.</li>
         <li>53–55% wins; uncertainty about ±3–4% ROI, so the past edge is small and not proven. Line shopping added about
             <b>+2.2 pts</b> on the same picks. Goalie ratings are calibrated to match how goalies actually play.</li>
+        <li>Includes team skating speed (fitted on these same seasons, so its small gain is slightly optimistic). 2023-24 had
+            very few flags, so its ROI is mostly noise.</li>
         <li>No 2022-23 opening lines in the data. With pre-2020 data the same rule was about break-even (2016–21).</li>
       </ul>"""
 
@@ -637,7 +665,7 @@ table.gt{font-size:12.5px;border-collapse:separate;border-spacing:0;width:100%;t
 .gt td[rowspan]{white-space:normal}.gt td[rowspan].nowrap{white-space:nowrap}
 .gt td.pickcell{line-height:1.15;padding-top:2px;padding-bottom:2px}.gt td.pickcell .small{font-size:10.5px}.gt td.pickcell .flagpill{margin-bottom:1px}
 .gt td.tm{white-space:nowrap}.gt td.tm .b2b{margin-left:4px}.gt td.tm img,.gt td.tm picture{margin-right:5px}
-.gt tbody.game tr.away td:not([rowspan]),.gt tbody.game tr.home td:not([rowspan]){height:34px}
+.gt tbody.game tr.away td:not([rowspan]),.gt tbody.game tr.home td:not([rowspan]){height:34px;vertical-align:middle}
 .gt th.num,.gt td.num{text-align:right}.gt th:not(.num),.gt td:not(.num){text-align:left}
 .gt th{background:var(--card);padding:8px 5px;border-bottom:2px solid var(--line);font-size:10px;white-space:nowrap}
 .gt td{padding:4px 5px;border-bottom:none;vertical-align:middle;white-space:nowrap}
@@ -657,8 +685,11 @@ table.gt{font-size:12.5px;border-collapse:separate;border-spacing:0;width:100%;t
 .gt td.big-total{font-size:18px;font-weight:800}
 .gt td.tot .big-total{display:inline-block;width:2.1ch;text-align:right;font-size:18px;margin-right:6px;vertical-align:-2px}
 .gt .score-cell{font-size:15px;font-weight:800}
-.gt .gc{white-space:nowrap}.gt .gc .gb{margin-left:2px}
-.gt td.outs{max-width:none}.gt td.outs .tip.injwrap{display:block}.gt td.outs .injuries{min-height:0;overflow:hidden;text-overflow:ellipsis}
+.gt td.gl{white-space:normal}.gt .gc{white-space:normal;line-height:1.5}.gt .gc .gb{margin-left:2px;white-space:nowrap}
+.gt td.outs{white-space:normal;padding-top:5px;padding-bottom:5px}
+.gt .outlist{display:flex;flex-direction:column;gap:2px;font-size:11px;line-height:1.3}
+.gt .outlist .ip{color:var(--neg)}.gt .outlist .ip b{font-weight:700;white-space:nowrap}.gt .outlist .ip.dtd{color:var(--muted)}
+.gt .itag{font-size:9.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.03em}
 .gt .pill{font-size:11px;padding:2px 7px}
 .flagpill{display:inline-block;background:var(--gold);color:#1a1200;font-size:10px;font-weight:800;padding:1px 7px;border-radius:999px;margin-bottom:2px}
 .gt tr.srcrow td{padding:0 8px 6px 38px;white-space:nowrap}.gt tr.srcrow .lineup-src{margin-top:1px;font-size:10.5px}
@@ -715,7 +746,8 @@ def build():
 <section><h2>How it works</h2><div class="panel">
 <p style="margin:0">Each team's goals are projected separately for <b>5-on-5</b> (expected goals + actual goals for/against per 60) and the
 <b>power play</b> (PP and PK efficiency × penalties drawn and taken), plus other situations. The opposing <b>starting goalie's</b>
-goals saved above expected scales goals allowed, and <b>back-to-backs</b> cut the tired team's scoring ~8% (opponent +6.5%).
+goals saved above expected scales goals allowed, <b>back-to-backs</b> cut the tired team's scoring ~8% (opponent +6.5%), and
+<b>team skating speed</b> nudges fast teams up (+2% per step) and their opponents down (−1.7%).
 Data from the 2020-21 season onward only (MoneyPuck, NHL API, DailyFaceoff, Action Network). Runs on GitHub Actions every 2 hours from 11 AM to 9 PM ET.</p>
 <dl>
 <div><dt>Projected goals bar</dt><dd>Each team's projected goals on a 0–4.5 scale. The tick marks the high-scoring cutoff; a solid bar means past it.</dd></div>
@@ -724,7 +756,8 @@ Data from the 2020-21 season onward only (MoneyPuck, NHL API, DailyFaceoff, Acti
 <div><dt>Goalie badges</dt><dd>✓ Confirmed / Likely / Projected starter, from DailyFaceoff, refreshed every run (every 2 hours). "Changed" = different from the starter the projection used.</dd></div>
 <div><dt>B2B</dt><dd>Team played yesterday: its projected scoring is cut ~8% and its opponent's raised ~6.5%.</dd></div>
 <div><dt>Injuries &amp; lineups</dt><dd>ESPN's injury list plus DailyFaceoff's projected lineups checked against the official NHL roster. Players who are out, on IR, suspended, or missing from tonight's lineup (scratch) are replaced by a replacement-level skater. GF = change to his team's scoring, GA = change to goals against (shown for whichever is bigger; hover for both). Day-to-day players are shown but not adjusted.</dd></div>
-<div><dt>Breakdown</dt><dd>Each team's goals = (5-on-5 + power play + other situations) × opposing-goalie adjustment × back-to-back adjustment. A + goalie number means the opposing goalie has been below average.</dd></div>
+<div><dt>Breakdown</dt><dd>Each team's goals = (5-on-5 + power play + other situations) × opposing-goalie × back-to-back × team speed × injury adjustments. A + goalie number means the opposing goalie has been below average.</dd></div>
+<div><dt>Team speed (Spd)</dt><dd>How often a team's skaters hit 20+ mph (NHL EDGE), last season vs the league. Fast teams score a little more and allow a little less, so it shifts team projections but barely changes totals.</dd></div>
 </dl></div></section>"""
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
     with open(OUT, "w") as f:

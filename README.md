@@ -27,6 +27,7 @@ then adjusted for:
 
 - **Starting goalie**: goals saved above expected, calibrated so ratings match how goalies actually play
 - **Back-to-backs**: tired team −8% scoring, its opponent +6.5%
+- **Team skating speed** (NHL EDGE, last season's 20+ mph bursts): +2% own scoring and −1.7% to the opponent per step above average
 - **Injuries and lineups**: injured, suspended or scratched regulars replaced by a replacement-level player
 
 Only data from the 2020-21 season onward is used.
@@ -41,14 +42,15 @@ Only data from the 2020-21 season onward is used.
 | Injuries | ESPN |
 | Projected lineups / scratches | DailyFaceoff line combinations vs the official NHL roster |
 | Schedule, scores, rosters | NHL API |
+| Team skating speed | NHL EDGE (NHL API) |
 | Betting lines (open, current, 5 sportsbooks) | Action Network |
 
 ## Backtest (2021-26, 2020+ data only)
 
 | | Bets | Win % | ROI |
 |---|---|---|---|
-| At the opening line | 620 | 52.6% | +0.5% |
-| At the closing line | 903 | 54.7% | +2.3% |
+| At the opening line | 585 | 53.0% | +1.3% |
+| At the closing line | 840 | 54.7% | +2.4% |
 | Line shopping (best book) | | | about +2 pts more |
 
 The past edge is small (±3–4% uncertainty). The live paper-trading record decides whether it's real.
@@ -62,6 +64,7 @@ src/                          everything the daily run uses
   model.py                      daily entry point: `today` projects, flags and logs; also the original model
   split_model.py                the 5v5 / power-play model used daily
   goalies.py  players.py        goalie and skater data + ratings
+  speed.py                      team skating speed (NHL EDGE)
   injuries.py  lineups.py       ESPN injuries, DailyFaceoff projected lineups vs NHL roster
   odds.py  books.py  grade.py   betting lines (consensus, opening, every sportsbook) and line math
   paper.py                      paper-trading log: log, settle, report
@@ -74,7 +77,7 @@ research/                     backtests (not part of the daily run)
   sbr.py                        2007-2022 odds archive
 data/                         CSV data
   paper_trades.csv              the paper-trading log (every logged game, picks, results)
-  goalie_*.csv  skater_seasons.csv  opening_lineups.csv
+  goalie_*.csv  skater_seasons.csv  opening_lineups.csv  team_speed.csv
   odds_*.csv  sbr_odds.csv      historical lines
 docs/                         the website (GitHub Pages)
 ```

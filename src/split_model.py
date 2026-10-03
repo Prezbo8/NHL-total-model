@@ -9,6 +9,7 @@ import pandas as pd
 
 import model as m
 import players
+import speed
 
 SITS = {"5on5": "ev", "5on4": "pp", "4on5": "pk", "other": "o"}
 FIRST_SEASON = 2020  # use nothing (games, goalie history) from before the 2020-21 season
@@ -54,7 +55,7 @@ def season_of(day):
 
 
 def walk_split(games, k=m.K, w=m.W_GOALS, regress=m.REGRESS, known_starters=True, with_projector=False, roster_w=0.0,
-               live_season=None):
+               live_season=None, use_speed=True):
     """live_season: the season being projected. If it's newer than the data (e.g. opening day, before any
     of its games exist), last season's ratings are rolled over into this season's starting ratings."""
     starter, by_game, gg = m.load_goalies()
@@ -75,8 +76,9 @@ def walk_split(games, k=m.K, w=m.W_GOALS, regress=m.REGRESS, known_starters=True
     other = avg("o_goalsFor") + avg("o_goalsAgainst")
     T5 = t5  # league 5v5 seconds per game, updated as games come in
     rows = []
+    zspeed = speed.z_prev(games) if use_speed else {}
 
-    def project(home, away, home_goalie, away_goalie, h_b2b=False, a_b2b=False, detail=False):
+    def project(home, away, home_goalie, away_goalie, h_b2b=False, a_b2b=False, detail=False, season=None):
         """Projected (home goals, away goals) from the ratings as they stand right now.
         detail=True also returns each side's parts: 5v5, power play, other situations,
         and the opposing goalie / back-to-back adjustments (as fractions, e.g. -0.05)."""
@@ -87,12 +89,15 @@ def walk_split(games, k=m.K, w=m.W_GOALS, regress=m.REGRESS, known_starters=True
             pp = g["pp"][att] * g["pk"][dfn] / R["pk"].lg * pp_time
             return ev, pp, other / 2
         fh, fa = m.b2b_factors(h_b2b, a_b2b)
+        s_ = season if season is not None else last
+        zh, za = zspeed.get((s_, home), 0.0), zspeed.get((s_, away), 0.0)
+        sh, sa = 1 + m.SPEED_OWN * zh + m.SPEED_OPP * za, 1 + m.SPEED_OWN * za + m.SPEED_OPP * zh
         out, det = [], {}
-        for side, att, dfn, goalie, f in (("home", home, away, away_goalie, fh), ("away", away, home, home_goalie, fa)):
+        for side, att, dfn, goalie, f, spd in (("home", home, away, away_goalie, fh, sh), ("away", away, home, home_goalie, fa, sa)):
             ev, pp, oth = parts(att, dfn)
             gadj = -gs.skill(goalie)
-            out.append((ev + pp + oth) * (1 + gadj) * f)
-            det[side] = {"ev": ev, "pp": pp, "oth": oth, "gadj": gadj, "b2badj": f - 1}
+            out.append((ev + pp + oth) * (1 + gadj) * f * spd)
+            det[side] = {"ev": ev, "pp": pp, "oth": oth, "gadj": gadj, "b2badj": f - 1, "spd": spd - 1}
         return (out[0], out[1], det) if detail else (out[0], out[1])
 
     last = max(games.season.max(), live_season or 0)
@@ -110,7 +115,7 @@ def walk_split(games, k=m.K, w=m.W_GOALS, regress=m.REGRESS, known_starters=True
                     return starter.get((r.gameId, team))
                 rr = recent.get(team)
                 return max(set(rr), key=rr.count) if rr else None
-            lam_h, lam_a = project(r.home, r.away, pick(r.home), pick(r.away), r.h_b2b, r.a_b2b)
+            lam_h, lam_a = project(r.home, r.away, pick(r.home), pick(r.away), r.h_b2b, r.a_b2b, season=season)
             rows.append((r.gameId, season, r.gameDate, r.home, r.away, lam_h + lam_a, r.total, lam_h, lam_a))
             # update: offense = blend of goals and xG, defense = xG only (goalie handled separately)
             bl = lambda gl, x: w * gl + (1 - w) * x
