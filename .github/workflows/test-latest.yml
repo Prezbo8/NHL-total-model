@@ -1,0 +1,33 @@
+name: Temporary test (latest Python / pandas / numpy)
+on: workflow_dispatch
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    env:
+      TZ: America/New_York
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+      - name: Install latest
+        run: pip install pandas numpy pyflakes && python -c "import sys, pandas, numpy; print('python', sys.version.split()[0], '| pandas', pandas.__version__, '| numpy', numpy.__version__)"
+      - name: Static check
+        run: python -m pyflakes src/*.py research/*.py tests/*.py
+      - name: Component checks (29)
+        run: python tests/check_model.py
+      - name: Projection run for tomorrow (never logged)
+        run: python src/model.py today "$(date -d tomorrow +%F)" | tail -8
+      - name: Dashboard build + settle on a copy
+        run: python src/dashboard.py && python src/paper.py report
+      - name: Backtest unchanged
+        run: |
+          python - <<'PY'
+          import sys; sys.path[:0] = ["src", "research"]
+          import split_model as sm, history
+          p = sm.walk_split(sm.load_split(), known_starters=False)
+          d = history.flagged(p).merge(history.lines()[lambda x: x.gameDate >= 20200801], on=["gameDate", "home", "away"])
+          for w, want in (("open", 1.3), ("close", 2.4)):
+              b = history.bet_results(d, w); roi = b.prof.mean() * 100
+              print(f"{w}: {len(b)} bets ROI {roi:+.1f}% (expected {want:+.1f}%)"); assert abs(roi - want) < 0.06
+          PY
