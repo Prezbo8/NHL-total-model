@@ -80,7 +80,7 @@ data/                         CSV data
   goalie_*.csv  skater_seasons.csv  opening_lineups.csv  team_speed.csv
   odds_*.csv  sbr_odds.csv      historical lines
 docs/                         the website (GitHub Pages)
-tests/check_model.py          29 component checks (paper log, settling, goalies, model, injuries, odds, dashboard)
+tests/check_model.py          32 component checks (paper log, settling, goalies, model, injuries, odds, dashboard)
 ```
 
 ## Schedule
@@ -108,7 +108,7 @@ python3 src/model.py today [YYYY-MM-DD]   # projections + flags (only today's da
 python3 src/paper.py report               # paper-trading record
 python3 src/dashboard.py                  # rebuild the website
 python3 research/history.py               # backtest the overs rule
-python3 tests/check_model.py              # 29 component checks (also run on GitHub: Tests workflow)
+python3 tests/check_model.py              # 32 component checks (also run on GitHub: Tests workflow)
 ```
 
 The first run downloads MoneyPuck's game file (~126 MB, not stored in the repo).

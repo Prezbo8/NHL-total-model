@@ -112,6 +112,127 @@ def call_result(r, flagged):
     return c, ("L" if over else "W") if c == "AVOID" else ("W" if over else "L")
 
 
+GL_WORDS = {"great": "a weak goalie", "good": "a beatable goalie", "mid": "an average goalie",
+            "bad": "a strong goalie", "trash": "a top goalie"}
+CALL_HISTORY = {"SLAM": "Games like this went over 54% of the time at the opening line and 57% at the closing line in 2021-26.",
+                "1U": "Games like this went over about 53% of the time in 2021-26.",
+                "AVOID": "Games like this went over only 45-49% of the time in 2021-26."}
+
+
+def reasoning(r, flagged):
+    """6-9 plain-English sentences behind the game's call, built from its logged numbers."""
+    c = call(r, flagged)
+    a, h = r.away, r.home
+    v = lambda s_, k: getattr(r, f"{s_}_{k}", float("nan"))
+    if pd.isna(v("away", "ev")):
+        return f"{c}: breakdown not available for this game."
+    S = (("away", a), ("home", h))
+    proj = {"away": r.proj_away, "home": r.proj_home}
+    if pd.isna(r.cutoff):
+        return f"{c}: this game was logged without a high-scoring cutoff, so there's no full reasoning for it."
+    hot = {s_: proj[s_] >= r.cutoff for s_ in proj}
+    t, final = r.bet_total, not pd.isna(r.final_total)
+    ev_t = {s_: tier("ev", v(s_, "ev")) for s_, _ in S}
+    gl_t = {s_: tier("gadj", v(s_, "gadj")) for s_, _ in S}
+    strong = [x for s_, x in S if gl_t[s_] in ("bad", "trash")]
+    both_proj = f"{a} {proj['away']:.2f}, {h} {proj['home']:.2f}; cutoff {r.cutoff:.2f}"
+    out = []
+    # 1. the call and the rule behind it
+    if c == "SLAM":
+        out.append(f"<b>🔨 SLAM:</b> both teams project as high-scoring ({both_proj}), the line is {line(t)}, "
+                   "and both are good or better at 5-on-5, the strongest over spot the model has.")
+    elif c == "1U":
+        short = [x for s_, x in S if ev_t[s_] not in ("good", "great")]
+        out.append(f"<b>1U:</b> both teams project as high-scoring ({both_proj}) and the line is {line(t)}, "
+                   f"but {' and '.join(short)} {'is' if len(short) == 1 else 'are'} only "
+                   f"{' / '.join(ev_t[s_] for s_, x in S if x in short)} at 5-on-5, so it's an over but not a slam.")
+    elif flagged:
+        out.append(f"<b>AVOID:</b> both teams project as high-scoring ({both_proj}), but both face a strong goalie, "
+                   "and overs in that spot went only 45-46% in 2021-26.")
+    else:
+        why = []
+        low = [(s_, x) for s_, x in S if not hot[s_]]
+        if low:
+            why.append(f"{' and '.join(x for _, x in low)} project{'s' if len(low) == 1 else ''} under the {r.cutoff:.2f}-goal "
+                       f"high-scoring cutoff ({', '.join(f'{x} {proj[s_]:.2f}' for s_, x in low)})")
+        if pd.isna(t):
+            why.append("no line was posted")
+        elif t not in (6.0, 6.5):
+            why.append(f"the line is {line(t)}, and only 6 and 6.5 qualify")
+        out.append(f"<b>AVOID:</b> {'; '.join(why) or 'it does not meet the over rule'}.")
+        if len(low) == 1 and r.proj >= 6.0:
+            (s0, x0), carry = low[0], [x for s_, x in S if hot[s_]][0]
+            gap = r.cutoff - proj[s0]
+            out.append(f"{x0} just misses the cutoff (by {gap:.2f}), and the rule needs both teams over it, so the "
+                       f"{r.proj:.2f} total isn't enough on its own." if gap < 0.1 else
+                       f"The {r.proj:.2f} total looks high, but most of it comes from {carry}; the over rule needs both teams scoring.")
+    # 2. 5-on-5 and power play
+    ev = [f"{x} is {ev_t[s_]} ({v(s_, 'ev'):.2f})" for s_, x in S]
+    pp = [f"{x} is {tier('pp', v(s_, 'pp'))} ({v(s_, 'pp'):.2f})" for s_, x in S]
+    out.append(f"At 5-on-5, {ev[0]} and {ev[1]}; on the power play, {pp[0]} and {pp[1]}.")
+    # 3. goalies faced (the goalie the projection was built with)
+    gl = []
+    for s_, x in S:
+        opp = "home" if s_ == "away" else "away"
+        nm, _ = goalie_parts(getattr(r, f"{opp}_goalie", ""))
+        now = getattr(r, f"{opp}_goalie_now", None)
+        now_nm = goalie_parts(now)[0] if isinstance(now, str) else nm
+        who = e(nm) if nm != "unknown" else "an unknown starter"
+        gl.append((f"{x} faces {who} (no goalie rating)" if pd.isna(v(s_, "gadj")) else
+                   f"{x} faces {who}, {GL_WORDS.get(gl_t[s_], 'a goalie')} ({v(s_, 'gadj') * 100:+.1f}%)")
+                  + (f", but the expected starter later changed to {e(now_nm)}, so this part is out of date"
+                     if now_nm not in (nm, "unknown") and nm != "unknown" else ""))
+    sent = "; ".join(gl) + "."
+    if c in ("SLAM", "1U") and len(strong) == 1:
+        sent += f" Only {strong[0]} faces a strong goalie, so the two-strong-goalies avoid rule doesn't apply."
+    unconf = sum("confirmed" not in str(getattr(r, f"{s_}_goalie_now", "")).lower().replace("unconfirmed", "") for s_, _ in S)
+    if unconf and not final:
+        sent += " Starters aren't confirmed yet, so this can change."
+    out.append(sent)
+    # 4. the other adjustments, only when they matter
+    extra = []
+    both_tired = all(-0.05 < v(s_, "b2badj") < -0.005 for s_, _ in S)
+    if both_tired:
+        extra.append(f"both teams played yesterday ({v('away', 'b2badj') * 100:+.0f}% each)")
+    for s_, x in S:
+        b = v(s_, "b2badj")
+        if both_tired:
+            pass
+        elif b < -0.05:
+            extra.append(f"{x} played yesterday ({b * 100:+.0f}%)")
+        elif b > 0.01:
+            extra.append(f"{x}'s opponent played yesterday ({b * 100:+.1f}%)")
+        elif b < -0.005:
+            extra.append(f"both teams played yesterday ({x} {b * 100:+.0f}%)")
+        if not pd.isna(v(s_, "spd")) and abs(v(s_, "spd")) >= 0.02:
+            extra.append(f"{x}'s team speed {'adds' if v(s_, 'spd') > 0 else 'costs'} {abs(v(s_, 'spd')) * 100:.1f}%")
+        if not pd.isna(v(s_, "inj")) and abs(v(s_, "inj")) >= 0.015:
+            extra.append(f"injuries {'help' if v(s_, 'inj') > 0 else 'cost'} {x} {abs(v(s_, 'inj')) * 100:.1f}%")
+    if extra:
+        out.append("Other factors: " + "; ".join(extra) + ".")
+    # 5. projection and line
+    mv = ""
+    if not pd.isna(t) and not pd.isna(r.open_total) and r.open_total != t:
+        mv = f" The line moved from {line(r.open_total)} to {line(t)}" + (", toward the over." if t > r.open_total else ", toward the under.")
+    out.append(f"The model projects {r.proj:.2f} total goals" + ("" if pd.isna(t) else f" against a {line(t)} line")
+               + f", with a {r.p7:.0%} chance of 7 or more (a typical game is about 45%)." + mv)
+    # parts that don't multiply out to the projection (games logged before breakdowns were recorded)
+    def parts(s_):
+        z = lambda k: 0.0 if pd.isna(v(s_, k)) else v(s_, k)
+        return (z("ev") + z("pp") + z("oth")) * (1 + z("gadj")) * (1 + z("b2badj")) * (1 + z("spd")) * (1 + z("inj"))
+    if any(abs(parts(s_) - proj[s_]) > 0.02 for s_, _ in S):
+        out.append("Note: this game's breakdown was recorded on a later run than its projection, so the parts don't add up exactly.")
+    # 6. track record and result
+    out.append(CALL_HISTORY[c])
+    if final and not pd.isna(t):
+        went = "went over" if r.final_total > t else "stayed under" if r.final_total < t else "pushed"
+        right = (r.final_total > t) if c != "AVOID" else (r.final_total < t)
+        score = "" if pd.isna(r.away_score) or pd.isna(r.home_score) else f" ({a} {int(r.away_score)}, {h} {int(r.home_score)})"
+        out.append(f"Final: {int(r.final_total)} goals{score}, so it {went} {line(t)}"
+                   + ("" if r.final_total == t else f" and the call was {'right' if right else 'wrong'}") + ".")
+    return " ".join(out)
+
+
 def tip(label, text=None, cls=""):
     """Label with an explanation that pops up on hover (or tap on a phone)."""
     t = text or TIPS.get(label, "")
@@ -466,11 +587,11 @@ def day_table(g):
                   f"{line(r.open_total)} → {line(r.bet_total)} <span class='muted'>o{price(r.bet_over)}</span>")
             game = (f"<td class='num gcol big-total' rowspan='2'>{r.proj:.2f}</td><td class='num p7' rowspan='2'>{r.p7:.0%}</td>"
                     f"<td rowspan='2'>{callpill}<br>{ln}</td>")
-        ctx = ""  # lineup source and trends / H2H are logged but not shown
+        ctx = f"<div class='why-text'>{reasoning(r, flagged)}</div>"
         away = team("away", r.away, r.proj_away, r.away_score if final else None) + game + detail("away")
         home = team("home", r.home, r.proj_home, r.home_score if final else None) + detail("home")
         body.append(f"<tbody class='game {cls}'><tr class='away'>{away}</tr><tr class='home'>{home}</tr>"
-                    + (f"<tr class='srcrow'><td colspan='22'>{ctx}</td></tr>" if ctx else "") + "</tbody>")
+                    + (f"<tr class='srcrow whyrow'><td colspan='22'>{ctx}</td></tr>" if ctx else "") + "</tbody>")
     key = ("<div class='tier-key'>Breakdown (for scoring):" + "".join(f"<span class='t-{t}'>{t}</span>" for t in reversed(TIER_NAMES)) + "</div>")
     return (f"{key}<div class='gtable'><table class='gt'>{cols}<thead>{sections}<tr>{head}</tr></thead>{''.join(body)}</table></div>"
             "<p class='muted small legend'>Two rows per game (away, then home). <span style='color:var(--accent)'>●</span> = team projected "
@@ -806,7 +927,9 @@ table.gt{font-size:12.5px;border-collapse:separate;border-spacing:0;width:100%;t
 .callpill.c-slam{background:var(--gold);color:#1a1200}.callpill.c-1u{border:1.5px solid var(--gold);color:var(--ink)}
 .callpill.c-avoid{border:1px solid var(--line);color:var(--muted);font-weight:700}.callpill .tip{border-bottom:none}
 .flagpill{display:inline-block;background:var(--gold);color:#1a1200;font-size:10px;font-weight:800;padding:1px 7px;border-radius:999px;margin-bottom:2px}
-.gt tr.srcrow td{padding:0 8px 6px 38px;white-space:nowrap}.gt tr.srcrow .lineup-src{margin-top:1px;font-size:10.5px}
+.gt tr.srcrow td{padding:0 8px 6px 38px;white-space:nowrap}
+.gt tr.whyrow td{white-space:normal;padding:7px 14px 9px;text-align:left!important}
+.gt .why-text{font-size:12.5px;line-height:1.5;color:var(--muted);max-width:none}.gt .why-text b{color:var(--ink)}.gt tr.srcrow .lineup-src{margin-top:1px;font-size:10.5px}
 .gt .trends{font-size:11px;color:var(--ink);line-height:1.5}.gt .trends b{font-weight:700}
 .lean{display:inline-block;font-size:10px;font-weight:800;padding:1px 7px;border-radius:999px;margin-left:6px;text-transform:uppercase;letter-spacing:.03em}
 .lean.over{background:rgba(26,127,55,.16);color:var(--pos)}.lean.under{background:rgba(198,40,40,.14);color:var(--neg)}

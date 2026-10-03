@@ -103,6 +103,24 @@ visible = re.sub(r"<style>.*?</style>|<[^>]+>", " ", html, flags=re.S)
 check("index + a page per logged day", len(days) == real.date.nunique(), f"{len(days)} day pages")
 check("no 'nan' / 'None' shown on the page", not re.search(r"\bnan\b|\bNone\b", visible))
 check("header is just the title", re.search(r"<header class=\"hero\"><h1>NHL Total Model</h1></header>", html) is not None)
+# reasoning text: every logged game plus awkward future cases (no line, missing goalie/rating/scores, push, both tired)
+nan = float("nan")
+row0 = real[real.away_ev.notna()].iloc[0].to_dict()
+edge = [{}, dict(bet_total=nan, open_total=nan, flag=False), dict(away_goalie=nan, home_goalie_now=nan, away_gadj=nan),
+        dict(away_spd=nan, home_inj=nan), dict(bet_total=6.0, final_total=6.0, away_score=nan, home_score=nan),
+        dict(away_b2badj=-0.02, home_b2badj=-0.02), dict(cutoff=nan), dict(away_ev=nan),
+        dict(home_goalie="Ty D'<b>Amour (Confirmed)")]
+rows = list(real.itertuples()) + [next(pd.DataFrame([{**row0, **x}]).itertuples()) for x in edge]
+texts, crash = [], ""
+for r in rows:
+    try:
+        texts.append(re.sub(r"<[^>]+>", "", dashboard.reasoning(r, dashboard._is(r.flag))))
+    except Exception as ex:
+        crash = f"{r.away}@{r.home}: {type(ex).__name__}: {ex}"
+check("reasoning builds for every game and edge case", not crash, crash or f"{len(rows)} games")
+check("reasoning never shows nan / None / raw HTML", not any(re.search(r"\bnan\b|\bNone\b|<b>Amour", t) for t in texts))
+check("reasoning matches the call", all(t.split(":")[0].replace("🔨 ", "") == dashboard.call(r, dashboard._is(r.flag))
+                                        for t, r in zip(texts, rows)))
 
 print(f"\n{sum(results)}/{len(results)} checks passed")
 sys.exit(0 if all(results) else 1)
