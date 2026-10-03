@@ -1,17 +1,15 @@
 name: Daily NHL run
 
-# Every 2 hours from 11 AM to 9 PM Eastern, all year (runs at :17, with a :47 backup).
+# Every hour from 11 AM to 9 PM Eastern, all year (runs at :17), started by keeper.yml; this schedule is the backup.
 # - GitHub schedules in UTC only, so summer (EDT) and winter (EST) sets are both listed; the "gate"
 #   step runs whichever matches today's Eastern offset and skips the other.
 # - Not on the hour: GitHub drops/delays scheduled runs at the top of the hour under load (none of the
-#   :00 runs on Oct 2 2026 ever fired). The :47 backup catches a dropped :17 run; running twice is
-#   harmless (first logged line stays the bet, settling skips settled games, dashboard just rebuilds).
+#   :00 runs on Oct 2 2026 ever fired). Running twice is harmless (first logged line stays the bet,
+#   settling skips settled games, the latest projection just refreshes).
 on:
   schedule:
-    - cron: "17 15,17,19,21,23,1 * * *"   # EDT 11:17a 1:17p 3:17p 5:17p 7:17p 9:17p
-    - cron: "47 15,17,19,21,23,1 * * *"   # EDT backup, 30 min later
-    - cron: "17 16,18,20,22,0,2 * * *"    # EST 11:17a ... 9:17p
-    - cron: "47 16,18,20,22,0,2 * * *"    # EST backup
+    - cron: "17 15-23,0-1 * * *"   # EDT 11:17a ... 9:17p
+    - cron: "17 16-23,0-2 * * *"   # EST 11:17a ... 9:17p
   workflow_dispatch: {}
 
 permissions:
@@ -33,8 +31,8 @@ jobs:
         id: gate
         run: |
           if [ "${{ github.event_name }}" != "schedule" ]; then echo "run=true" >> "$GITHUB_OUTPUT"; exit 0; fi
-          if [ "$(date +%Z)" = "EDT" ]; then hours="15,17,19,21,23,1"; else hours="16,18,20,22,0,2"; fi
-          if [ "${{ github.event.schedule }}" = "17 $hours * * *" ] || [ "${{ github.event.schedule }}" = "47 $hours * * *" ]; then
+          if [ "$(date +%Z)" = "EDT" ]; then hours="15-23,0-1"; else hours="16-23,0-2"; fi
+          if [ "${{ github.event.schedule }}" = "17 $hours * * *" ]; then
             echo "run=true" >> "$GITHUB_OUTPUT"
           else echo "run=false" >> "$GITHUB_OUTPUT"; echo "other daylight-saving slot: skipping"; fi
 

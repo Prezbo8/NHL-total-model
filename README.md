@@ -85,7 +85,7 @@ tests/check_model.py          32 component checks (paper log, settling, goalies,
 
 ## Schedule
 
-Runs every 2 hours from **11:17 AM to 9:17 PM Eastern**, all year (daylight saving handled).
+Runs **every hour from 11:17 AM to 9:17 PM Eastern**, all year (daylight saving handled).
 
 - `.github/workflows/keeper.yml` stays running on GitHub and starts **Daily NHL run** at each slot.
   GitHub stops any run after 6 hours, so the keeper starts a fresh copy of itself every 5.5 hours;
@@ -93,7 +93,7 @@ Runs every 2 hours from **11:17 AM to 9:17 PM Eastern**, all year (daylight savi
   Oct 2, 2026 seven slots in a row never fired.)
 - `.github/workflows/daily.yml` does the work: settles yesterday's games, re-downloads stats,
   goalies, injuries, lineups and lines, projects today's games, logs them, rebuilds the dashboard
-  and commits everything back. Its own schedule (:17 with a :47 backup) stays as a fallback.
+  and commits everything back. Its own hourly :17 schedule stays as a fallback.
 - Nothing runs on a local machine.
 
 Run it now: **Actions** tab → **Daily NHL run** → **Run workflow** (or `gh workflow run daily.yml`).

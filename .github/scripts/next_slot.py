@@ -1,9 +1,9 @@
-"""Seconds until the next run slot: 11:17 AM, 1:17, 3:17, 5:17, 7:17, 9:17 PM Eastern (DST-aware)."""
+"""Seconds until the next run slot: every hour at :17 from 11:17 AM to 9:17 PM Eastern (DST-aware)."""
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 ET = ZoneInfo("America/New_York")
-SLOTS = [(11, 17), (13, 17), (15, 17), (17, 17), (19, 17), (21, 17)]
+SLOTS = [(h, 17) for h in range(11, 22)]  # 11:17 AM ... 9:17 PM
 
 now = datetime.now(ET)
 candidates = [(now + timedelta(days=d)).replace(hour=h, minute=mi, second=0, microsecond=0)
