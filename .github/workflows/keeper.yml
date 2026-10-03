@@ -1,0 +1,56 @@
+name: Keeper (runs the daily job on time)
+
+# GitHub's own schedule is unreliable for this repo (scheduled runs fire late or not at all), so this
+# workflow stays running and starts "Daily NHL run" at 11:17 AM, 1:17, 3:17, 5:17, 7:17 and 9:17 PM
+# Eastern. GitHub stops a run after 6 hours, so before that it starts a fresh copy of itself.
+# Only one keeper runs at a time (concurrency), so the chain can't duplicate. The schedule below just
+# restarts the chain if it ever breaks (when GitHub's scheduler does fire).
+on:
+  workflow_dispatch:
+    inputs:
+      test:
+        description: "Test mode: start the daily run in 1 min, hand off after ~4 min (then the next keeper runs normally)"
+        type: boolean
+        default: false
+  schedule:
+    - cron: "23 3,9,15,21 * * *"
+
+permissions:
+  actions: write
+  contents: read
+
+concurrency:
+  group: keeper
+  cancel-in-progress: false
+
+jobs:
+  keep:
+    runs-on: ubuntu-latest
+    timeout-minutes: 355
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github
+      - name: Start the daily run at each slot, then hand off to a fresh keeper
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          START=$(date +%s); BUDGET=$((5 * 3600 + 30 * 60))   # hand off after 5.5 h (GitHub limit is 6 h)
+          TEST="${{ inputs.test }}"; [ "$TEST" = "true" ] && BUDGET=240
+          dispatch() { for i in 1 2 3 4 5; do gh workflow run "$1" -R "$GITHUB_REPOSITORY" && return 0; sleep 30; done; return 1; }
+          while true; do
+            read WAIT WHEN <<< "$(python3 .github/scripts/next_slot.py)"
+            if [ "$TEST" = "true" ]; then
+              if [ -z "$TESTED" ]; then WAIT=60; WHEN="test slot (1 min)"; TESTED=1; else WAIT=99999; fi
+            fi
+            ELAPSED=$(( $(date +%s) - START ))
+            if [ $((ELAPSED + WAIT)) -lt $BUDGET ]; then
+              echo "next slot: $WHEN (in $((WAIT / 60)) min)"; sleep "$WAIT"
+              echo "starting Daily NHL run ($(TZ=America/New_York date '+%-I:%M %p %Z'))"; dispatch daily.yml || echo "::error::could not start daily run"
+              sleep 90
+            else
+              REST=$(( BUDGET - ELAPSED )); [ $REST -gt 0 ] && { echo "next slot $WHEN is past this run's limit; handing off in $((REST / 60)) min"; sleep "$REST"; }
+              echo "handing off to a fresh keeper"; dispatch keeper.yml || echo "::error::could not restart keeper"   # successor runs in normal mode
+              exit 0
+            fi
+          done
