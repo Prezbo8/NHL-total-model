@@ -472,7 +472,7 @@ def today(day=None):
                            + (f" -> best: {best[1]} o{best[2]:g} {best[3]:+d}" if best else ""))
         op = ln.get("open")
         tr = trends.compute(games, day, h, a)  # recent form + head-to-head (context only, not in the projection)
-        log_rows.append({"start_utc": g["startTimeUTC"], "date": day, "away": a, "home": h, "proj": round(x, 3), "proj_away": round(la, 3),
+        log_rows.append({"start_utc": g["startTimeUTC"], "game_id": g.get("id"), "date": day, "away": a, "home": h, "proj": round(x, 3), "proj_away": round(la, 3),
                          "proj_home": round(lh, 3), "cutoff": round(cutoff, 3), "flag": bool(flag), "p7": round(p7, 4),
                          "away_goalie": f"{ag} ({as_})", "home_goalie": f"{hg} ({hs})",
                          "open_total": op["total"] if op else None, "open_over": op["over"] if op else None,
@@ -501,6 +501,10 @@ def today(day=None):
             f.write(pd.Timestamp.now(tz="America/New_York").strftime("%Y-%m-%d %H:%M %Z") + "\n")
         import paper
         added, upgraded = paper.log_games(log_rows)
+        import store  # run history in Supabase (skipped when not configured; never stops the run)
+        store.record_run(day, log_rows, sources={"dailyfaceoff": bool(dfo), "lines": bool(lines), "sportsbooks": bool(shop),
+                                                 "lineups": bool(lineup_info), "injuries": bool(inj)})
+        store.sync_log(paper.read_log())
         print(f"(paper log: {added} new games, {upgraded} newly flagged, in {paper.LOG})")
 
 

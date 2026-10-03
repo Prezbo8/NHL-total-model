@@ -142,6 +142,8 @@ def settle():
                     d.at[i, "result_best"] = rb
                     d.at[i, "profit_best"] = {"W": float(grade.payout(bbo)), "P": 0.0, "L": -1.0}[rb]
     d.to_csv(LOG, index=False)
+    import store  # mirror finals and paper results to Supabase (skipped when not configured)
+    store.sync_log(read_log())
     print(f"settled through {todo.date.max() if len(todo) else 'n/a'}")
 
 

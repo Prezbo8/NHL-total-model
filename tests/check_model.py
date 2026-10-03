@@ -2,7 +2,7 @@
 
   python3 tests/check_model.py     # exits 1 if any check fails
 """
-import os, re, shutil, sys, datetime, tempfile
+import os, re, json, shutil, sys, datetime, tempfile
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "src"))
 import pandas as pd
 import paper, goalies, injuries, model as m, split_model as sm, odds, grade, dashboard
@@ -97,6 +97,36 @@ rows = odds.day_games(datetime.date(2026, 10, 1), 15)
 check("closing lines parse", len(rows) == 8, f"{len(rows)} games")
 abbrs = {grade.ABBR.get(x, x) for r in rows for x in (r["home"], r["away"])}
 check("sportsbook team codes match NHL codes", abbrs <= set(g.home), str(sorted(abbrs - set(g.home))))
+
+print("supabase run history (fake database, nothing is sent)")
+import store
+schema = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "supabase", "schema.sql")).read()
+cols = {t: set(re.findall(r"(?:^|,)\s*([a-z_0-9]+)\s+(?:uuid|timestamptz|date|text|int|bigint|real|boolean|jsonb)\b",
+                          body.replace("\n", ","), re.M))
+        for t, body in re.findall(r"create table if not exists (\w+) \((.*?)\n\);", schema, re.S)}
+sent = []
+store.URL, store.KEY = "https://fake.supabase.co", "fake"
+store._send = lambda table, rows, on_conflict=None, tries=3: sent.extend((table, store.clean(r)) for r in rows)
+fut2 = "2099-01-01T23:00:00Z"
+run_rows = [dict(base, start_utc=fut2, game_id=1, away="AAA", home="BBB", flag=True, bet_total=6.5, bet_over=-110, bet_under=-110,
+                 best_book="X", best_total=6.5, best_over=-105, best_under=-115, open_total=6.5, open_over=-110, logged_at="11:00",
+                 away_out=None, home_out=None, away_dtd=None, home_dtd=None),
+            dict(base, start_utc=past, game_id=2, away="CCC", home="DDD", flag=False, bet_total=6.0, bet_over=-110, bet_under=-110)]
+rid = store.record_run("2026-10-03", run_rows, sources={"dailyfaceoff": True})
+store.sync_log(paper.read_log())
+by = {}
+for t, r in sent:
+    by.setdefault(t, []).append(r)
+check("run saved: 1 run, only not-started games projected", len(by.get("nhl_runs", [])) == 1 and
+      [p["away"] for p in by.get("nhl_projections", [])] == ["AAA"] and by["nhl_projections"][0]["run_id"] == rid)
+unknown = {f"{t}.{k}" for t, rows in by.items() for r in rows for k in r if k not in cols.get(t, set())}
+check("every field sent exists in supabase/schema.sql", not unknown and len(cols) == 4, ", ".join(sorted(unknown)))
+check("call saved with each projection, no NaN sent", by["nhl_projections"][0]["call"] in ("SLAM", "1U", "AVOID")
+      and "NaN" not in json.dumps([r for _, r in sent]))
+store._send = lambda *a, **k: (_ for _ in ()).throw(RuntimeError("supabase down"))
+check("supabase failure never stops a run", store.record_run("2026-10-03", run_rows) is None)
+store.URL = ""
+check("skipped when not configured", store.record_run("2026-10-03", run_rows) is None)
 
 print("dashboard")
 dashboard.OUT = SP + "site/index.html"

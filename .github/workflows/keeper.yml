@@ -37,7 +37,7 @@ jobs:
         run: |
           START=$(date +%s); BUDGET=$((5 * 3600 + 30 * 60))   # hand off after 5.5 h (GitHub limit is 6 h)
           TEST="${{ inputs.test }}"; [ "$TEST" = "true" ] && BUDGET=240
-          dispatch() { for i in 1 2 3 4 5; do gh workflow run "$1" -R "$GITHUB_REPOSITORY" && return 0; sleep 30; done; return 1; }
+          dispatch() { for i in 1 2 3 4 5; do gh workflow run "$@" -R "$GITHUB_REPOSITORY" && return 0; sleep 30; done; return 1; }
           while true; do
             read WAIT WHEN <<< "$(python3 .github/scripts/next_slot.py)"
             if [ "$TEST" = "true" ]; then
@@ -46,7 +46,7 @@ jobs:
             ELAPSED=$(( $(date +%s) - START ))
             if [ $((ELAPSED + WAIT)) -lt $BUDGET ]; then
               echo "next slot: $WHEN (in $((WAIT / 60)) min)"; sleep "$WAIT"
-              echo "starting Daily NHL run ($(TZ=America/New_York date '+%-I:%M %p %Z'))"; dispatch daily.yml || echo "::error::could not start daily run"
+              echo "starting Daily NHL run ($(TZ=America/New_York date '+%-I:%M %p %Z'))"; case "$WHEN" in *"puck drop"*) KIND=pregame;; *) KIND=hourly;; esac; dispatch daily.yml -f trigger=$KIND || echo "::error::could not start daily run"
               sleep 90
             else
               REST=$(( BUDGET - ELAPSED )); [ $REST -gt 0 ] && { echo "next slot $WHEN is past this run's limit; handing off in $((REST / 60)) min"; sleep "$REST"; }
