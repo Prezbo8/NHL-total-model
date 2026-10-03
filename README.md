@@ -85,7 +85,7 @@ tests/check_model.py          32 component checks (paper log, settling, goalies,
 
 ## Schedule
 
-Runs **every hour from 11:17 AM to 9:17 PM Eastern**, all year (daylight saving handled).
+Runs **every hour from 11:17 AM to 10:17 PM Eastern**, all year (daylight saving handled).
 
 - `.github/workflows/keeper.yml` stays running on GitHub and starts **Daily NHL run** at each slot.
   GitHub stops any run after 6 hours, so the keeper starts a fresh copy of itself every 5.5 hours;
