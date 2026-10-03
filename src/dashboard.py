@@ -183,7 +183,7 @@ def goalie_compact(logged, now):
     old_nm, _ = goalie_parts(logged)
     changed = ""
     if old_nm != nm and old_nm != "unknown":
-        changed = (f" <span class='gb chg'>{tip('⇄ was ' + e(short_name(old_nm)), f'Starter changed after this game was logged: the projection used {old_nm}. A better goalie now = projection too high; a worse one = too low.')}</span>")
+        changed = (f" <span class='gb chg'>{tip('⇄ ' + e(old_nm.split(' ', 1)[-1]), f'Starter changed after this game was logged: the projection used {old_nm}. A better goalie now = projection too high; a worse one = too low.')}</span>")
     return f"<span class='gc'>{e(last)} {badge}{changed}</span>"
 
 
@@ -308,7 +308,7 @@ def day_table(g):
     final_day = bool(len(g)) and g.final_total.notna().all()
     head = f"<th>{tip('Team', cls='tl')}</th>"
     if final_day:
-        head += f"<th class='num'>{tip('Score', 'Final goals for this team (shootout winner gets +1, as sportsbooks settle).')}</th>"
+        head += f"<th class='num'>{tip('G', 'Final goals for this team (shootout winner gets +1, as sportsbooks settle).')}</th>"
     head += f"<th class='num'>{tip('Proj')}</th>"
     if final_day:
         head += (f"<th class='gcol'>{tip('Total goals')}</th><th class='num'>{tip('Proj total')}</th><th class='num'>{tip('P(7+)')}</th>"
@@ -320,6 +320,11 @@ def day_table(g):
              f"<th>{tip('Out', 'Injured, suspended or scratched regulars already taken out of the projection (GF = his team scoring, GA = goals against). DTD = day-to-day, not adjusted. Hover a row for the full list.')}</th>"
              f"<th class='num bcol'>{tip('5v5')}</th><th class='num'>{tip('PP')}</th><th class='num'>{tip('Oth')}</th>"
              f"<th class='num'>{tip('Gl', cls='tr')}</th><th class='num'>{tip('B2B', cls='tr')}</th><th class='num'>{tip('Inj', cls='tr')}</th>")
+    # fixed widths (%), same section sizes in both tables so they line up:
+    # Team 16 | Game/Result 30 | Goalies & lineups 28 | Breakdown 26
+    widths = ([8.5, 2.5, 5] if final_day else [9.5, 6.5]) \
+        + ([7, 4, 4, 7, 8] if final_day else [8, 6, 16]) + [16.5, 11.5] + [26 / 6] * 6
+    cols = "<colgroup>" + "".join(f"<col style='width:{w:.3f}%'>" for w in widths) + "</colgroup>"
     sections = (f"<tr class='sec'><th colspan='{3 if final_day else 2}'>Team</th>"
                 f"<th class='gcol' colspan='{5 if final_day else 3}'>{'Result' if final_day else 'Game'}</th>"
                 f"<th class='gcol' colspan='2'>Goalies &amp; lineups</th><th class='bcol' colspan='6'>Projection breakdown</th></tr>")
@@ -335,7 +340,7 @@ def day_table(g):
             if final_day:
                 cells += f"<td class='num score-cell'>{int(score)}</td>"
             cells += (f"<td class='num proj{' hot' if hot else ''}'>{tip(f'{proj:.2f}', f'{TEAMS.get(abbr, abbr)} projected goals (high-scoring cutoff {r.cutoff:.2f}).' + (' HIGH: above the cutoff.' if hot else ''))}"
-                      f"{'<span class=hot-dot>●</span>' if hot else ''}</td>")
+                      f"<span class='hot-dot{'' if hot else ' off'}'>●</span></td>")
             return cells
 
         def detail(side):
@@ -356,13 +361,13 @@ def day_table(g):
                   f"<span class='pill over'>O {line(t)}</span>" if r.final_total > t else
                   f"<span class='pill under'>U {line(t)}</span>" if r.final_total < t else f"<span class='pill'>P {line(t)}</span>")
             moved = "" if pd.isna(r.close_total) or pd.isna(t) or r.close_total == t else (" ↑" if r.close_total > t else " ↓")
-            pick = (f"{star} <span class='res {e(r.result)}'>{e(r.result)} {r.profit:+.2f}u</span>"
-                    + ("" if pd.isna(r.profit_best) else f"<br><span class='muted'>best book {r.profit_best:+.2f}u</span>")
+            pick = (f"{star}<br><span class='res {e(r.result)}'>{e(r.result)} {r.profit:+.2f}u</span>"
+                    + ("" if pd.isna(r.profit_best) else f"<br><span class='muted small'>best book {r.profit_best:+.2f}u</span>")
                     if flagged and not pd.isna(r.result) else "–")
-            game = (f"<td class='gcol tot' rowspan='2'><span class='big-total'>{int(r.final_total)}</span> {vs}</td>"
+            game = (f"<td class='gcol tot' rowspan='2'><span class='big-total'>{int(r.final_total)}</span>{vs}</td>"
                     f"<td class='num' rowspan='2'>{r.proj:.2f}</td><td class='num' rowspan='2'>{r.p7:.0%}</td>"
-                    f"<td rowspan='2'>{'–' if pd.isna(t) else f'{line(t)} → {line(r.close_total)}{moved}'}</td>"
-                    f"<td rowspan='2'>{pick}</td>")
+                    f"<td rowspan='2' class='nowrap'>{'–' if pd.isna(t) else f'{line(t)} → {line(r.close_total)}{moved}'}</td>"
+                    f"<td rowspan='2' class='pickcell'>{pick}</td>")
         else:
             ln = ("<span class='muted'>not posted</span>" if pd.isna(r.bet_total) else
                   f"{line(r.open_total)} → {line(r.bet_total)} <span class='muted'>o{price(r.bet_over)}</span>")
@@ -373,7 +378,7 @@ def day_table(g):
         home = team("home", r.home, r.proj_home, r.home_score if final else None) + detail("home")
         body.append(f"<tbody class='game {cls}'><tr class='away'>{away}</tr><tr class='home'>{home}</tr>"
                     + (f"<tr class='srcrow'><td colspan='22'>{ctx}</td></tr>" if ctx else "") + "</tbody>")
-    return (f"<div class='gtable'><table class='gt'><thead>{sections}<tr>{head}</tr></thead>{''.join(body)}</table></div>"
+    return (f"<div class='gtable'><table class='gt'>{cols}<thead>{sections}<tr>{head}</tr></thead>{''.join(body)}</table></div>"
             "<p class='muted small legend'>Two rows per game (away, then home). <span style='color:var(--accent)'>●</span> = team projected "
             "high-scoring. Proj = (5v5 + PP + Oth) × goalie (Gl) × back-to-back (B2B) × injuries (Inj). "
             "Hover or tap any underlined label for an explanation.</p>")
@@ -626,7 +631,14 @@ footer{margin-top:32px;font-size:13px;color:var(--muted)}a{color:var(--accent)}
 .legend{margin:8px 0 0}
 /* table layout: two rows per game, sized to fit a desktop screen */
 .gtable{background:var(--card);border:1px solid var(--line);border-radius:12px;overflow-x:auto}
-table.gt{font-size:12.5px;border-collapse:separate;border-spacing:0;width:100%}
+table.gt{font-size:12.5px;border-collapse:separate;border-spacing:0;width:100%;table-layout:fixed}
+.gt td,.gt th{overflow:hidden;text-overflow:ellipsis}
+.gt thead tr:not(.sec) th{white-space:normal;line-height:1.25;vertical-align:bottom}
+.gt td[rowspan]{white-space:normal}.gt td[rowspan].nowrap{white-space:nowrap}
+.gt td.pickcell{line-height:1.15;padding-top:2px;padding-bottom:2px}.gt td.pickcell .small{font-size:10.5px}.gt td.pickcell .flagpill{margin-bottom:1px}
+.gt td.tm{white-space:nowrap}.gt td.tm .b2b{margin-left:4px}.gt td.tm img,.gt td.tm picture{margin-right:5px}
+.gt tbody.game tr.away td:not([rowspan]),.gt tbody.game tr.home td:not([rowspan]){height:34px}
+.gt th.num,.gt td.num{text-align:right}.gt th:not(.num),.gt td:not(.num){text-align:left}
 .gt th{background:var(--card);padding:8px 5px;border-bottom:2px solid var(--line);font-size:10px;white-space:nowrap}
 .gt td{padding:4px 5px;border-bottom:none;vertical-align:middle;white-space:nowrap}
 .gt tbody.game tr:last-child td{border-bottom:1px solid var(--line)}
@@ -634,21 +646,22 @@ table.gt{font-size:12.5px;border-collapse:separate;border-spacing:0;width:100%}
 .gt tbody.alt td{background:color-mix(in srgb,var(--ice) 45%,transparent)}
 .gt tbody.flagged td{background:var(--gold-soft)}
 .gt tbody.flagged tr.away td:first-child,.gt tbody.flagged tr.home td:first-child{box-shadow:inset 4px 0 0 var(--gold)}
-.gt td.tm{display:flex;align-items:center;gap:6px;padding-left:10px}
+.gt td.tm{padding-left:10px}.gt td.tm img,.gt td.tm picture{vertical-align:middle;margin-right:6px}
 .gt td.proj{font-weight:800;font-size:13px}.gt td.proj.hot{color:var(--accent)}
-.hot-dot{color:var(--accent);font-size:9px;margin-left:3px;vertical-align:2px}
+.hot-dot{display:inline-block;width:10px;text-align:right;color:var(--accent);font-size:9px;vertical-align:2px}.hot-dot.off{visibility:hidden}
 .gt td.gcol,.gt th.gcol,.gt td.bcol,.gt th.bcol{border-left:2px solid color-mix(in srgb,var(--muted) 45%,transparent)}
 .gt tr.sec th{font-size:10.5px;font-weight:800;letter-spacing:.08em;color:var(--ink);text-align:left;padding:7px 8px 5px;
   border-bottom:1px solid var(--line);background:color-mix(in srgb,var(--ice) 60%,var(--card))}
 .gt tr.sec th:first-child{border-top-left-radius:12px}.gt tr.sec th:last-child{border-top-right-radius:12px}
 .gt td[rowspan]{vertical-align:middle;font-weight:600}.gt td.p7{font-weight:800}
-.gt td.big-total{font-size:18px;font-weight:800}.gt td.tot .big-total{font-size:18px;margin-right:4px;vertical-align:-2px}
+.gt td.big-total{font-size:18px;font-weight:800}
+.gt td.tot .big-total{display:inline-block;width:2.1ch;text-align:right;font-size:18px;margin-right:6px;vertical-align:-2px}
 .gt .score-cell{font-size:15px;font-weight:800}
 .gt .gc{white-space:nowrap}.gt .gc .gb{margin-left:2px}
-.gt td.outs{max-width:170px}.gt td.outs .tip.injwrap{display:block}.gt td.outs .injuries{min-height:0;overflow:hidden;text-overflow:ellipsis}
+.gt td.outs{max-width:none}.gt td.outs .tip.injwrap{display:block}.gt td.outs .injuries{min-height:0;overflow:hidden;text-overflow:ellipsis}
 .gt .pill{font-size:11px;padding:2px 7px}
 .flagpill{display:inline-block;background:var(--gold);color:#1a1200;font-size:10px;font-weight:800;padding:1px 7px;border-radius:999px;margin-bottom:2px}
-.gt tr.srcrow td{padding:0 8px 6px 38px;white-space:normal}.gt tr.srcrow .lineup-src{margin-top:1px;font-size:10.5px}
+.gt tr.srcrow td{padding:0 8px 6px 38px;white-space:nowrap}.gt tr.srcrow .lineup-src{margin-top:1px;font-size:10.5px}
 .gt .trends{font-size:11px;color:var(--ink);line-height:1.5}.gt .trends b{font-weight:700}
 .lean{display:inline-block;font-size:10px;font-weight:800;padding:1px 7px;border-radius:999px;margin-left:6px;text-transform:uppercase;letter-spacing:.03em}
 .lean.over{background:rgba(26,127,55,.16);color:var(--pos)}.lean.under{background:rgba(198,40,40,.14);color:var(--neg)}
