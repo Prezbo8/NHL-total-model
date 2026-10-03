@@ -54,6 +54,7 @@ TIPS = {
     "SLAM": "Flagged over where both teams are good or great at 5-on-5. Went over 54% (opening line) / 57% (closing line) in 2021-26.",
     "1U": "Flagged over, but not both teams good at 5-on-5. Went over 53% in 2021-26.",
     "AVOID": "Not flagged, or flagged but both teams face strong goalies. These went over only 45-49% in 2021-26.",
+    "Paper bet": "The paper-trading record's bet: the first time this game was flagged, at that line. It never changes after it's logged.",
     "B2B tag": "Played yesterday: the model cuts this team's scoring ~8% and raises its opponent's ~6.5%.",
 }
 
@@ -98,6 +99,26 @@ def call(r, flagged):
     if both("gadj", ("bad", "trash")):
         return "AVOID"
     return "SLAM" if both("ev", ("good", "great")) else "1U"
+
+
+def current(g):
+    """The day's games as of the LATEST run: projection, P(7+), cutoff, flag, line, breakdown and the goalie
+    they were built with (from the *_now columns; rows logged before those existed keep their logged values).
+    The first-logged paper bet stays available as paper_flag / paper_line / first_call."""
+    g = g.copy()
+    g["paper_flag"], g["paper_line"] = g.flag.map(_is), g.bet_total
+    g["first_call"] = [call(r, _is(r.flag)) for r in g.itertuples()]
+    has = g.proj_now.notna() if "proj_now" in g else pd.Series(False, index=g.index)
+    for c in paper.NOW_BASE:
+        g[c] = g[c].astype(object)
+        g.loc[has, c] = g.loc[has, f"{c}_now"]
+    for s_ in ("away", "home"):
+        g[f"{s_}_goalie"] = g[f"{s_}_goalie"].astype(object)
+        g.loc[has, f"{s_}_goalie"] = g.loc[has, f"{s_}_goalie_now"]
+    g["flag"] = g.flag.map(_is)
+    for c in [c for c in paper.NOW_BASE if c != "flag"]:
+        g[c] = pd.to_numeric(g[c], errors="coerce")
+    return g
 
 
 def call_result(r, flagged):
@@ -506,7 +527,7 @@ def trends_html(r):
 def day_table(g):
     """One table for the day, two rows per game (away, home), sized to fit without scrolling on a
     desktop screen: decision columns first, then goalie, injuries and the projection breakdown."""
-    g = g.sort_values(["flag", "proj"], ascending=[False, False])
+    g = current(g).sort_values(["flag", "proj"], ascending=[False, False])
     final_day = bool(len(g)) and g.final_total.notna().all()
     head = f"<th>{tip('Team', cls='tl')}</th>"
     if final_day:
@@ -561,6 +582,8 @@ def day_table(g):
 
         c = call(r, flagged)
         callpill = f"<span class='callpill c-{c.lower()}'>{tip(('🔨 ' if c == 'SLAM' else '') + c, TIPS[c])}</span>"
+        if c != r.first_call:
+            callpill += f" <span class='was'>{tip('was ' + r.first_call, f'First call when this game was logged: {r.first_call}. Updated with the latest goalies, lines and injuries.')}</span>"
         if final_day:
             t = r.bet_total
             vs = ("<span class='pill muted-pill'>no line</span>" if pd.isna(t) else
@@ -572,11 +595,10 @@ def day_table(g):
                 outcome = "<span class='muted small'>no line</span>"
             elif c == "AVOID":
                 outcome = {"W": "<span class='res W'>✓ under</span>", "L": "<span class='res L'>✗ went over</span>"}.get(res, "<span class='res P'>push</span>")
-            elif flagged and not pd.isna(r.result):
-                outcome = (f"<span class='res {e(r.result)}'>{e(r.result)} {r.profit:+.2f}u</span>"
-                           + ("" if pd.isna(r.profit_best) else f"<br><span class='muted small'>best book {r.profit_best:+.2f}u</span>"))
             else:
                 outcome = f"<span class='res {res}'>{res}</span>"
+            if r.paper_flag and not pd.isna(r.result):  # the paper-trading bet (first-logged line)
+                outcome += f"<br><span class='muted small'>{tip('paper', TIPS['Paper bet'])} {e(r.result)} {r.profit:+.2f}u</span>"
             pick = f"{callpill}<br>{outcome}"
             game = (f"<td class='gcol tot' rowspan='2'><span class='big-total'>{int(r.final_total)}</span>{vs}</td>"
                     f"<td class='num' rowspan='2'>{r.proj:.2f}</td><td class='num' rowspan='2'>{r.p7:.0%}</td>"
@@ -608,7 +630,7 @@ def day_cards(g):
 
 def day_summary(g):
     done = g[g.final_total.notna()]
-    flags = int((g.flag).sum())
+    flags = int(current(g).flag.sum())
     parts = [f"{len(g)} games", f"<b>{flags} flag{'s' if flags != 1 else ''}</b>"]
     if len(done):
         wl = done[done.bet_total.notna()]
@@ -617,7 +639,7 @@ def day_summary(g):
         fl = done[(done.flag) & done.result.notna()]
         if len(fl):
             parts.append(f"flags <b>{(fl.result == 'W').sum()}-{(fl.result == 'L').sum()}-{(fl.result == 'P').sum()}</b> ({fl.profit.sum():+.2f}u)")
-        parts.append(call_record(done))
+        parts.append(call_record(current(done)))
     return " · ".join(parts)
 
 
@@ -923,6 +945,7 @@ table.gt{font-size:12.5px;border-collapse:separate;border-spacing:0;width:100%;t
 .gt .outlist .ip{color:var(--neg)}.gt .outlist .ip b{font-weight:700;white-space:nowrap}.gt .outlist .ip.dtd{color:var(--muted)}
 .gt .itag{font-size:9.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.03em}
 .gt .pill{font-size:11px;padding:2px 7px}
+.was{font-size:9.5px;color:var(--muted);white-space:nowrap}.was .tip{border-bottom-style:dotted}
 .callpill{display:inline-block;font-size:10px;font-weight:800;padding:1px 8px;border-radius:999px;margin-bottom:2px;letter-spacing:.04em}
 .callpill.c-slam{background:var(--gold);color:#1a1200}.callpill.c-1u{border:1.5px solid var(--gold);color:var(--ink)}
 .callpill.c-avoid{border:1px solid var(--line);color:var(--muted);font-weight:700}.callpill .tip{border-bottom:none}

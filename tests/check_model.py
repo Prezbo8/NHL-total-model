@@ -28,6 +28,11 @@ r2 = paper.log_games([dict(base, start_utc=fut, away="AAA", home="BBB", flag=Tru
                       dict(base, start_utc=fut, away="CCC", home="DDD", flag=True, bet_total=6.0, bet_over=-110, bet_under=-110, best_book="W", best_total=6.0, best_over=-100, logged_at="17:00")])
 d = paper.read_log().set_index("away")
 check("late flag upgrades at the 5 PM line", r2 == (0, 1) and d.at["AAA", "bet_total"] == 6.5 and d.at["AAA", "bet_over"] == 110)
+check("latest run's numbers saved, first-logged bet kept", d.at["CCC", "bet_total"] == 6.5 and d.at["CCC", "bet_total_now"] == 6.0
+      and paper.was_flagged_now(d.at["AAA", "flag_now"]) and d.at["AAA", "proj_now"] == 6.0)
+cur = dashboard.current(paper.read_log()).set_index("away")
+check("dashboard reads the latest run (line, flag), paper bet kept separately",
+      cur.at["CCC", "bet_total"] == 6.0 and cur.at["CCC", "paper_line"] == 6.5 and bool(cur.at["AAA", "flag"]))
 check("early flag keeps its 11 AM bet + best book", d.at["CCC", "bet_total"] == 6.5 and d.at["CCC", "best_book"] == "Y")
 check("latest starter + injuries refresh", d.at["AAA", "away_goalie_now"] == "Q (Confirmed)" and "McDavid" in str(d.at["AAA", "away_out"]))
 
