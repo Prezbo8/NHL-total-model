@@ -348,7 +348,7 @@ def day_table(g):
     # fixed widths (%), same section sizes in both tables so they line up:
     # Team 16 | Game/Result 30 | Goalies & lineups 28 | Breakdown 26
     widths = ([8.5, 2.5, 5] if final_day else [9.5, 6.5]) \
-        + ([7, 4, 4, 7, 8] if final_day else [8, 6, 16]) + [13, 15] + [3.6, 3.4, 3.4, 4.4, 3.8, 3.6, 3.8]
+        + ([7, 4, 4, 7, 8] if final_day else [8, 6, 16]) + [13, 14] + [3.6, 3.1, 3.1, 4.4, 4.2, 4.0, 4.6]
     cols = "<colgroup>" + "".join(f"<col style='width:{w:.3f}%'>" for w in widths) + "</colgroup>"
     sections = (f"<tr class='sec'><th colspan='{3 if final_day else 2}'>Team</th>"
                 f"<th class='gcol' colspan='{5 if final_day else 3}'>{'Result' if final_day else 'Game'}</th>"
@@ -658,7 +658,7 @@ footer{margin-top:32px;font-size:13px;color:var(--muted)}a{color:var(--accent)}
 .daynav{display:flex;justify-content:space-between;align-items:center;margin:16px 0 0;font-weight:700}
 .legend{margin:8px 0 0}
 /* table layout: two rows per game, sized to fit a desktop screen */
-.gtable{background:var(--card);border:1px solid var(--line);border-radius:12px;overflow-x:auto}
+.gtable{background:var(--card);border:3px solid color-mix(in srgb,var(--muted) 60%,transparent);border-radius:12px;overflow-x:auto}
 table.gt{font-size:12.5px;border-collapse:separate;border-spacing:0;width:100%;table-layout:fixed}
 .gt td,.gt th{overflow:hidden;text-overflow:ellipsis}
 .gt thead tr:not(.sec) th{white-space:normal;line-height:1.25;vertical-align:bottom}
@@ -669,7 +669,9 @@ table.gt{font-size:12.5px;border-collapse:separate;border-spacing:0;width:100%;t
 .gt th.num,.gt td.num{text-align:right}.gt th:not(.num),.gt td:not(.num){text-align:left}
 .gt th{background:var(--card);padding:8px 5px;border-bottom:2px solid var(--line);font-size:10px;white-space:nowrap}
 .gt td{padding:4px 5px;border-bottom:none;vertical-align:middle;white-space:nowrap}
-.gt tbody.game tr:last-child td{border-bottom:1px solid var(--line)}
+/* each game is its own block: strong border between games */
+.gt tbody.game tr.away td{border-top:3px solid color-mix(in srgb,var(--muted) 60%,transparent)}
+.gt thead + tbody.game tr.away td{border-top:none}
 .gt tbody.game tr.away td:not([rowspan]){padding-top:8px}.gt tbody.game tr.home td:not([rowspan]){padding-bottom:8px}
 .gt tbody.alt td{background:color-mix(in srgb,var(--ice) 45%,transparent)}
 .gt tbody.flagged td{background:var(--gold-soft)}
@@ -678,13 +680,13 @@ table.gt{font-size:12.5px;border-collapse:separate;border-spacing:0;width:100%;t
 .gt td.proj{font-weight:800;font-size:13px}.gt td.proj.hot{color:var(--accent)}
 .hot-dot{display:inline-block;width:10px;text-align:right;color:var(--accent);font-size:9px;vertical-align:2px}.hot-dot.off{visibility:hidden}
 /* every column gets its own border; sections get a stronger one */
-.gt th,.gt td{border-left:1px solid var(--line)}
+.gt th,.gt td{border-left:2px solid var(--line)}
 .gt tr > :first-child{border-left:none}
-.gt tbody.game tr.home td:not([rowspan]){border-top:1px solid color-mix(in srgb,var(--line) 70%,transparent)}
+.gt tbody.game tr.home td:not([rowspan]){border-top:2px solid color-mix(in srgb,var(--line) 80%,transparent)}
 .gt tr.srcrow td{border-left:none;border-top:1px dashed color-mix(in srgb,var(--line) 70%,transparent)}
-.gt td.gcol,.gt th.gcol,.gt td.bcol,.gt th.bcol{border-left:2px solid color-mix(in srgb,var(--muted) 55%,transparent)}
-.gt tr.sec th{border-left:none}.gt tr.sec th.gcol,.gt tr.sec th.bcol{border-left:2px solid color-mix(in srgb,var(--muted) 55%,transparent)}
-.gt thead tr:not(.sec) th{border-bottom:2px solid color-mix(in srgb,var(--muted) 35%,transparent)}
+.gt td.gcol,.gt th.gcol,.gt td.bcol,.gt th.bcol{border-left:3px solid color-mix(in srgb,var(--muted) 60%,transparent)}
+.gt tr.sec th{border-left:none}.gt tr.sec th.gcol,.gt tr.sec th.bcol{border-left:3px solid color-mix(in srgb,var(--muted) 60%,transparent)}
+.gt thead tr:not(.sec) th{border-bottom:3px solid color-mix(in srgb,var(--muted) 60%,transparent)}
 .gt td[rowspan],.gt td[rowspan].num,.gt th.ctr{text-align:center}
 .gt tr.sec th{font-size:10.5px;font-weight:800;letter-spacing:.08em;color:var(--ink);text-align:left;padding:7px 8px 5px;
   border-bottom:1px solid var(--line);background:color-mix(in srgb,var(--ice) 60%,var(--card))}
