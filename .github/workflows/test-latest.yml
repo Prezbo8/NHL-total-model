@@ -12,6 +12,8 @@ jobs:
           python-version: "3.14"
       - name: Install latest
         run: pip install pandas numpy pyflakes && python -c "import sys, pandas, numpy; print('python', sys.version.split()[0], '| pandas', pandas.__version__, '| numpy', numpy.__version__)"
+      - name: Download MoneyPuck game data (not stored in the repo)
+        run: python -c "import sys; sys.path.insert(0, 'src'); import model; assert model.refresh_data()"
       - name: Static check
         run: python -m pyflakes src/*.py research/*.py tests/*.py
       - name: Component checks (29)
