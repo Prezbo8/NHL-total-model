@@ -47,6 +47,9 @@ TIPS = {
     "Projected": "Starter not announced yet: DailyFaceoff's guess, or this team's usual recent starter.",
     "OVER FLAG": "The model's pick: both teams projected high-scoring and the line is 6 or 6.5. Bet the OVER at the 'Best over' book. These are the picks that count in the record.",
     "Lineups": "Projected lineup source (DailyFaceoff line combinations, checked against the official NHL roster). A reporter name = tonight's lineup; 'last game's lineup' = not updated for tonight yet. Regulars missing from the lineup are treated as out (scratch).",
+    "Trends": "Each team's last 10 games: average total goals and how many went 7+ (over 6.5). Context only: tested on 2023-26, recent form adds almost nothing beyond the projection (the model already uses it).",
+    "H2H": "Head-to-head since 2020-21: meetings, average total, how many went 7+, and the last 3 scores. Context only: tested on 2023-26, it adds very little beyond the projection.",
+    "Lean": "Trend lean: OVER/UNDER when both teams' last-10 7+ rates and the head-to-head 7+ rate run clearly above/below the league's ~45%. Weak signal: it supports or questions the model's pick, it doesn't make one.",
     "B2B tag": "Played yesterday: the model cuts this team's scoring ~8% and raises its opponent's ~6.5%.",
 }
 
@@ -134,7 +137,7 @@ def injury_html(out, dtd):
         players_out.sort(key=lambda p: -max(abs(p[1]), abs(p[2])))  # biggest impact first
         items = []
         for name, d_off, d_def in players_out[:3]:
-            last = e(name.split(" ", 1)[-1])
+            last = e(short_name(name))
             effect = f"{-d_off * 100:+.1f}% GF" if abs(d_off) >= abs(d_def) else f"{d_def * 100:+.1f}% GA"
             items.append(f"<span>{last} {effect}</span>")
         more = players_out[3:]
@@ -143,7 +146,7 @@ def injury_html(out, dtd):
         parts.append(f"<span class='inj out'>Out: {', '.join(items)}</span>")
     if isinstance(dtd, str) and dtd and len(players_out) < 3:
         parts.append("<span class='inj dtd'>DTD: "
-                     f"{', '.join(e(n.split(' ', 1)[-1]) for n in dtd.split(', ')[:2])}</span>")
+                     f"{', '.join(e(short_name(n)) for n in dtd.split(', ')[:2])}</span>")
     if not parts:
         return "<div class='injuries'></div>"
     full = []
@@ -154,6 +157,34 @@ def injury_html(out, dtd):
     text = ("Out = injured, suspended or not in tonight's projected lineup (scratch), already taken out of the projection. GF = his team's goals, GA = goals against. "
             + " | ".join(full))
     return f"<div class='tip injwrap' tabindex='0' data-tip='{e(text)}'><div class='injuries'>{' '.join(parts)}</div></div>"
+
+
+def short_name(full):
+    """'Igor Shesterkin' -> 'I. Shesterkin', 'Ukko-Pekka Luukkonen' -> 'U. Luukkonen'."""
+    full = str(full).strip()
+    if " " not in full:
+        return full
+    first, last = full.split(" ", 1)
+    return f"{first[0]}. {last}"
+
+
+def goalie_compact(logged, now):
+    """Table version: last name + short badge; full details in the hover text."""
+    now = now if isinstance(now, str) else logged
+    nm, status = goalie_parts(now)
+    st = status.lower()
+    last = short_name(nm) if nm != "unknown" else "?"
+    if "confirmed" in st and "un" not in st:
+        badge = f"<span class='gb ok'>{tip('✓', f'{nm}: confirmed starter (DailyFaceoff).')}</span>"
+    elif "likely" in st:
+        badge = f"<span class='gb likely'>{tip('Likely', f'{nm}: expected to start, not confirmed yet.')}</span>"
+    else:
+        badge = f"<span class='gb proj'>{tip('Proj', f'{nm}: starter not announced yet (DailyFaceoff guess or usual starter).')}</span>"
+    old_nm, _ = goalie_parts(logged)
+    changed = ""
+    if old_nm != nm and old_nm != "unknown":
+        changed = (f" <span class='gb chg'>{tip('⇄ was ' + e(short_name(old_nm)), f'Starter changed after this game was logged: the projection used {old_nm}. A better goalie now = projection too high; a worse one = too low.')}</span>")
+    return f"<span class='gc'>{e(last)} {badge}{changed}</span>"
 
 
 def team_row(abbr, proj, cutoff, goalie, goalie_now=None, b2b=False, score=None, out=None, dtd=None):
@@ -237,6 +268,115 @@ def game_card(r):
       <div class='meta'>{''.join(meta)}</div>{breakdown(r, flagged)}</article>"""
 
 
+LAYOUT = "table"  # "table" (one table, two rows per game) or "cards" (one card per game); backup: tag card-dashboard-v1
+
+
+def day_view(g):
+    return day_table(g) if LAYOUT == "table" else day_cards(g)
+
+
+def _is(v):
+    return str(v).strip().lower() in ("true", "1", "1.0")
+
+
+def trends_html(r):
+    """Context line: both teams' last 10, head-to-head since 2020-21, and the trend lean."""
+    def l10(side, abbr):
+        n = getattr(r, f"{side}_l10_n", None)
+        if pd.isna(n) or not n:
+            return ""
+        return f"<b>{e(abbr)}</b> L{int(n)} avg {getattr(r, f'{side}_l10_avg'):.1f} · {int(getattr(r, f'{side}_l10_7'))}/{int(n)} 7+"
+    parts = [x for x in (l10("away", r.away), l10("home", r.home)) if x]
+    hn = getattr(r, "h2h_n", None)
+    if not pd.isna(hn) and hn:
+        last = getattr(r, "h2h_last", None)
+        parts.append(f"<b>H2H</b> {int(hn)} since '20 · avg {r.h2h_avg:.1f} · {int(r.h2h_7)}/{int(hn)} 7+"
+                     + (f" <span class='muted'>· last: {e(last)}</span>" if isinstance(last, str) and last else ""))
+    if not parts:
+        return ""
+    ln = getattr(r, "trend_lean", None)
+    chip = (f" <span class='lean {str(ln).lower()}'>{tip('trends: ' + str(ln).lower(), TIPS['Lean'], 'tr')}</span>"
+            if isinstance(ln, str) and ln else "")
+    return (f"<div class='trends'>{tip('Trends', TIPS['Trends'], 'tl')} / {tip('H2H', TIPS['H2H'], 'tl')}: "
+            f"{' &nbsp;|&nbsp; '.join(parts)}{chip}</div>")
+
+
+def day_table(g):
+    """One table for the day, two rows per game (away, home), sized to fit without scrolling on a
+    desktop screen: decision columns first, then goalie, injuries and the projection breakdown."""
+    g = g.sort_values(["flag", "proj"], ascending=[False, False])
+    final_day = bool(len(g)) and g.final_total.notna().all()
+    head = f"<th>{tip('Team', cls='tl')}</th>"
+    if final_day:
+        head += f"<th class='num'>{tip('Score', 'Final goals for this team (shootout winner gets +1, as sportsbooks settle).')}</th>"
+    head += f"<th class='num'>{tip('Proj')}</th>"
+    if final_day:
+        head += (f"<th class='gcol'>{tip('Total goals')}</th><th class='num'>{tip('Proj total')}</th><th class='num'>{tip('P(7+)')}</th>"
+                 f"<th>{tip('Line')}</th><th>{tip('Pick')}</th>")
+    else:
+        head += (f"<th class='num gcol'>{tip('Proj total')}</th><th class='num'>{tip('P(7+)')}</th>"
+                 f"<th>{tip('Line', 'Consensus total: opening line → now, and the over price (−120 = risk 120 to win 100). ★ FLAG = the model’s over pick.')}</th>")
+    head += (f"<th class='gcol'>{tip('Goalie', 'Starting goalie: ✓ confirmed, Likely, or Proj (not announced). ⇄ = changed after the game was logged.')}</th>"
+             f"<th>{tip('Out', 'Injured, suspended or scratched regulars already taken out of the projection (GF = his team scoring, GA = goals against). DTD = day-to-day, not adjusted. Hover a row for the full list.')}</th>"
+             f"<th class='num'>{tip('5v5')}</th><th class='num'>{tip('PP')}</th><th class='num'>{tip('Oth')}</th>"
+             f"<th class='num'>{tip('Gl', cls='tr')}</th><th class='num'>{tip('B2B', cls='tr')}</th><th class='num'>{tip('Inj', cls='tr')}</th>")
+    body = []
+    for i, r in enumerate(g.itertuples()):
+        flagged, final = bool(r.flag), not pd.isna(r.final_total)
+        cls = ("flagged " if flagged else "") + ("alt" if i % 2 else "")
+
+        def team(side, abbr, proj, score):
+            hot = proj >= r.cutoff
+            b2b = f" <span class='b2b'>{tip('B2B', TIPS['B2B tag'])}</span>" if _is(getattr(r, f"{side}_b2b")) else ""
+            cells = (f"<td class='tm'>{logo(abbr, 22)}<b title='{e(TEAMS.get(abbr, abbr))}'>{e(abbr)}</b>{b2b}</td>")
+            if final_day:
+                cells += f"<td class='num score-cell'>{int(score)}</td>"
+            cells += (f"<td class='num proj{' hot' if hot else ''}'>{tip(f'{proj:.2f}', f'{TEAMS.get(abbr, abbr)} projected goals (high-scoring cutoff {r.cutoff:.2f}).' + (' HIGH: above the cutoff.' if hot else ''))}"
+                      f"{'<span class=hot-dot>●</span>' if hot else ''}</td>")
+            return cells
+
+        def detail(side):
+            g_ = lambda c: getattr(r, f"{side}_{c}", float("nan"))
+            def adj(v):
+                return "–" if pd.isna(v) or abs(v) < 0.0005 else f"{v * 100:+.1f}%"
+            cells = (f"<td class='gl gcol'>{goalie_compact(g_('goalie'), g_('goalie_now'))}</td>"
+                     f"<td class='outs'>{injury_html(g_('out'), g_('dtd'))}</td>")
+            if pd.isna(g_("ev")):
+                return cells + "<td class='num muted' colspan='6'>n/a</td>"
+            return cells + (f"<td class='num'>{g_('ev'):.2f}</td><td class='num'>{g_('pp'):.2f}</td><td class='num'>{g_('oth'):.2f}</td>"
+                            f"<td class='num'>{adj(g_('gadj'))}</td><td class='num'>{adj(g_('b2badj'))}</td><td class='num'>{adj(g_('inj'))}</td>")
+
+        star = f"<span class='flagpill'>{tip('★ FLAG', TIPS['OVER FLAG'])}</span>" if flagged else ""
+        if final_day:
+            t = r.bet_total
+            vs = ("<span class='pill muted-pill'>no line</span>" if pd.isna(t) else
+                  f"<span class='pill over'>O {line(t)}</span>" if r.final_total > t else
+                  f"<span class='pill under'>U {line(t)}</span>" if r.final_total < t else f"<span class='pill'>P {line(t)}</span>")
+            moved = "" if pd.isna(r.close_total) or pd.isna(t) or r.close_total == t else (" ↑" if r.close_total > t else " ↓")
+            pick = (f"{star} <span class='res {e(r.result)}'>{e(r.result)} {r.profit:+.2f}u</span>"
+                    + ("" if pd.isna(r.profit_best) else f"<br><span class='muted'>best book {r.profit_best:+.2f}u</span>")
+                    if flagged and not pd.isna(r.result) else "–")
+            game = (f"<td class='gcol tot' rowspan='2'><span class='big-total'>{int(r.final_total)}</span> {vs}</td>"
+                    f"<td class='num' rowspan='2'>{r.proj:.2f}</td><td class='num' rowspan='2'>{r.p7:.0%}</td>"
+                    f"<td rowspan='2'>{'–' if pd.isna(t) else f'{line(t)} → {line(r.close_total)}{moved}'}</td>"
+                    f"<td rowspan='2'>{pick}</td>")
+        else:
+            ln = ("<span class='muted'>not posted</span>" if pd.isna(r.bet_total) else
+                  f"{line(r.open_total)} → {line(r.bet_total)} <span class='muted'>o{price(r.bet_over)}</span>")
+            game = (f"<td class='num gcol big-total' rowspan='2'>{r.proj:.2f}</td><td class='num p7' rowspan='2'>{r.p7:.0%}</td>"
+                    f"<td rowspan='2'>{star}{'<br>' if star else ''}{ln}</td>")
+        ctx = trends_html(r) + lineup_note(r)
+        away = team("away", r.away, r.proj_away, r.away_score if final else None) + game + detail("away")
+        home = team("home", r.home, r.proj_home, r.home_score if final else None) + detail("home")
+        body.append(f"<tbody class='game {cls}'><tr class='away'>{away}</tr><tr class='home'>{home}</tr>"
+                    + (f"<tr class='srcrow'><td colspan='22'>{ctx}</td></tr>" if ctx else "") + "</tbody>")
+    return (f"<div class='gtable'><table class='gt'><thead><tr>{head}</tr></thead>{''.join(body)}</table></div>"
+            "<p class='muted small legend'>Two rows per game (away, then home). <span style='color:var(--accent)'>●</span> = team projected "
+            "high-scoring. Proj = (5v5 + PP + Oth) × goalie (Gl) × back-to-back (B2B) × injuries (Inj). "
+            "Under each game: both teams' last 10 games, head-to-head since 2020-21 and a trend lean (context only: tested, it adds little "
+            "beyond the projection). Hover or tap any underlined label for an explanation.</p>")
+
+
 def day_cards(g):
     g = g.sort_values(["flag", "proj"], ascending=[False, False])
     return (f"<div class='cards'>{''.join(game_card(r) for r in g.itertuples())}</div>"
@@ -269,7 +409,7 @@ def slate(d):
         return f"<p class='muted'>{pd.Timestamp(day):%A, %B %-d}: no games logged for today (off day, or the morning run hasn't happened yet).</p>"
     return f"""<p class='sub'>{pd.Timestamp(day):%A, %B %-d} · {day_summary(g)} · bar tick = high-scoring cutoff
       ({g.cutoff.iloc[0]:.2f} goals){f" · starters as of {e(g.updated_at.dropna().max())}" if g.updated_at.notna().any() else ""}</p>
-      {day_cards(g)}"""
+      {day_view(g)}"""
 
 
 def yesterday(d):
@@ -279,7 +419,7 @@ def yesterday(d):
     day = done.date.max()
     g = d[d.date == day]
     return f"""{RETRO_NOTE if retro(g).any() else ""}<p class='sub'>{pd.Timestamp(day):%A, %B %-d} · {day_summary(g)}
-      · <a href='days/{e(day)}.html'>day page →</a></p>{day_cards(g)}"""
+      · <a href='days/{e(day)}.html'>day page →</a></p>{day_view(g)}"""
 
 
 def accuracy(d):
@@ -325,7 +465,7 @@ def day_page(d, day, days):
     body = f"""<header class='hero small-hero'><h1>{pd.Timestamp(day):%A, %B %-d, %Y}</h1>
       <p>{day_summary(g)}</p></header>
       <nav class='daynav'>{prev_}<a href='../index.html'>Dashboard</a>{next_}</nav>
-      {RETRO_NOTE if retro(g).any() else ""}<section>{day_cards(g)}</section>"""
+      {RETRO_NOTE if retro(g).any() else ""}<section>{day_view(g)}</section>"""
     return shell(f"NHL Total Model · {day}", body, root="../")
 
 
@@ -406,7 +546,7 @@ CSS = """
   --accent:#58a6ff;--accent-soft:#1d3554;--gold:#e3b341;--gold-soft:#2b2410;--red:#ff5a6e;--pos:#3fb950;--neg:#f85149;color-scheme:dark}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
-.wrap{max-width:1180px;margin:0 auto;padding:0 16px 64px}
+.wrap{max-width:1360px;margin:0 auto;padding:0 16px 64px}
 /* hero: a rink seen from above - red center line, blue lines, faceoff circle */
 .hero{position:relative;overflow:hidden;margin:0 -16px;padding:34px 24px 30px;color:#fff;
   background:linear-gradient(90deg,transparent calc(50% - 2px),rgba(200,16,46,.85) calc(50% - 2px),rgba(200,16,46,.85) calc(50% + 2px),transparent calc(50% + 2px)),
@@ -482,6 +622,31 @@ footer{margin-top:32px;font-size:13px;color:var(--muted)}a{color:var(--accent)}
 .small-hero{padding:24px 24px 20px}.small-hero h1{font-size:clamp(22px,4vw,32px)}
 .daynav{display:flex;justify-content:space-between;align-items:center;margin:16px 0 0;font-weight:700}
 .legend{margin:8px 0 0}
+/* table layout: two rows per game, sized to fit a desktop screen */
+.gtable{background:var(--card);border:1px solid var(--line);border-radius:12px;overflow-x:auto}
+table.gt{font-size:12.5px;border-collapse:separate;border-spacing:0;width:100%}
+.gt th{background:var(--card);padding:8px 5px;border-bottom:2px solid var(--line);font-size:10px;white-space:nowrap}
+.gt td{padding:4px 5px;border-bottom:none;vertical-align:middle;white-space:nowrap}
+.gt tbody.game tr:last-child td{border-bottom:1px solid var(--line)}
+.gt tbody.game tr.away td:not([rowspan]){padding-top:8px}.gt tbody.game tr.home td:not([rowspan]){padding-bottom:8px}
+.gt tbody.alt td{background:color-mix(in srgb,var(--ice) 45%,transparent)}
+.gt tbody.flagged td{background:var(--gold-soft)}
+.gt tbody.flagged tr.away td:first-child,.gt tbody.flagged tr.home td:first-child{box-shadow:inset 4px 0 0 var(--gold)}
+.gt td.tm{display:flex;align-items:center;gap:6px;padding-left:10px}
+.gt td.proj{font-weight:800;font-size:13px}.gt td.proj.hot{color:var(--accent)}
+.hot-dot{color:var(--accent);font-size:9px;margin-left:3px;vertical-align:2px}
+.gt td.gcol,.gt th.gcol{border-left:2px solid var(--line)}
+.gt td[rowspan]{vertical-align:middle;font-weight:600}.gt td.p7{font-weight:800}
+.gt td.big-total{font-size:18px;font-weight:800}.gt td.tot .big-total{font-size:18px;margin-right:4px;vertical-align:-2px}
+.gt .score-cell{font-size:15px;font-weight:800}
+.gt .gc{white-space:nowrap}.gt .gc .gb{margin-left:2px}
+.gt td.outs{max-width:170px}.gt td.outs .tip.injwrap{display:block}.gt td.outs .injuries{min-height:0;overflow:hidden;text-overflow:ellipsis}
+.gt .pill{font-size:11px;padding:2px 7px}
+.flagpill{display:inline-block;background:var(--gold);color:#1a1200;font-size:10px;font-weight:800;padding:1px 7px;border-radius:999px;margin-bottom:2px}
+.gt tr.srcrow td{padding:0 8px 6px 38px;white-space:normal}.gt tr.srcrow .lineup-src{margin-top:1px;font-size:10.5px}
+.gt .trends{font-size:11px;color:var(--ink);line-height:1.5}.gt .trends b{font-weight:700}
+.lean{display:inline-block;font-size:10px;font-weight:800;padding:1px 7px;border-radius:999px;margin-left:6px;text-transform:uppercase;letter-spacing:.03em}
+.lean.over{background:rgba(26,127,55,.16);color:var(--pos)}.lean.under{background:rgba(198,40,40,.14);color:var(--neg)}
 .lineup-src{margin-top:6px;font-size:11px;color:var(--muted);line-height:1.35}
 .tip{position:relative;cursor:help;border-bottom:1px dotted currentColor;outline:none}
 .tip::after{content:attr(data-tip);position:absolute;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%);

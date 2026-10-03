@@ -19,6 +19,7 @@ import model as m
 import odds
 import paper
 import split_model as sm
+import trends
 
 
 def backfill(day):
@@ -77,6 +78,7 @@ def backfill(day):
                      "best_over": best[3] if flag and best else None, "best_under": best[4] if flag and best else None,
                      "logged_at": f"{day} (added retroactively Oct 2 from pre-game data; line = opening line)",
                      "flagged_at": None, "away_b2b": a in tired, "home_b2b": h in tired,
+                     **trends.compute(sm.load_split(), day, h, a),
                      "away_goalie_now": ag, "home_goalie_now": hg, "updated_at": None,
                      **{f"{s}_{c}": round(v, 4) for s in ("away", "home") for c, v in det[s].items()}})
     log = pd.read_csv(paper.LOG)

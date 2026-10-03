@@ -323,6 +323,7 @@ def today(day=None):
     import grade
     import odds
     import split_model as sm
+    import trends
     day = day or date.today().isoformat()
     load_games(refresh=True)
     games = sm.load_split()
@@ -462,6 +463,7 @@ def today(day=None):
             flagged.append(f"{a} @ {h} OVER {cur['total']:g} ({cur['over']:+d})"
                            + (f" -> best: {best[1]} o{best[2]:g} {best[3]:+d}" if best else ""))
         op = ln.get("open")
+        tr = trends.compute(games, day, h, a)  # recent form + head-to-head (context only, not in the projection)
         log_rows.append({"start_utc": g["startTimeUTC"], "date": day, "away": a, "home": h, "proj": round(x, 3), "proj_away": round(la, 3),
                          "proj_home": round(lh, 3), "cutoff": round(cutoff, 3), "flag": bool(flag), "p7": round(p7, 4),
                          "away_goalie": f"{ag} ({as_})", "home_goalie": f"{hg} ({hs})",
@@ -478,6 +480,7 @@ def today(day=None):
                          "home_out": "; ".join(f"{n}|{o:.4f}|{d:.4f}" for n, o, d in ih["out"]) or None,
                          "away_dtd": ", ".join(ia["dtd"]) or None, "home_dtd": ", ".join(ih["dtd"]) or None,
                          "away_lineup": lineup_label(lineup_info.get(a)), "home_lineup": lineup_label(lineup_info.get(h)),
+                         **tr,
                          **{f"{s}_{c}": round(v, 4) for s in ("away", "home") for c, v in det[s].items()}})
     print("\n(goalie % = share of expected goals stopped beyond average; higher = better)")
     print("OVER FLAG = both teams high-scoring (marked +) and the line is 6 or 6.5. Overs only, never 5.5.")
