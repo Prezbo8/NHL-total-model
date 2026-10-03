@@ -335,11 +335,11 @@ def day_table(g):
         head += f"<th class='num'>{tip('G', 'Final goals for this team (shootout winner gets +1, as sportsbooks settle).')}</th>"
     head += f"<th class='num'>{tip('Proj')}</th>"
     if final_day:
-        head += (f"<th class='gcol'>{tip('Total goals')}</th><th class='num'>{tip('Proj total')}</th><th class='num'>{tip('P(7+)')}</th>"
-                 f"<th>{tip('Line')}</th><th>{tip('Pick')}</th>")
+        head += (f"<th class='gcol ctr'>{tip('Total goals')}</th><th class='ctr'>{tip('Proj total')}</th><th class='ctr'>{tip('P(7+)')}</th>"
+                 f"<th class='ctr'>{tip('Line')}</th><th class='ctr'>{tip('Pick')}</th>")
     else:
-        head += (f"<th class='num gcol'>{tip('Proj total')}</th><th class='num'>{tip('P(7+)')}</th>"
-                 f"<th>{tip('Line', 'Consensus total: opening line → now, and the over price (−120 = risk 120 to win 100). ★ FLAG = the model’s over pick.')}</th>")
+        head += (f"<th class='gcol ctr'>{tip('Proj total')}</th><th class='ctr'>{tip('P(7+)')}</th>"
+                 f"<th class='ctr'>{tip('Line', 'Consensus total: opening line → now, and the over price (−120 = risk 120 to win 100). ★ FLAG = the model’s over pick.')}</th>")
     head += (f"<th class='gcol'>{tip('Goalie', 'Starting goalie: ✓ confirmed, Likely, or Proj (not announced). ⇄ = changed after the game was logged.')}</th>"
              f"<th>{tip('Out', 'Every injured, suspended or scratched regular, already taken out of the projection, biggest impact first: GF = change to his team scoring, GA = change to goals against. SCRATCH = not in tonight lineup, IR = injured reserve. DTD = day-to-day, not adjusted.')}</th>"
              f"<th class='num bcol'>{tip('5v5')}</th><th class='num'>{tip('PP')}</th><th class='num'>{tip('Oth')}</th>"
@@ -677,7 +677,15 @@ table.gt{font-size:12.5px;border-collapse:separate;border-spacing:0;width:100%;t
 .gt td.tm{padding-left:10px}.gt td.tm img,.gt td.tm picture{vertical-align:middle;margin-right:6px}
 .gt td.proj{font-weight:800;font-size:13px}.gt td.proj.hot{color:var(--accent)}
 .hot-dot{display:inline-block;width:10px;text-align:right;color:var(--accent);font-size:9px;vertical-align:2px}.hot-dot.off{visibility:hidden}
-.gt td.gcol,.gt th.gcol,.gt td.bcol,.gt th.bcol{border-left:2px solid color-mix(in srgb,var(--muted) 45%,transparent)}
+/* every column gets its own border; sections get a stronger one */
+.gt th,.gt td{border-left:1px solid var(--line)}
+.gt tr > :first-child{border-left:none}
+.gt tbody.game tr.home td:not([rowspan]){border-top:1px solid color-mix(in srgb,var(--line) 70%,transparent)}
+.gt tr.srcrow td{border-left:none;border-top:1px dashed color-mix(in srgb,var(--line) 70%,transparent)}
+.gt td.gcol,.gt th.gcol,.gt td.bcol,.gt th.bcol{border-left:2px solid color-mix(in srgb,var(--muted) 55%,transparent)}
+.gt tr.sec th{border-left:none}.gt tr.sec th.gcol,.gt tr.sec th.bcol{border-left:2px solid color-mix(in srgb,var(--muted) 55%,transparent)}
+.gt thead tr:not(.sec) th{border-bottom:2px solid color-mix(in srgb,var(--muted) 35%,transparent)}
+.gt td[rowspan],.gt td[rowspan].num,.gt th.ctr{text-align:center}
 .gt tr.sec th{font-size:10.5px;font-weight:800;letter-spacing:.08em;color:var(--ink);text-align:left;padding:7px 8px 5px;
   border-bottom:1px solid var(--line);background:color-mix(in srgb,var(--ice) 60%,var(--card))}
 .gt tr.sec th:first-child{border-top-left-radius:12px}.gt tr.sec th:last-child{border-top-right-radius:12px}
