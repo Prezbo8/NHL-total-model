@@ -4,8 +4,8 @@
 """
 import os, re, shutil, sys, datetime, tempfile
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "src"))
-import pandas as pd, numpy as np
-import paper, goalies, injuries, model as m, split_model as sm, odds, grade, dashboard, players
+import pandas as pd
+import paper, goalies, injuries, model as m, split_model as sm, odds, grade, dashboard
 SP = tempfile.mkdtemp(prefix="nhl-check-") + "/"
 results = []
 def check(name, ok, detail=""):
