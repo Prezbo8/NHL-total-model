@@ -44,11 +44,11 @@ jobs:
       - uses: actions/setup-python@v7
         if: steps.gate.outputs.run == 'true'
         with:
-          python-version: "3.13"
+          python-version: "3.14"
 
       - name: Install
         if: steps.gate.outputs.run == 'true'
-        run: pip install "pandas==2.2.3" "numpy==2.2.6"   # same versions the code is tested with
+        run: pip install "pandas==3.0.6" "numpy==2.5.3"   # same versions tests/check_model.py passes on (Tests workflow)
 
       # each step runs even if an earlier one failed (e.g. settling hits an API outage),
       # so today's projections and the dashboard still get made; the run still shows red

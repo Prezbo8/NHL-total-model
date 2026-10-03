@@ -59,7 +59,7 @@ Injury and lineup adjustments are not backtested (no free history of nightly lin
 ## Repo layout
 
 ```
-.github/workflows/            daily.yml (the run) + keeper.yml (starts it on time)
+.github/workflows/            daily.yml (the run) + keeper.yml (starts it on time) + tests.yml (checks)
 src/                          everything the daily run uses
   model.py                      daily entry point: `today` projects, flags and logs; also the original model
   split_model.py                the 5v5 / power-play model used daily
@@ -80,6 +80,7 @@ data/                         CSV data
   goalie_*.csv  skater_seasons.csv  opening_lineups.csv  team_speed.csv
   odds_*.csv  sbr_odds.csv      historical lines
 docs/                         the website (GitHub Pages)
+tests/check_model.py          29 component checks (paper log, settling, goalies, model, injuries, odds, dashboard)
 ```
 
 ## Schedule
@@ -102,11 +103,12 @@ If the keeper ever stops (no "Keeper" run in progress on the Actions tab), resta
 ## Running locally
 
 ```
-pip install pandas==2.2.3 numpy==2.2.6
+pip install pandas==3.0.6 numpy==2.5.3   # Python 3.14
 python3 src/model.py today [YYYY-MM-DD]   # projections + flags (only today's date is logged)
 python3 src/paper.py report               # paper-trading record
 python3 src/dashboard.py                  # rebuild the website
 python3 research/history.py               # backtest the overs rule
+python3 tests/check_model.py              # 29 component checks (also run on GitHub: Tests workflow)
 ```
 
 The first run downloads MoneyPuck's game file (~126 MB, not stored in the repo).

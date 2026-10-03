@@ -1,5 +1,11 @@
-name: Temporary test (latest Python / pandas / numpy)
-on: workflow_dispatch
+name: Tests
+
+# Runs the model's checks on the same Python / pandas / numpy as the daily run, whenever model code
+# changes (and on demand). Nothing is committed: projections are for tomorrow, so nothing is logged.
+on:
+  workflow_dispatch: {}
+  push:
+    paths: ["src/**", "research/**", "tests/**", ".github/workflows/**"]
 jobs:
   test:
     runs-on: ubuntu-24.04
@@ -10,8 +16,8 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: "3.14"
-      - name: Install latest
-        run: pip install pandas numpy pyflakes && python -c "import sys, pandas, numpy; print('python', sys.version.split()[0], '| pandas', pandas.__version__, '| numpy', numpy.__version__)"
+      - name: Install (same versions as the daily run)
+        run: pip install "pandas==3.0.6" "numpy==2.5.3" pyflakes && python -c "import sys, pandas, numpy; print('python', sys.version.split()[0], '| pandas', pandas.__version__, '| numpy', numpy.__version__)"
       - name: Download MoneyPuck game data (not stored in the repo)
         run: python -c "import sys; sys.path.insert(0, 'src'); import model; assert model.refresh_data()"
       - name: Static check
