@@ -95,7 +95,7 @@ select p.call,
        sum(case when g.final_total = p.line_total then 1 else 0 end) as pushes
 from nhl_projections p
 join nhl_runs r using (run_id)
-join nhl_games g using (game_date, away, home)
+join nhl_games g on g.game_date = p.game_date and g.away = p.away and g.home = p.home
 where g.final_total is not null and p.line_total is not null and p.start_utc is not null and r.run_at < p.start_utc
 group by 1, 2;
 
