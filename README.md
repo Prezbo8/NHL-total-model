@@ -57,7 +57,7 @@ Injury and lineup adjustments are not backtested (no free history of nightly lin
 ## Repo layout
 
 ```
-.github/workflows/daily.yml   scheduled run on GitHub Actions
+.github/workflows/            daily.yml (the run) + keeper.yml (starts it on time)
 src/                          everything the daily run uses
   model.py                      daily entry point: `today` projects, flags and logs; also the original model
   split_model.py                the 5v5 / power-play model used daily
@@ -81,12 +81,20 @@ docs/                         the website (GitHub Pages)
 
 ## Schedule
 
-`.github/workflows/daily.yml` runs every 2 hours from **11 AM to 9 PM Eastern**, all year, at :17
-past the hour with a :47 backup (GitHub delays or drops on-the-hour runs). Each run settles
-yesterday's games, re-downloads stats, goalies, injuries, lineups and lines, projects today's games,
-logs them, rebuilds the dashboard and commits everything back. Nothing runs on a local machine.
+Runs every 2 hours from **11:17 AM to 9:17 PM Eastern**, all year (daylight saving handled).
+
+- `.github/workflows/keeper.yml` stays running on GitHub and starts **Daily NHL run** at each slot.
+  GitHub stops any run after 6 hours, so the keeper starts a fresh copy of itself every 5.5 hours;
+  only one keeper runs at a time. (GitHub's own scheduler was too unreliable for this repo: on
+  Oct 2, 2026 seven slots in a row never fired.)
+- `.github/workflows/daily.yml` does the work: settles yesterday's games, re-downloads stats,
+  goalies, injuries, lineups and lines, projects today's games, logs them, rebuilds the dashboard
+  and commits everything back. Its own schedule (:17 with a :47 backup) stays as a fallback.
+- Nothing runs on a local machine.
 
 Run it now: **Actions** tab → **Daily NHL run** → **Run workflow** (or `gh workflow run daily.yml`).
+If the keeper ever stops (no "Keeper" run in progress on the Actions tab), restart it with
+**Keeper** → **Run workflow** (or `gh workflow run keeper.yml`).
 
 ## Running locally
 
