@@ -31,7 +31,7 @@ TIPS = {
     "Best over": "Best-value over at 6 or 6.5 across DraftKings, FanDuel, BetRivers, BetMGM and Caesars, chosen with the model's probabilities (an over 6 can push).",
     "Total goals": "Final total goals (a shootout winner counts as one goal, as sportsbooks settle it).",
     "vs line": "Did the game go over or under the line that was logged before it started?",
-    "Pick": "Result of the OVER FLAG bet at the logged consensus line, in units (1 unit risked).",
+    "Pick": "The call (SLAM / 1U / AVOID) and how it did at the logged consensus line. SLAM / 1U: W = went over (units at 1 unit risked). AVOID: ✓ = stayed under, ✗ = went over.",
     "Best book": "Same pick at the best sportsbook price (the 'Best over' book), in units.",
     "Team": "Team, away first then home.",
     "5v5": "Goals this team should score at full strength (5 skaters vs 5). Most of a team's goals come from here.",
@@ -98,6 +98,18 @@ def call(r, flagged):
     if both("gadj", ("bad", "trash")):
         return "AVOID"
     return "SLAM" if both("ev", ("good", "great")) else "1U"
+
+
+def call_result(r, flagged):
+    """(call, outcome) for a finished game vs the logged line: SLAM/1U -> 'W'/'L'/'P' (over won / lost / push);
+    AVOID -> 'W' when it stayed under (avoiding was right), 'L' when it went over, 'P' on a push; None without a line."""
+    c = call(r, flagged)
+    if pd.isna(r.bet_total) or pd.isna(r.final_total):
+        return c, None
+    over = r.final_total > r.bet_total
+    if r.final_total == r.bet_total:
+        return c, "P"
+    return c, ("L" if over else "W") if c == "AVOID" else ("W" if over else "L")
 
 
 def tip(label, text=None, cls=""):
@@ -426,7 +438,6 @@ def day_table(g):
                             + td("gadj", adj(g_("gadj"))) + td("b2badj", adj(g_("b2badj"))) + td("spd", adj(g_("spd")))
                             + td("inj", adj(g_("inj"))))
 
-        star = f"<span class='flagpill'>{tip('★ FLAG', TIPS['OVER FLAG'])}</span>" if flagged else ""
         c = call(r, flagged)
         callpill = f"<span class='callpill c-{c.lower()}'>{tip(('🔨 ' if c == 'SLAM' else '') + c, TIPS[c])}</span>"
         if final_day:
@@ -435,9 +446,17 @@ def day_table(g):
                   f"<span class='pill over'>O {line(t)}</span>" if r.final_total > t else
                   f"<span class='pill under'>U {line(t)}</span>" if r.final_total < t else f"<span class='pill'>P {line(t)}</span>")
             moved = "" if pd.isna(r.close_total) or pd.isna(t) or r.close_total == t else (" ↑" if r.close_total > t else " ↓")
-            pick = (f"{star}<br><span class='res {e(r.result)}'>{e(r.result)} {r.profit:+.2f}u</span>"
-                    + ("" if pd.isna(r.profit_best) else f"<br><span class='muted small'>best book {r.profit_best:+.2f}u</span>")
-                    if flagged and not pd.isna(r.result) else "–")
+            c, res = call_result(r, flagged)
+            if res is None:
+                outcome = "<span class='muted small'>no line</span>"
+            elif c == "AVOID":
+                outcome = {"W": "<span class='res W'>✓ under</span>", "L": "<span class='res L'>✗ went over</span>"}.get(res, "<span class='res P'>push</span>")
+            elif flagged and not pd.isna(r.result):
+                outcome = (f"<span class='res {e(r.result)}'>{e(r.result)} {r.profit:+.2f}u</span>"
+                           + ("" if pd.isna(r.profit_best) else f"<br><span class='muted small'>best book {r.profit_best:+.2f}u</span>"))
+            else:
+                outcome = f"<span class='res {res}'>{res}</span>"
+            pick = f"{callpill}<br>{outcome}"
             game = (f"<td class='gcol tot' rowspan='2'><span class='big-total'>{int(r.final_total)}</span>{vs}</td>"
                     f"<td class='num' rowspan='2'>{r.proj:.2f}</td><td class='num' rowspan='2'>{r.p7:.0%}</td>"
                     f"<td rowspan='2' class='nowrap'>{'–' if pd.isna(t) else f'{line(t)} → {line(r.close_total)}{moved}'}</td>"
@@ -477,7 +496,24 @@ def day_summary(g):
         fl = done[(done.flag) & done.result.notna()]
         if len(fl):
             parts.append(f"flags <b>{(fl.result == 'W').sum()}-{(fl.result == 'L').sum()}-{(fl.result == 'P').sum()}</b> ({fl.profit.sum():+.2f}u)")
+        parts.append(call_record(done))
     return " · ".join(parts)
+
+
+def call_record(done):
+    """'🔨 SLAM 1-0-0 · 1U 0-1-0 · AVOID 6 of 10 stayed under' for finished games (vs the logged line)."""
+    res = {"SLAM": [], "1U": [], "AVOID": []}
+    for r in done.itertuples():
+        c, o = call_result(r, _is(r.flag))
+        if o:
+            res[c].append(o)
+    out = []
+    for c in ("SLAM", "1U"):
+        x = res[c]
+        out.append(f"{'🔨 ' if c == 'SLAM' else ''}{c} <b>{x.count('W')}-{x.count('L')}-{x.count('P')}</b>" if x else f"{c} –")
+    a = res["AVOID"]
+    out.append(f"AVOID <b>{a.count('W')} of {len(a)}</b> stayed under" if a else "AVOID –")
+    return "calls: " + " · ".join(out)
 
 
 RETRO_NOTE = ("<p class='retro'><b>Retroactive day:</b> added after the fact from pre-game data only (earlier games, that day's "
