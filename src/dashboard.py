@@ -318,8 +318,11 @@ def day_table(g):
                  f"<th>{tip('Line', 'Consensus total: opening line → now, and the over price (−120 = risk 120 to win 100). ★ FLAG = the model’s over pick.')}</th>")
     head += (f"<th class='gcol'>{tip('Goalie', 'Starting goalie: ✓ confirmed, Likely, or Proj (not announced). ⇄ = changed after the game was logged.')}</th>"
              f"<th>{tip('Out', 'Injured, suspended or scratched regulars already taken out of the projection (GF = his team scoring, GA = goals against). DTD = day-to-day, not adjusted. Hover a row for the full list.')}</th>"
-             f"<th class='num'>{tip('5v5')}</th><th class='num'>{tip('PP')}</th><th class='num'>{tip('Oth')}</th>"
+             f"<th class='num bcol'>{tip('5v5')}</th><th class='num'>{tip('PP')}</th><th class='num'>{tip('Oth')}</th>"
              f"<th class='num'>{tip('Gl', cls='tr')}</th><th class='num'>{tip('B2B', cls='tr')}</th><th class='num'>{tip('Inj', cls='tr')}</th>")
+    sections = (f"<tr class='sec'><th colspan='{3 if final_day else 2}'>Team</th>"
+                f"<th class='gcol' colspan='{5 if final_day else 3}'>{'Result' if final_day else 'Game'}</th>"
+                f"<th class='gcol' colspan='2'>Goalies &amp; lineups</th><th class='bcol' colspan='6'>Projection breakdown</th></tr>")
     body = []
     for i, r in enumerate(g.itertuples()):
         flagged, final = bool(r.flag), not pd.isna(r.final_total)
@@ -342,8 +345,8 @@ def day_table(g):
             cells = (f"<td class='gl gcol'>{goalie_compact(g_('goalie'), g_('goalie_now'))}</td>"
                      f"<td class='outs'>{injury_html(g_('out'), g_('dtd'))}</td>")
             if pd.isna(g_("ev")):
-                return cells + "<td class='num muted' colspan='6'>n/a</td>"
-            return cells + (f"<td class='num'>{g_('ev'):.2f}</td><td class='num'>{g_('pp'):.2f}</td><td class='num'>{g_('oth'):.2f}</td>"
+                return cells + "<td class='num muted bcol' colspan='6'>n/a</td>"
+            return cells + (f"<td class='num bcol'>{g_('ev'):.2f}</td><td class='num'>{g_('pp'):.2f}</td><td class='num'>{g_('oth'):.2f}</td>"
                             f"<td class='num'>{adj(g_('gadj'))}</td><td class='num'>{adj(g_('b2badj'))}</td><td class='num'>{adj(g_('inj'))}</td>")
 
         star = f"<span class='flagpill'>{tip('★ FLAG', TIPS['OVER FLAG'])}</span>" if flagged else ""
@@ -365,16 +368,15 @@ def day_table(g):
                   f"{line(r.open_total)} → {line(r.bet_total)} <span class='muted'>o{price(r.bet_over)}</span>")
             game = (f"<td class='num gcol big-total' rowspan='2'>{r.proj:.2f}</td><td class='num p7' rowspan='2'>{r.p7:.0%}</td>"
                     f"<td rowspan='2'>{star}{'<br>' if star else ''}{ln}</td>")
-        ctx = trends_html(r) + lineup_note(r)
+        ctx = lineup_note(r)  # trends / H2H are logged but not shown
         away = team("away", r.away, r.proj_away, r.away_score if final else None) + game + detail("away")
         home = team("home", r.home, r.proj_home, r.home_score if final else None) + detail("home")
         body.append(f"<tbody class='game {cls}'><tr class='away'>{away}</tr><tr class='home'>{home}</tr>"
                     + (f"<tr class='srcrow'><td colspan='22'>{ctx}</td></tr>" if ctx else "") + "</tbody>")
-    return (f"<div class='gtable'><table class='gt'><thead><tr>{head}</tr></thead>{''.join(body)}</table></div>"
+    return (f"<div class='gtable'><table class='gt'><thead>{sections}<tr>{head}</tr></thead>{''.join(body)}</table></div>"
             "<p class='muted small legend'>Two rows per game (away, then home). <span style='color:var(--accent)'>●</span> = team projected "
             "high-scoring. Proj = (5v5 + PP + Oth) × goalie (Gl) × back-to-back (B2B) × injuries (Inj). "
-            "Under each game: both teams' last 10 games, head-to-head since 2020-21 and a trend lean (context only: tested, it adds little "
-            "beyond the projection). Hover or tap any underlined label for an explanation.</p>")
+            "Hover or tap any underlined label for an explanation.</p>")
 
 
 def day_cards(g):
@@ -635,7 +637,10 @@ table.gt{font-size:12.5px;border-collapse:separate;border-spacing:0;width:100%}
 .gt td.tm{display:flex;align-items:center;gap:6px;padding-left:10px}
 .gt td.proj{font-weight:800;font-size:13px}.gt td.proj.hot{color:var(--accent)}
 .hot-dot{color:var(--accent);font-size:9px;margin-left:3px;vertical-align:2px}
-.gt td.gcol,.gt th.gcol{border-left:2px solid var(--line)}
+.gt td.gcol,.gt th.gcol,.gt td.bcol,.gt th.bcol{border-left:2px solid color-mix(in srgb,var(--muted) 45%,transparent)}
+.gt tr.sec th{font-size:10.5px;font-weight:800;letter-spacing:.08em;color:var(--ink);text-align:left;padding:7px 8px 5px;
+  border-bottom:1px solid var(--line);background:color-mix(in srgb,var(--ice) 60%,var(--card))}
+.gt tr.sec th:first-child{border-top-left-radius:12px}.gt tr.sec th:last-child{border-top-right-radius:12px}
 .gt td[rowspan]{vertical-align:middle;font-weight:600}.gt td.p7{font-weight:800}
 .gt td.big-total{font-size:18px;font-weight:800}.gt td.tot .big-total{font-size:18px;margin-right:4px;vertical-align:-2px}
 .gt .score-cell{font-size:15px;font-weight:800}
