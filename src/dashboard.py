@@ -333,7 +333,7 @@ def day_table(g):
     head = f"<th>{tip('Team', cls='tl')}</th>"
     if final_day:
         head += f"<th class='num'>{tip('G', 'Final goals for this team (shootout winner gets +1, as sportsbooks settle).')}</th>"
-    head += f"<th class='num'>{tip('Proj')}</th>"
+    head += f"<th class='num projh'>{tip('Proj')}</th>"
     if final_day:
         head += (f"<th class='gcol ctr'>{tip('Total goals')}</th><th class='ctr'>{tip('Proj total')}</th><th class='ctr'>{tip('P(7+)')}</th>"
                  f"<th class='ctr'>{tip('Line')}</th><th class='ctr'>{tip('Pick')}</th>")
@@ -399,7 +399,7 @@ def day_table(g):
                   f"{line(r.open_total)} → {line(r.bet_total)} <span class='muted'>o{price(r.bet_over)}</span>")
             game = (f"<td class='num gcol big-total' rowspan='2'>{r.proj:.2f}</td><td class='num p7' rowspan='2'>{r.p7:.0%}</td>"
                     f"<td rowspan='2'>{star}{'<br>' if star else ''}{ln}</td>")
-        ctx = lineup_note(r)  # trends / H2H are logged but not shown
+        ctx = ""  # lineup source and trends / H2H are logged but not shown
         away = team("away", r.away, r.proj_away, r.away_score if final else None) + game + detail("away")
         home = team("home", r.home, r.proj_home, r.home_score if final else None) + detail("home")
         body.append(f"<tbody class='game {cls}'><tr class='away'>{away}</tr><tr class='home'>{home}</tr>"
@@ -658,35 +658,39 @@ footer{margin-top:32px;font-size:13px;color:var(--muted)}a{color:var(--accent)}
 .daynav{display:flex;justify-content:space-between;align-items:center;margin:16px 0 0;font-weight:700}
 .legend{margin:8px 0 0}
 /* table layout: two rows per game, sized to fit a desktop screen */
-.gtable{background:var(--card);border:3px solid color-mix(in srgb,var(--muted) 60%,transparent);border-radius:12px;overflow-x:auto}
+.gtable{background:var(--card);border:4px solid color-mix(in srgb,var(--muted) 60%,transparent);border-radius:12px;overflow-x:auto}
 table.gt{font-size:12.5px;border-collapse:separate;border-spacing:0;width:100%;table-layout:fixed}
 .gt td,.gt th{overflow:hidden;text-overflow:ellipsis}
 .gt thead tr:not(.sec) th{white-space:normal;line-height:1.25;vertical-align:bottom}
-.gt td[rowspan]{white-space:normal}.gt td[rowspan].nowrap{white-space:nowrap}
+.gt td[rowspan]{white-space:normal}.gt td[rowspan].nowrap,.gt td[rowspan].tot{white-space:nowrap}
+.gt td.tot{padding-left:3px;padding-right:3px}
 .gt td.pickcell{line-height:1.15;padding-top:2px;padding-bottom:2px}.gt td.pickcell .small{font-size:10.5px}.gt td.pickcell .flagpill{margin-bottom:1px}
 .gt td.tm{white-space:nowrap}.gt td.tm .b2b{margin-left:4px}.gt td.tm img,.gt td.tm picture{margin-right:5px}
 .gt tbody.game tr.away td:not([rowspan]),.gt tbody.game tr.home td:not([rowspan]){height:34px;vertical-align:middle}
 .gt th.num,.gt td.num{text-align:right}.gt th:not(.num),.gt td:not(.num){text-align:left}
+.gt td,.gt th{vertical-align:middle}.gt thead tr:not(.sec) th{vertical-align:bottom}
+.gt td.num,.gt td[rowspan]{font-variant-numeric:tabular-nums}
+.gt th.projh{padding-right:15px}   /* lines the Proj header up with the numbers (room for the HIGH dot) */
 .gt th{background:var(--card);padding:8px 5px;border-bottom:2px solid var(--line);font-size:10px;white-space:nowrap}
 .gt td{padding:4px 5px;border-bottom:none;vertical-align:middle;white-space:nowrap}
 /* each game is its own block: strong border between games */
-.gt tbody.game tr.away td{border-top:3px solid color-mix(in srgb,var(--muted) 60%,transparent)}
+.gt tbody.game tr.away td{border-top:4px solid color-mix(in srgb,var(--muted) 60%,transparent)}
 .gt thead + tbody.game tr.away td{border-top:none}
 .gt tbody.game tr.away td:not([rowspan]){padding-top:8px}.gt tbody.game tr.home td:not([rowspan]){padding-bottom:8px}
 .gt tbody.alt td{background:color-mix(in srgb,var(--ice) 45%,transparent)}
 .gt tbody.flagged td{background:var(--gold-soft)}
 .gt tbody.flagged tr.away td:first-child,.gt tbody.flagged tr.home td:first-child{box-shadow:inset 4px 0 0 var(--gold)}
-.gt td.tm{padding-left:10px}.gt td.tm img,.gt td.tm picture{vertical-align:middle;margin-right:6px}
+.gt td.tm,.gt thead tr:not(.sec) th:first-child{padding-left:10px}.gt td.tm img,.gt td.tm picture{vertical-align:middle;margin-right:6px}
 .gt td.proj{font-weight:800;font-size:13px}.gt td.proj.hot{color:var(--accent)}
 .hot-dot{display:inline-block;width:10px;text-align:right;color:var(--accent);font-size:9px;vertical-align:2px}.hot-dot.off{visibility:hidden}
 /* every column gets its own border; sections get a stronger one */
-.gt th,.gt td{border-left:2px solid var(--line)}
+.gt th,.gt td{border-left:3px solid var(--line)}
 .gt tr > :first-child{border-left:none}
-.gt tbody.game tr.home td:not([rowspan]){border-top:2px solid color-mix(in srgb,var(--line) 80%,transparent)}
+.gt tbody.game tr.home td:not([rowspan]){border-top:3px solid var(--line)}
 .gt tr.srcrow td{border-left:none;border-top:1px dashed color-mix(in srgb,var(--line) 70%,transparent)}
-.gt td.gcol,.gt th.gcol,.gt td.bcol,.gt th.bcol{border-left:3px solid color-mix(in srgb,var(--muted) 60%,transparent)}
-.gt tr.sec th{border-left:none}.gt tr.sec th.gcol,.gt tr.sec th.bcol{border-left:3px solid color-mix(in srgb,var(--muted) 60%,transparent)}
-.gt thead tr:not(.sec) th{border-bottom:3px solid color-mix(in srgb,var(--muted) 60%,transparent)}
+.gt td.gcol,.gt th.gcol,.gt td.bcol,.gt th.bcol{border-left:4px solid color-mix(in srgb,var(--muted) 60%,transparent)}
+.gt tr.sec th{border-left:none}.gt tr.sec th.gcol,.gt tr.sec th.bcol{border-left:4px solid color-mix(in srgb,var(--muted) 60%,transparent)}
+.gt thead tr:not(.sec) th{border-bottom:4px solid color-mix(in srgb,var(--muted) 60%,transparent)}
 .gt td[rowspan],.gt td[rowspan].num,.gt th.ctr{text-align:center}
 .gt tr.sec th{font-size:10.5px;font-weight:800;letter-spacing:.08em;color:var(--ink);text-align:left;padding:7px 8px 5px;
   border-bottom:1px solid var(--line);background:color-mix(in srgb,var(--ice) 60%,var(--card))}
