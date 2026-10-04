@@ -163,12 +163,26 @@ def add_rotowire_injuries(injured, rw_injuries):
 
 
 def actual_starters(game_id):
-    """{'away': (name, nhl_id), 'home': (name, nhl_id)} from the NHL box score once the game has started."""
-    url = f"https://api-web.nhle.com/v1/gamecenter/{int(game_id)}/boxscore"
-    b = json.loads(_get(url))
+    """{'away': (name, nhl_id), 'home': (name, nhl_id)} once the game has started.
+    The box score's 'starter' flag is used when the NHL has set it (it only appears once a game is
+    official); otherwise the goalie in net for the first shot each team faced (play-by-play)."""
+    base = f"https://api-web.nhle.com/v1/gamecenter/{int(game_id)}"
+    b = json.loads(_get(f"{base}/boxscore"))
     out = {}
     for side, k in (("away", "awayTeam"), ("home", "homeTeam")):
         for g in b.get("playerByGameStats", {}).get(k, {}).get("goalies", []):
             if g.get("starter"):
                 out[side] = (g.get("name", {}).get("default", ""), g.get("playerId"))
+    if len(out) < 2:
+        p = json.loads(_get(f"{base}/play-by-play"))
+        side_of = {p["awayTeam"]["id"]: "away", p["homeTeam"]["id"]: "home"}
+        roster = {r["playerId"]: (f'{r["firstName"]["default"]} {r["lastName"]["default"]}', side_of.get(r["teamId"]))
+                  for r in p.get("rosterSpots", [])}
+        for play in p.get("plays", []):
+            gid = (play.get("details") or {}).get("goalieInNetId")
+            name, side = roster.get(gid, (None, None))
+            if side and side not in out:
+                out[side] = (name, gid)
+            if len(out) == 2:
+                break
     return out

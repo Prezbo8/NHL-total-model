@@ -518,6 +518,10 @@ def today(day=None):
         import store  # run history in Supabase (skipped when not configured; never stops the run)
         store.record_run(day, log_rows, sources={"dailyfaceoff": bool(dfo), "lines": bool(lines), "sportsbooks": bool(shop),
                                                  "lineups": bool(lineup_info), "injuries": bool(inj)})
+        try:  # games already under way: record who actually started (NHL box score)
+            paper.update_actual_starters()
+        except Exception as e:
+            print(f"(couldn't record actual starters: {e})")
         store.sync_log(paper.read_log())
         print(f"(paper log: {added} new games, {upgraded} newly flagged, in {paper.LOG})")
 

@@ -110,16 +110,22 @@ def log_games(rows):
     return len(added), upgraded
 
 
+STARTED = ("LIVE", "CRIT", "OFF", "FINAL")  # NHL game states once the puck has dropped
+
+
 def record_actual_starters(d, days_back=7):
-    """Fill {away,home}_goalie_actual (who really started, from the NHL box score) for finished games of the
-    last week that don't have it yet. Shows on the results and measures how often the predicted starter was right."""
+    """Fill {away,home}_goalie_actual (who really started, from the NHL box score) for games of the last week
+    that have started and don't have it yet. The dashboard then shows the real starter from puck drop on,
+    and it measures how often the predicted starter was right."""
     import confirm
     recent = (pd.Timestamp(date.today()) - pd.Timedelta(days=days_back)).strftime("%Y-%m-%d")
-    need = d[d.final_total.notna() & d.away_goalie_actual.isna() & (d.date >= recent)]
+    need = d[(d.away_goalie_actual.isna() | d.home_goalie_actual.isna()) & (d.date >= recent)
+             & (d.date <= date.today().isoformat())]
     for day in sorted(need.date.unique()):
         try:
             with urllib.request.urlopen(fetch(f"https://api-web.nhle.com/v1/score/{day}")) as f:
-                ids = {(g["awayTeam"]["abbrev"], g["homeTeam"]["abbrev"]): g["id"] for g in json.load(f)["games"]}
+                ids = {(g["awayTeam"]["abbrev"], g["homeTeam"]["abbrev"]): g["id"] for g in json.load(f)["games"]
+                       if g.get("gameState") in STARTED}
         except Exception as e:
             print(f"(couldn't read {day} games for actual starters: {e})")
             continue
@@ -133,6 +139,17 @@ def record_actual_starters(d, days_back=7):
             for side in ("away", "home"):
                 if side in act:
                     d.at[i, f"{side}_goalie_actual"] = act[side][0]
+
+
+def update_actual_starters():
+    """Record actual starters for games that have started (run after each projection run)."""
+    d = read_log()
+    before = d.away_goalie_actual.notna().sum() + d.home_goalie_actual.notna().sum()
+    record_actual_starters(d, days_back=1)
+    after = d.away_goalie_actual.notna().sum() + d.home_goalie_actual.notna().sum()
+    if after != before:
+        d.to_csv(LOG, index=False)
+    print(f"(actual starters: {after - before} new)")
 
 
 def settle():
