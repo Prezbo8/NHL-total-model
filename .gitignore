@@ -6,3 +6,6 @@ __pycache__/
 
 # retry flag for the current run (src/health.py)
 data/.retry
+
+# research: who dressed in every game since 2020 (research/lineups_hist.py), ~10 MB
+data/dressed.csv

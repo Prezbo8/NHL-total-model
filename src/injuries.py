@@ -11,8 +11,9 @@ in_rating = how much of him is actually in the team's current rating: a player w
             missed most of the team's games is mostly gone from the numbers, so he's mostly not
             removed again (no double counting).
 
-Not backtested (there's no free history of who was out each night) - shown on the dashboard so its
-effect is visible.
+Backtested Oct 2026 (research/injury_backtest.py) on who actually dressed in 14,898 team-games: goals vs
+the model track the adjustment with a slope of ~1.3 in both 2021-24 and 2024-26 (1.0 = exactly right size),
+and it improves accuracy vs closing and opening lines. Kept at 1.0x: live, the lineup is only projected.
 """
 import json
 import urllib.request

@@ -54,7 +54,7 @@ Only data from the 2020-21 season onward is used.
 | Line shopping (best book) | | | about +2 pts more |
 
 The past edge is small (±3–4% uncertainty). The live paper-trading record decides whether it's real.
-Injury and lineup adjustments are not backtested (no free history of nightly lineups).
+Injury and lineup adjustments were backtested on who actually dressed (2021-26, research/injury_backtest.py): they make projections more accurate and are about the right size.
 
 ## Repo layout
 

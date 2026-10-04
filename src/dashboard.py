@@ -539,7 +539,7 @@ def trends_html(r):
 def day_table(g):
     """One table for the day, two rows per game (away, home), sized to fit without scrolling on a
     desktop screen: decision columns first, then goalie, injuries and the projection breakdown."""
-    g = current(g).sort_values(["flag", "proj"], ascending=[False, False])
+    g = current(g).sort_values(["p7", "proj"], ascending=[False, False])  # most likely to go 7+ first
     final_day = bool(len(g)) and g.final_total.notna().all()
     head = f"<th>{tip('Team', cls='tl')}</th>"
     if final_day:
