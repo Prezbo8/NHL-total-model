@@ -32,7 +32,7 @@ COLS = ["date", "away", "home", "proj", "proj_away", "proj_home", "cutoff", "fla
         "away_l10_n", "away_l10_avg", "away_l10_7", "home_l10_n", "home_l10_avg", "home_l10_7",
         "h2h_n", "h2h_avg", "h2h_7", "h2h_last", "trend_lean",
         # goalie confirmation sources (confirm.py) and, after the game, who actually started (NHL box score)
-        "game_id", "away_goalie_src", "home_goalie_src", "away_goalie_actual", "home_goalie_actual"] + [
+        "game_id", "start_utc", "away_goalie_src", "home_goalie_src", "away_goalie_actual", "home_goalie_actual"] + [
         f"{s}_{c}" for s in ("away", "home") for c in ("ev", "pp", "oth", "gadj", "b2badj", "spd", "inj")]
 BREAKDOWN = [f"{s}_{c}" for s in ("away", "home") for c in ("ev", "pp", "oth", "gadj", "b2badj", "spd", "inj")]
 # latest run's numbers for games that haven't started (what the dashboard shows); the columns above
@@ -57,7 +57,7 @@ def read_log():
         d[c] = d[c].map(was_flagged_now).astype(bool)
     for c in ("result", "result_best", "best_book", "away_goalie_now", "home_goalie_now", "updated_at", "flagged_at",
               "away_goalie", "home_goalie", "away_out", "home_out", "away_dtd", "home_dtd", "away_lineup", "home_lineup",
-              "h2h_last", "trend_lean", "away_goalie_src", "home_goalie_src", "away_goalie_actual", "home_goalie_actual"):
+              "h2h_last", "trend_lean", "start_utc", "away_goalie_src", "home_goalie_src", "away_goalie_actual", "home_goalie_actual"):
         d[c] = d[c].astype(object)
     return d
 
@@ -70,7 +70,7 @@ def log_games(rows):
     now = pd.Timestamp.now(tz="UTC")
     new = pd.DataFrame(rows)
     new = new.reindex(columns=list(dict.fromkeys(["start_utc"] + list(new.columns) + COLS)))  # any missing field -> empty
-    new = new[pd.to_datetime(new.start_utc, utc=True) > now].drop(columns="start_utc")
+    new = new[pd.to_datetime(new.start_utc, utc=True) > now]
     if new.empty:
         return 0, 0
     key = lambda d: d.date.astype(str) + d.away + d.home
@@ -90,7 +90,7 @@ def log_games(rows):
             for c in ("away_goalie_now", "home_goalie_now", "away_b2b", "home_b2b", "updated_at",
                       "away_out", "home_out", "away_dtd", "home_dtd", "away_lineup", "home_lineup",
                       "away_l10_n", "away_l10_avg", "away_l10_7", "home_l10_n", "home_l10_avg", "home_l10_7",
-                      "h2h_n", "h2h_avg", "h2h_7", "h2h_last", "trend_lean", "game_id",
+                      "h2h_n", "h2h_avg", "h2h_7", "h2h_last", "trend_lean", "game_id", "start_utc",
                       "away_goalie_src", "home_goalie_src") + tuple(NOW):
                 old.loc[i, c] = r[c]
             if not was_flagged_now(old.at[i, "flag"]):  # best book is informational until a game is flagged

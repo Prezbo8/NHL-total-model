@@ -268,6 +268,13 @@ def price(x):
     return "" if pd.isna(x) else f"{int(x):+d}"
 
 
+def start_time(v):
+    """'7:00 PM' (Eastern) from the log's start_utc; '' when it's missing."""
+    if pd.isna(v) or not str(v).strip():
+        return ""
+    return f"{pd.Timestamp(v).tz_convert('America/New_York'):%-I:%M %p}"
+
+
 def line(t):
     return "" if pd.isna(t) else f"{t:g}"
 
@@ -593,6 +600,8 @@ def day_table(g):
                             + td("inj", adj(g_("inj"))))
 
         c = call(r, flagged)
+        st = start_time(getattr(r, "start_utc", None))
+        gtime = f"<span class='gtime'>{st} ET</span><br>" if st else ""
         callpill = f"<span class='callpill c-{c.lower()}'>{tip(('🔨 ' if c == 'SLAM' else '') + c, TIPS[c])}</span>"
         if c != r.first_call:
             callpill += f" <span class='was'>{tip('was ' + r.first_call, f'First call when this game was logged: {r.first_call}. Updated with the latest goalies, lines and injuries.')}</span>"
@@ -611,7 +620,7 @@ def day_table(g):
                 outcome = f"<span class='res {res}'>{res}</span>"
             if r.paper_flag and not pd.isna(r.result):  # the paper-trading bet (first-logged line)
                 outcome += f"<br><span class='muted small'>{tip('paper', TIPS['Paper bet'])} {e(r.result)} {r.profit:+.2f}u</span>"
-            pick = f"{callpill}<br>{outcome}"
+            pick = f"{gtime}{callpill}<br>{outcome}"
             game = (f"<td class='gcol tot' rowspan='2'><span class='big-total'>{int(r.final_total)}</span>{vs}</td>"
                     f"<td class='num' rowspan='2'>{r.proj:.2f}</td><td class='num' rowspan='2'>{r.p7:.0%}</td>"
                     f"<td rowspan='2' class='nowrap'>{'–' if pd.isna(t) else f'{line(t)} → {line(r.close_total)}{moved}'}</td>"
@@ -620,7 +629,7 @@ def day_table(g):
             ln = ("<span class='muted'>not posted</span>" if pd.isna(r.bet_total) else
                   f"{line(r.open_total)} → {line(r.bet_total)} <span class='muted'>o{price(r.bet_over)}</span>")
             game = (f"<td class='num gcol big-total' rowspan='2'>{r.proj:.2f}</td><td class='num p7' rowspan='2'>{r.p7:.0%}</td>"
-                    f"<td rowspan='2'>{callpill}<br>{ln}</td>")
+                    f"<td rowspan='2'>{gtime}{callpill}<br>{ln}</td>")
         ctx = f"<div class='why-text'>{reasoning(r, flagged)}</div>"
         away = team("away", r.away, r.proj_away, r.away_score if final else None) + game + detail("away")
         home = team("home", r.home, r.proj_home, r.home_score if final else None) + detail("home")
@@ -961,6 +970,7 @@ table.gt{font-size:12.5px;border-collapse:separate;border-spacing:0;width:100%;t
 .gt .itag{font-size:9.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.03em}
 .gt .pill{font-size:11px;padding:2px 7px}
 .was{font-size:9.5px;color:var(--muted);white-space:nowrap}.was .tip{border-bottom-style:dotted}
+.gtime{font-size:13px;font-weight:800;color:var(--ink)}
 .callpill{display:inline-block;font-size:10px;font-weight:800;padding:1px 8px;border-radius:999px;margin-bottom:2px;letter-spacing:.04em}
 .callpill.c-slam{background:var(--gold);color:#1a1200}.callpill.c-1u{border:1.5px solid var(--gold);color:var(--ink)}
 .callpill.c-avoid{border:1px solid var(--line);color:var(--muted);font-weight:700}.callpill .tip{border-bottom:none}
