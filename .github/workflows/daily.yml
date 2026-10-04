@@ -19,6 +19,8 @@ on:
 permissions:
   contents: write
   pages: write
+  issues: write    # source-failure alerts (src/health.py)
+  actions: write   # start a retry run when a source is still failing
 
 concurrency:
   group: daily
@@ -94,3 +96,21 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh api -X POST "repos/${{ github.repository }}/pages/builds" || echo "pages build request failed (site may still update on its own)"
+
+      - name: Alert on data sources failing 2+ runs in a row (GitHub issue; closes itself on recovery)
+        if: ${{ !cancelled() && steps.gate.outputs.run == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python src/health.py alert || echo "alert step failed"
+
+      - name: Retry in 5 minutes if a source is still failing (until it works)
+        if: ${{ !cancelled() && steps.gate.outputs.run == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ -f data/.retry ]; then
+            echo "still failing: $(cat data/.retry)"; sleep 300
+            gh workflow run daily.yml -R "${{ github.repository }}" -f trigger=retry
+          else
+            echo "all sources OK"
+          fi

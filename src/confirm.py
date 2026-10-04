@@ -95,14 +95,15 @@ def goaliepost():
     return out
 
 
-def gather(dfo_by_team, rw_goalies=None):
+def gather(dfo_by_team, rw_goalies=None, gp_goalies=None):
     """{team: [(source, goalie, status, nhl_id or None)]} from all three sources.
-    dfo_by_team: {team: (goalie, status text)}; rw_goalies: rotowire()[0] if already fetched."""
+    dfo_by_team: {team: (goalie, status text)}; rw_goalies / gp_goalies: rotowire()[0] / goaliepost() if already fetched."""
     out = {}
     for t, (g, st) in dfo_by_team.items():
         if g:
             out.setdefault(t, []).append(("DailyFaceoff", g, status(st), None))
-    srcs = (("Rotowire", (lambda: rw_goalies) if rw_goalies is not None else (lambda: rotowire()[0])), ("GoaliePost", goaliepost))
+    srcs = (("Rotowire", (lambda: rw_goalies) if rw_goalies is not None else (lambda: rotowire()[0])),
+            ("GoaliePost", (lambda: gp_goalies) if gp_goalies is not None else goaliepost))
     for name, fn in srcs:
         try:
             for t, v in fn().items():

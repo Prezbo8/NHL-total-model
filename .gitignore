@@ -3,3 +3,6 @@ data/moneypuck_games.csv
 data/moneypuck_games.csv.part
 __pycache__/
 .DS_Store
+
+# retry flag for the current run (src/health.py)
+data/.retry

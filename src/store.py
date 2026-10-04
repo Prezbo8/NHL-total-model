@@ -73,10 +73,14 @@ def safe(fn):
         if not enabled():
             print(f"(supabase not configured: {fn.__name__} skipped)")
             return None
+        import health
         try:
-            return fn(*a, **k)
+            out = fn(*a, **k)
+            health._results.setdefault("Supabase", None)
+            return out
         except Exception as e:
             print(f"::warning::supabase {fn.__name__} failed (the CSV log is unaffected): {e}")
+            health._results["Supabase"] = f"{type(e).__name__}: {str(e)[:150]}"
             return None
     return wrap
 

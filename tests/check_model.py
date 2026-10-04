@@ -98,6 +98,32 @@ check("closing lines parse", len(rows) == 8, f"{len(rows)} games")
 abbrs = {grade.ABBR.get(x, x) for r in rows for x in (r["home"], r["away"])}
 check("sportsbook team codes match NHL codes", abbrs <= set(g.home), str(sorted(abbrs - set(g.home))))
 
+print("source retries + alerts (fake sources, nothing real is called)")
+import health
+health.STATE, health.RETRY_FLAG = SP + "health.json", SP + ".retry"
+calls = {"n": 0}
+def flaky():
+    calls["n"] += 1
+    if calls["n"] < 3:
+        raise ConnectionError("site down")
+    return {"ok": 1}
+check("a failing source is retried until it works", health.attempt("Flaky", flaky, waits=[0.01] * 4) == {"ok": 1} and calls["n"] == 3)
+check("a dead source gives the fallback; empty counts as a failure when required",
+      health.attempt("Dead", lambda: 1 / 0, "fallback", waits=[0.01]) == "fallback"
+      and health.attempt("Empty", lambda: {}, {}, must=True, waits=[]) == {})
+bad = health.finish()
+st = json.load(open(health.STATE))
+check("failures saved across runs + retry run requested", sorted(bad) == ["Dead", "Empty"] and st["Dead"]["consecutive_failures"] == 1
+      and st["Flaky"]["consecutive_failures"] == 0 and (os.path.exists(health.RETRY_FLAG) or datetime.datetime.now().hour >= 23))
+health._results.clear(); health.attempt("Dead", lambda: 1 / 0, waits=[]); health.attempt("Empty", lambda: 5, waits=[]); health.finish()
+made, closed = [], []
+health._gh = lambda *a: (made.append(a[a.index("--title") + 1]) if a[:2] == ("issue", "create") else closed.append(a[2]) if a[:2] == ("issue", "close") else None,
+                         type("R", (), {"returncode": 0, "stdout": '[{"title": "Data source failing: Empty", "number": 7}]' if a[:2] == ("issue", "list") else ""})())[1]
+health.alert()
+check("alert after 2 failed runs in a row; closes when the source recovers",
+      made == ["Data source failing: Dead"] and closed == ["7"])
+health._results.clear()
+
 print("goalie + injury confirmations (offline)")
 import confirm
 C = confirm.combine

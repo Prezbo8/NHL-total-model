@@ -69,6 +69,7 @@ src/                          everything the daily run uses
   confirm.py                    starting goalies from DailyFaceoff + Rotowire + GoaliePost combined; Rotowire injuries; actual starters (NHL box score)
   odds.py  books.py  grade.py   betting lines (consensus, opening, every sportsbook) and line math
   paper.py                      paper-trading log: log, settle, report
+  health.py                     retries every data source until it works, re-runs in 5 min if one still fails, GitHub issue alerts
   store.py                      run history in Supabase (every run's projections; skipped without the key)
   dashboard.py                  builds the website in docs/
   backfill.py                   adds a past day from pre-game data only (marked retroactive)
@@ -83,7 +84,7 @@ data/                         CSV data
   odds_*.csv  sbr_odds.csv      historical lines
 docs/                         the website (GitHub Pages)
 supabase/schema.sql           Supabase tables (nhl_*) for the run history: paste once into the SQL Editor
-tests/check_model.py          44 component checks (paper log, settling, goalies, model, injuries, odds, dashboard)
+tests/check_model.py          48 component checks (paper log, settling, goalies, model, injuries, odds, dashboard)
 ```
 
 ## Schedule
@@ -111,7 +112,7 @@ python3 src/model.py today [YYYY-MM-DD]   # projections + flags (only today's da
 python3 src/paper.py report               # paper-trading record
 python3 src/dashboard.py                  # rebuild the website
 python3 research/history.py               # backtest the overs rule
-python3 tests/check_model.py              # 44 component checks (also run on GitHub: Tests workflow)
+python3 tests/check_model.py              # 48 component checks (also run on GitHub: Tests workflow)
 ```
 
 The first run downloads MoneyPuck's game file (~126 MB, not stored in the repo).

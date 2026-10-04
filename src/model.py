@@ -327,16 +327,16 @@ def today(day=None):
     import odds
     import split_model as sm
     import trends
+    import health  # every source is retried until it works (health.attempt); failures re-run the job
     day = day or date.today().isoformat()
-    load_games(refresh=True)
+    health.attempt("MoneyPuck stats", lambda: refresh_data() or (_ for _ in ()).throw(RuntimeError("download failed")),
+                   waits=[60, 180])  # on failure the previous download is still used
+    load_games()
     games = sm.load_split()
     season = sm.season_of(date.fromisoformat(day))  # from the date, not the data (opening day has no games yet)
-    goalies.refresh([season])
-    try:  # team skating speed: this season uses LAST season's numbers (fetched once per season)
-        import speed
-        speed.refresh(season - 1)
-    except Exception as e:
-        print(f"(couldn't refresh team speed: {e}; using saved speed data)")
+    health.attempt("Goalie data", lambda: goalies.refresh([season]) or True)
+    import speed  # team skating speed: this season uses LAST season's numbers (fetched once per season)
+    health.attempt("NHL EDGE speed", lambda: speed.refresh(season - 1) or True)
     proj, project = sm.walk_split(games, known_starters=False, with_projector=True, live_season=season)
     cal = fit_calibration(proj[proj.season.between(2022, season - 1)])
     prev = proj[proj.season == season - 1]
@@ -345,65 +345,54 @@ def today(day=None):
     def schedule(d):
         with urllib.request.urlopen(fetch(f"https://api-web.nhle.com/v1/schedule/{d}")) as f:
             return [g for wk in json.load(f)["gameWeek"] if wk["date"] == d for g in wk["games"]]
-    todays = [g for g in schedule(day) if g["gameType"] == 2]
+    sched = health.attempt("NHL schedule", lambda: schedule(day))
+    if sched is None:
+        health.finish()
+        raise RuntimeError("NHL schedule unavailable after retries")
+    todays = [g for g in sched if g["gameType"] == 2]
     yday = (date.fromisoformat(day) - timedelta(days=1)).isoformat()
     # back-to-back = played a real game yesterday (the effect was measured on regular-season games;
     # preseason and postponed games don't count)
-    tired = {g[s]["abbrev"] for g in schedule(yday)
+    tired = {g[s]["abbrev"] for g in (health.attempt("NHL schedule (yesterday)", lambda: schedule(yday)) or [])
              if g["gameType"] in (2, 3) and g.get("gameScheduleState", "OK") == "OK"
              for s in ("homeTeam", "awayTeam")}
     if not todays:
         print(f"No regular-season games on {day}.")
+        health.finish()
         return
-    try:
-        dfo = dailyfaceoff(day)
-    except Exception as e:
-        print(f"(couldn't read DailyFaceoff starters: {e}; using each team's usual starter)")
-        dfo = {}
+    dfo = health.attempt("DailyFaceoff goalies", lambda: dailyfaceoff(day), {}, must=True)
     lines = {}
     for book, label in ((30, "open"), (15, "now")):
-        try:
-            for r in odds.day_games(date.fromisoformat(day), book, completed_only=False):
-                key = (grade.ABBR.get(r["home"], r["home"]), grade.ABBR.get(r["away"], r["away"]))
-                lines.setdefault(key, {})[label] = r
-        except Exception as e:
-            print(f"(couldn't read {label} lines from Action Network: {e})")
-    shop = {}  # (home, away) -> [(book name, total, over, under)] for real sportsbooks
-    try:
-        import books
-        names = books.book_names()
-        for r in books.day_all_books(date.fromisoformat(day), completed_only=False):
-            if r["book"] in books.NOT_BOOKS:
-                continue
+        rows = health.attempt(f"Action Network {label} lines",
+                              lambda b=book: odds.day_games(date.fromisoformat(day), b, completed_only=False), [], must=True)
+        for r in rows:
             key = (grade.ABBR.get(r["home"], r["home"]), grade.ABBR.get(r["away"], r["away"]))
-            shop.setdefault(key, []).append((names.get(r["book"], str(r["book"])), r["total"], int(r["over"]), int(r["under"])))
-    except Exception as e:
-        print(f"(couldn't read sportsbook lines for line shopping: {e})")
-    import confirm
-    try:  # second source for starting goalies + injuries (Rotowire)
-        rw_goalies, rw_injuries = confirm.rotowire()
-    except Exception as e:
-        print(f"(couldn't read Rotowire: {type(e).__name__}: {str(e)[:80]})")
-        rw_goalies, rw_injuries = {}, {}
+            lines.setdefault(key, {})[label] = r
+    shop = {}  # (home, away) -> [(book name, total, over, under)] for real sportsbooks
+    import books
+
+    def all_books():
+        names = books.book_names()
+        return [(r, names) for r in books.day_all_books(date.fromisoformat(day), completed_only=False)]
+    for r, names in health.attempt("Sportsbook lines", all_books, [], must=True):
+        if r["book"] in books.NOT_BOOKS:
+            continue
+        key = (grade.ABBR.get(r["home"], r["home"]), grade.ABBR.get(r["away"], r["away"]))
+        shop.setdefault(key, []).append((names.get(r["book"], str(r["book"])), r["total"], int(r["over"]), int(r["under"])))
+    import confirm  # second and third sources for starting goalies (+ Rotowire injuries)
+    rw_goalies, rw_injuries = health.attempt("Rotowire", confirm.rotowire, ({}, {}), must=True)
+    gp_goalies = health.attempt("GoaliePost", confirm.goaliepost, {}, must=True)
     # starting goalies: DailyFaceoff + Rotowire + GoaliePost combined (confirm.combine)
     dfo_by_team = {t["abbrev"]: dfo.get(norm_name(f'{t["placeName"]["default"]} {t["commonName"]["default"]}'), (None, None))
                    for g in todays for t in (g["homeTeam"], g["awayTeam"])}
-    goalie_calls = {t: confirm.combine(r) for t, r in confirm.gather(dfo_by_team, rw_goalies).items()}
+    goalie_calls = {t: confirm.combine(r) for t, r in confirm.gather(dfo_by_team, rw_goalies, gp_goalies).items()}
     import injuries
-    try:  # skater injuries (ESPN)
-        injured = injuries.fetch()
-    except Exception as e:
-        print(f"(couldn't read ESPN injuries: {e})")
-        injured = []
+    injured = health.attempt("ESPN injuries", injuries.fetch, [], must=True)
     injured = confirm.add_rotowire_injuries(injured, rw_injuries)
-    lineup_info = {}
-    try:  # projected lineups (DailyFaceoff) vs official NHL rosters: healthy scratches, late changes
-        import lineups
-        playing = [t["abbrev"] for g in todays for t in (g["homeTeam"], g["awayTeam"])]
-        lineup_info = lineups.outs(day, playing)
-        injured = injuries.merge_lineups(injured, lineup_info)
-    except Exception as e:
-        print(f"(couldn't check projected lineups: {e}; using injuries only)")
+    import lineups  # projected lineups (DailyFaceoff) vs official NHL rosters: healthy scratches, late changes
+    playing = [t["abbrev"] for g in todays for t in (g["homeTeam"], g["awayTeam"])]
+    lineup_info = health.attempt("DailyFaceoff lineups", lambda: lineups.outs(day, playing), {}, must=True)
+    injured = injuries.merge_lineups(injured, lineup_info)
     try:  # remove missing regulars, replace with replacement-level players
         inj = injuries.adjustments(injured, season, injuries.team_games_this_season(games, season))
     except Exception as e:
@@ -524,6 +513,8 @@ def today(day=None):
             print(f"(couldn't record actual starters: {e})")
         store.sync_log(paper.read_log())
         print(f"(paper log: {added} new games, {upgraded} newly flagged, in {paper.LOG})")
+    bad = health.finish()
+    print("(all data sources OK)" if not bad else f"(still failing after retries: {', '.join(bad)})")
 
 
 if __name__ == "__main__":
