@@ -179,6 +179,13 @@ check("supabase failure never stops a run", store.record_run("2026-10-03", run_r
 store.URL = ""
 check("skipped when not configured", store.record_run("2026-10-03", run_rows) is None)
 
+print("monthly check-up (sections that don't need the full model run)")
+import retune
+g_season = retune.season_rows(2026)
+cl, _ = retune.calls_section(g_season); gl, _ = retune.goalie_section(g_season); cal, _ = retune.calibration_section(g_season)
+check("monthly report sections build from the real log", any("| SLAM |" in x for x in cl) and any("actually started" in x for x in gl)
+      and any("finished games" in x or "No finished" in x for x in cal))
+
 print("dashboard")
 dashboard.OUT = SP + "site/index.html"
 import paths; paper.LOG = paths.data("paper_trades.csv")

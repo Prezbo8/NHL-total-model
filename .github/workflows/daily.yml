@@ -103,6 +103,15 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: python src/health.py alert || echo "alert step failed"
 
+      - name: Start this month's model check if it hasn't run yet (backup for GitHub's scheduler)
+        if: ${{ !cancelled() && steps.gate.outputs.run == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ ! -f "data/monthly/$(date +%Y-%m).md" ] && [ -z "$(gh run list -R "${{ github.repository }}" --workflow monthly.yml --status in_progress --json databaseId -q '.[].databaseId')" ]; then
+            gh workflow run monthly.yml -R "${{ github.repository }}" || echo "couldn't start the monthly check"
+          fi
+
       - name: Retry in 5 minutes if a source is still failing (until it works)
         if: ${{ !cancelled() && steps.gate.outputs.run == 'true' }}
         env:
