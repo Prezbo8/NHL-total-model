@@ -1,58 +1,58 @@
 {
  "Action Network now lines": {
   "consecutive_failures": 0,
-  "last_ok": "2026-10-04 11:18 EDT"
+  "last_ok": "2026-10-04 12:17 EDT"
  },
  "Action Network open lines": {
   "consecutive_failures": 0,
-  "last_ok": "2026-10-04 11:18 EDT"
+  "last_ok": "2026-10-04 12:17 EDT"
  },
  "DailyFaceoff goalies": {
   "consecutive_failures": 0,
-  "last_ok": "2026-10-04 11:18 EDT"
+  "last_ok": "2026-10-04 12:17 EDT"
  },
  "DailyFaceoff lineups": {
   "consecutive_failures": 0,
-  "last_ok": "2026-10-04 11:18 EDT"
+  "last_ok": "2026-10-04 12:17 EDT"
  },
  "ESPN injuries": {
   "consecutive_failures": 0,
-  "last_ok": "2026-10-04 11:18 EDT"
+  "last_ok": "2026-10-04 12:17 EDT"
  },
  "Goalie data": {
   "consecutive_failures": 0,
-  "last_ok": "2026-10-04 11:18 EDT"
+  "last_ok": "2026-10-04 12:17 EDT"
  },
  "GoaliePost": {
   "consecutive_failures": 0,
-  "last_ok": "2026-10-04 11:18 EDT"
+  "last_ok": "2026-10-04 12:17 EDT"
  },
  "MoneyPuck stats": {
   "consecutive_failures": 0,
-  "last_ok": "2026-10-04 11:18 EDT"
+  "last_ok": "2026-10-04 12:17 EDT"
  },
  "NHL EDGE speed": {
   "consecutive_failures": 0,
-  "last_ok": "2026-10-04 11:18 EDT"
+  "last_ok": "2026-10-04 12:17 EDT"
  },
  "NHL schedule": {
   "consecutive_failures": 0,
-  "last_ok": "2026-10-04 11:18 EDT"
+  "last_ok": "2026-10-04 12:17 EDT"
  },
  "NHL schedule (yesterday)": {
   "consecutive_failures": 0,
-  "last_ok": "2026-10-04 11:18 EDT"
+  "last_ok": "2026-10-04 12:17 EDT"
  },
  "Rotowire": {
   "consecutive_failures": 0,
-  "last_ok": "2026-10-04 11:18 EDT"
+  "last_ok": "2026-10-04 12:17 EDT"
  },
  "Sportsbook lines": {
   "consecutive_failures": 0,
-  "last_ok": "2026-10-04 11:18 EDT"
+  "last_ok": "2026-10-04 12:17 EDT"
  },
  "Supabase": {
   "consecutive_failures": 0,
-  "last_ok": "2026-10-04 11:18 EDT"
+  "last_ok": "2026-10-04 12:17 EDT"
  }
 }
