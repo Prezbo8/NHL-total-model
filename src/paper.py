@@ -30,7 +30,9 @@ COLS = ["date", "away", "home", "proj", "proj_away", "proj_home", "cutoff", "fla
         "away_out", "home_out", "away_dtd", "home_dtd", "away_lineup", "home_lineup",
         # recent form + head-to-head context (not used in the projection)
         "away_l10_n", "away_l10_avg", "away_l10_7", "home_l10_n", "home_l10_avg", "home_l10_7",
-        "h2h_n", "h2h_avg", "h2h_7", "h2h_last", "trend_lean"] + [
+        "h2h_n", "h2h_avg", "h2h_7", "h2h_last", "trend_lean",
+        # goalie confirmation sources (confirm.py) and, after the game, who actually started (NHL box score)
+        "game_id", "away_goalie_src", "home_goalie_src", "away_goalie_actual", "home_goalie_actual"] + [
         f"{s}_{c}" for s in ("away", "home") for c in ("ev", "pp", "oth", "gadj", "b2badj", "spd", "inj")]
 BREAKDOWN = [f"{s}_{c}" for s in ("away", "home") for c in ("ev", "pp", "oth", "gadj", "b2badj", "spd", "inj")]
 # latest run's numbers for games that haven't started (what the dashboard shows); the columns above
@@ -55,7 +57,7 @@ def read_log():
         d[c] = d[c].map(was_flagged_now).astype(bool)
     for c in ("result", "result_best", "best_book", "away_goalie_now", "home_goalie_now", "updated_at", "flagged_at",
               "away_goalie", "home_goalie", "away_out", "home_out", "away_dtd", "home_dtd", "away_lineup", "home_lineup",
-              "h2h_last", "trend_lean"):
+              "h2h_last", "trend_lean", "away_goalie_src", "home_goalie_src", "away_goalie_actual", "home_goalie_actual"):
         d[c] = d[c].astype(object)
     return d
 
@@ -88,7 +90,8 @@ def log_games(rows):
             for c in ("away_goalie_now", "home_goalie_now", "away_b2b", "home_b2b", "updated_at",
                       "away_out", "home_out", "away_dtd", "home_dtd", "away_lineup", "home_lineup",
                       "away_l10_n", "away_l10_avg", "away_l10_7", "home_l10_n", "home_l10_avg", "home_l10_7",
-                      "h2h_n", "h2h_avg", "h2h_7", "h2h_last", "trend_lean") + tuple(NOW):
+                      "h2h_n", "h2h_avg", "h2h_7", "h2h_last", "trend_lean", "game_id",
+                      "away_goalie_src", "home_goalie_src") + tuple(NOW):
                 old.loc[i, c] = r[c]
             if not was_flagged_now(old.at[i, "flag"]):  # best book is informational until a game is flagged
                 for c in ("best_book", "best_total", "best_over", "best_under"):
@@ -105,6 +108,31 @@ def log_games(rows):
     out = pd.concat([old, added], ignore_index=True) if len(old) else added
     out.reindex(columns=COLS).to_csv(LOG, index=False)
     return len(added), upgraded
+
+
+def record_actual_starters(d, days_back=7):
+    """Fill {away,home}_goalie_actual (who really started, from the NHL box score) for finished games of the
+    last week that don't have it yet. Shows on the results and measures how often the predicted starter was right."""
+    import confirm
+    recent = (pd.Timestamp(date.today()) - pd.Timedelta(days=days_back)).strftime("%Y-%m-%d")
+    need = d[d.final_total.notna() & d.away_goalie_actual.isna() & (d.date >= recent)]
+    for day in sorted(need.date.unique()):
+        try:
+            with urllib.request.urlopen(fetch(f"https://api-web.nhle.com/v1/score/{day}")) as f:
+                ids = {(g["awayTeam"]["abbrev"], g["homeTeam"]["abbrev"]): g["id"] for g in json.load(f)["games"]}
+        except Exception as e:
+            print(f"(couldn't read {day} games for actual starters: {e})")
+            continue
+        for i in need[need.date == day].index:
+            gid = ids.get((d.at[i, "away"], d.at[i, "home"]))
+            try:
+                act = confirm.actual_starters(gid) if gid else {}
+            except Exception as e:
+                print(f"(couldn't read box score {gid}: {e})")
+                continue
+            for side in ("away", "home"):
+                if side in act:
+                    d.at[i, f"{side}_goalie_actual"] = act[side][0]
 
 
 def settle():
@@ -141,6 +169,7 @@ def settle():
                     rb = "W" if a + h > bbt else "P" if a + h == bbt else "L"
                     d.at[i, "result_best"] = rb
                     d.at[i, "profit_best"] = {"W": float(grade.payout(bbo)), "P": 0.0, "L": -1.0}[rb]
+    record_actual_starters(d)
     d.to_csv(LOG, index=False)
     import store  # mirror finals and paper results to Supabase (skipped when not configured)
     store.sync_log(read_log())

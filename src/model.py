@@ -379,12 +379,23 @@ def today(day=None):
             shop.setdefault(key, []).append((names.get(r["book"], str(r["book"])), r["total"], int(r["over"]), int(r["under"])))
     except Exception as e:
         print(f"(couldn't read sportsbook lines for line shopping: {e})")
+    import confirm
+    try:  # second source for starting goalies + injuries (Rotowire)
+        rw_goalies, rw_injuries = confirm.rotowire()
+    except Exception as e:
+        print(f"(couldn't read Rotowire: {type(e).__name__}: {str(e)[:80]})")
+        rw_goalies, rw_injuries = {}, {}
+    # starting goalies: DailyFaceoff + Rotowire + GoaliePost combined (confirm.combine)
+    dfo_by_team = {t["abbrev"]: dfo.get(norm_name(f'{t["placeName"]["default"]} {t["commonName"]["default"]}'), (None, None))
+                   for g in todays for t in (g["homeTeam"], g["awayTeam"])}
+    goalie_calls = {t: confirm.combine(r) for t, r in confirm.gather(dfo_by_team, rw_goalies).items()}
     import injuries
     try:  # skater injuries (ESPN)
         injured = injuries.fetch()
     except Exception as e:
         print(f"(couldn't read ESPN injuries: {e})")
         injured = []
+    injured = confirm.add_rotowire_injuries(injured, rw_injuries)
     lineup_info = {}
     try:  # projected lineups (DailyFaceoff) vs official NHL rosters: healthy scratches, late changes
         import lineups
@@ -404,9 +415,10 @@ def today(day=None):
     recent = st[(st.started == 1) & (st.season >= st.season.max() - 1)].sort_values("gameId")
 
     def starter(team_abbrev, team_name):
-        name, status = dfo.get(norm_name(team_name), (None, None))
-        if name and name.lower() in ids:
-            return name, ids[name.lower()], status
+        name, status, _, pid = goalie_calls.get(team_abbrev, (None, None, "", None))
+        if name:
+            pid = pid or ids.get(name.lower()) or next((p for n, p in ids.items() if confirm.same(n, name)), None)
+            return name, pid, status  # no id = no history in the goalie file: rated as an average goalie
         # fallback: whoever started most of the team's last 10 games
         r = recent[recent.team == team_abbrev].tail(10)
         if not len(r):
@@ -483,6 +495,8 @@ def today(day=None):
                          "logged_at": pd.Timestamp.now().strftime("%Y-%m-%d %H:%M"),
                          "away_b2b": a in tired, "home_b2b": h in tired,
                          "away_goalie_now": f"{ag} ({as_})", "home_goalie_now": f"{hg} ({hs})",
+                         "away_goalie_src": goalie_calls.get(a, (None, None, None))[2] or None,
+                         "home_goalie_src": goalie_calls.get(h, (None, None, None))[2] or None,
                          "updated_at": pd.Timestamp.now().strftime("%Y-%m-%d %H:%M"),
                          "away_out": "; ".join(f"{n}|{o:.4f}|{d:.4f}" for n, o, d in ia["out"]) or None,
                          "home_out": "; ".join(f"{n}|{o:.4f}|{d:.4f}" for n, o, d in ih["out"]) or None,

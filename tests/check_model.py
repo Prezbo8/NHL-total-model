@@ -98,6 +98,31 @@ check("closing lines parse", len(rows) == 8, f"{len(rows)} games")
 abbrs = {grade.ABBR.get(x, x) for r in rows for x in (r["home"], r["away"])}
 check("sportsbook team codes match NHL codes", abbrs <= set(g.home), str(sorted(abbrs - set(g.home))))
 
+print("goalie + injury confirmations (offline)")
+import confirm
+C = confirm.combine
+check("3 sources agree -> Confirmed, keeps full name + NHL id",
+      C([("DailyFaceoff", "U. Luukkonen", "likely", None), ("Rotowire", "Ukko-Pekka Luukkonen", "confirmed", None),
+         ("GoaliePost", "Ukko-Pekka Luukkonen", "confirmed", 8480045)])[::3] == ("Ukko-Pekka Luukkonen", 8480045)
+      and C([("GoaliePost", "Igor Shesterkin", "confirmed", 1)])[1] == "Confirmed")
+check("sources confirm different goalies -> Conflict, majority wins",
+      C([("DailyFaceoff", "Igor Shesterkin", "confirmed"), ("Rotowire", "Jonathan Quick", "confirmed"),
+         ("GoaliePost", "Igor Shesterkin", "confirmed")])[:2] == ("Igor Shesterkin", "Conflict"))
+check("a confirmation beats a 'likely' for someone else; no sources -> Projected",
+      C([("DailyFaceoff", "Igor Shesterkin", "likely"), ("GoaliePost", "Jonathan Quick", "confirmed")])[:2] == ("Jonathan Quick", "Confirmed")
+      and C([])[:2] == (None, "Projected") and not confirm.same("Eric Comrie", "Mike Comrie"))
+inj = confirm.add_rotowire_injuries([{"team": "CHI", "name": "Bowen Byram", "pos": "D", "status": "Day-To-Day", "ret": None, "note": ""}],
+                                    {"CHI": [("Bowen Byram", "D", "OUT"), ("Connor Bedard", "C", "IR-NR"), ("Spencer Knight", "G", "OUT")]})
+check("Rotowire injuries merged: day-to-day -> out, new IR added, goalies skipped",
+      [(r["name"], r["status"]) for r in inj] == [("Bowen Byram", "Out"), ("Connor Bedard", "Out")])
+gc = dashboard.goalie_compact
+check("goalie badges: conflict, sources in hover, actual starter on results",
+      "gb conflict" in gc("A B (Conflict)", "A B (Conflict)", "DailyFaceoff: ✓ (confirmed)")
+      and "Sources: Rotowire" in gc("A B (Confirmed)", "A B (Confirmed)", "Rotowire: ✓ (confirmed)")
+      and "gb chg" in gc("Igor Shesterkin (Confirmed)", "Igor Shesterkin (Confirmed)", None, "D. Garand")
+      and "gb ok" in gc("Dylan Garand (Likely)", "Dylan Garand (Likely)", None, "D. Garand")
+      and "gb chg" in gc("Pyotr Kochetkov (Confirmed)", "Brandon Bussi (Confirmed)", None, "B. Bussi"))  # projection used Kochetkov
+
 print("supabase run history (fake database, nothing is sent)")
 import store
 schema = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "supabase", "schema.sql")).read()

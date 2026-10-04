@@ -390,18 +390,30 @@ def short_name(full):
     return f"{first[0]}. {last}"
 
 
-def goalie_compact(logged, now):
-    """Table version: last name + short badge; full details in the hover text."""
+def goalie_compact(logged, now, src=None, actual=None):
+    """Table version: last name + short badge; full details in the hover text.
+    src = which sources confirmed him (confirm.py); actual = who really started (after the game)."""
+    import confirm
     now = now if isinstance(now, str) else logged
     nm, status = goalie_parts(now)
     st = status.lower()
+    srcs = f" Sources: {src}." if isinstance(src, str) and src else ""
+    if isinstance(actual, str) and actual:
+        # finished game: show who really started, and whether the projection had the right goalie
+        used, _ = goalie_parts(logged)  # the goalie the shown projection was built with
+        right = used != "unknown" and confirm.same(actual, used)
+        badge = (f"<span class='gb ok'>{tip('✓', f'{actual} started, as projected.')}</span>" if right else
+                 f"<span class='gb chg'>{tip('⇄ ' + e(used.split(' ', 1)[-1]), f'{actual} started, but the projection used {used}.')}</span>")
+        return f"<span class='gc'>{e(short_name(actual) if '.' not in actual else actual)} {badge}</span>"
     last = short_name(nm) if nm != "unknown" else "?"
-    if "confirmed" in st and "un" not in st:
-        badge = f"<span class='gb ok'>{tip('✓', f'{nm}: confirmed starter (DailyFaceoff).')}</span>"
+    if "conflict" in st:
+        badge = f"<span class='gb conflict'>{tip('⚠', f'{nm}: sources disagree on the starter; the projection uses the one most sources back.{srcs}')}</span>"
+    elif "confirmed" in st and "un" not in st:
+        badge = f"<span class='gb ok'>{tip('✓', f'{nm}: confirmed starter.{srcs}')}</span>"
     elif "likely" in st:
-        badge = f"<span class='gb likely'>{tip('Likely', f'{nm}: expected to start, not confirmed yet.')}</span>"
+        badge = f"<span class='gb likely'>{tip('Likely', f'{nm}: expected to start, not confirmed yet.{srcs}')}</span>"
     else:
-        badge = f"<span class='gb proj'>{tip('Proj', f'{nm}: starter not announced yet (DailyFaceoff guess or usual starter).')}</span>"
+        badge = f"<span class='gb proj'>{tip('Proj', f'{nm}: starter not announced yet (best guess or usual starter).{srcs}')}</span>"
     old_nm, _ = goalie_parts(logged)
     changed = ""
     if old_nm != nm and old_nm != "unknown":
@@ -539,7 +551,7 @@ def day_table(g):
     else:
         head += (f"<th class='gcol ctr'>{tip('Proj total')}</th><th class='ctr'>{tip('P(7+)')}</th>"
                  f"<th class='ctr'>{tip('Line', 'Consensus total: opening line → now, and the over price (−120 = risk 120 to win 100). ★ FLAG = the model’s over pick.')}</th>")
-    head += (f"<th class='gcol'>{tip('Goalie', 'Starting goalie: ✓ confirmed, Likely, or Proj (not announced). ⇄ = changed after the game was logged.')}</th>"
+    head += (f"<th class='gcol'>{tip('Goalie', 'Starting goalie, checked against DailyFaceoff, Rotowire and GoaliePost: ✓ confirmed, Likely, Proj (not announced), ⚠ sources disagree. Hover the badge for which sources said what. On results: who actually started (NHL box score), ⇄ = not the goalie the projection used.')}</th>"
              f"<th class='num bcol'>{tip('5v5')}</th><th class='num'>{tip('PP')}</th><th class='num'>{tip('Oth')}</th>"
              f"<th class='num'>{tip('Gl', cls='tr')}</th><th class='num'>{tip('B2B', cls='tr')}</th><th class='num'>{tip('Spd', cls='tr')}</th>"
              f"<th class='num'>{tip('Inj', cls='tr')}</th>")
@@ -570,7 +582,7 @@ def day_table(g):
             g_ = lambda c: getattr(r, f"{side}_{c}", float("nan"))
             def adj(v):
                 return "–" if pd.isna(v) or abs(v) < 0.0005 else f"{v * 100:+.1f}%"
-            cells = f"<td class='gl gcol'>{goalie_compact(g_('goalie'), g_('goalie_now'))}</td>"
+            cells = f"<td class='gl gcol'>{goalie_compact(g_('goalie'), g_('goalie_now'), g_('goalie_src'), g_('goalie_actual'))}</td>"
             if pd.isna(g_("ev")):
                 return cells + "<td class='num muted bcol' colspan='7'>n/a</td>"
             def td(stat, text, extra=""):
@@ -880,7 +892,7 @@ footer{margin-top:32px;font-size:13px;color:var(--muted)}a{color:var(--accent)}
 .small{font-size:12px}
 .gb{display:inline-block;font-size:10px;font-weight:800;letter-spacing:.03em;padding:1px 6px;border-radius:999px;margin-left:4px;vertical-align:1px}
 .gb.ok{background:rgba(26,127,55,.15);color:var(--pos)}.gb.likely{background:rgba(201,151,0,.18);color:var(--gold)}
-.gb.proj{background:var(--ice);color:var(--muted)}.gb.chg{background:var(--neg);color:#fff}
+.gb.proj{background:var(--ice);color:var(--muted)}.gb.conflict{background:rgba(220,38,38,.18);color:var(--neg)}.gb.chg{background:var(--neg);color:#fff}
 .goalie{white-space:normal;min-height:34px}
 .injuries{min-height:16px;font-size:11px;line-height:1.35;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.inj.out{color:var(--neg);font-weight:700}.inj.dtd{color:var(--muted)}
 .b2b{display:inline-block;font-size:10px;font-weight:800;padding:1px 6px;border-radius:4px;background:var(--red);color:#fff;
