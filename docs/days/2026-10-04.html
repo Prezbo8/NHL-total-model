@@ -1,0 +1,228 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>NHL Total Model · 2026-10-04</title>
+<link rel="icon" type="image/svg+xml" href="../favicon.svg" media="(prefers-color-scheme: light)">
+<link rel="icon" type="image/svg+xml" href="../favicon-dark.svg" media="(prefers-color-scheme: dark)">
+<link rel="icon" type="image/png" sizes="32x32" href="../favicon-32.png">
+<link rel="apple-touch-icon" href="../apple-touch-icon.png"><style>
+:root{--bg:#f3f5f8;--card:#fff;--ink:#0f1a2a;--muted:#5f6b7a;--line:#dfe4ea;--ice:#e8eef5;
+  --accent:#1f6feb;--accent-soft:#c9dbf7;--gold:#c99700;--gold-soft:#fff4cc;--red:#c8102e;--pos:#1a7f37;--neg:#c62828}
+@media (prefers-color-scheme:dark){:root{--bg:#0b1119;--card:#131c27;--ink:#e8edf3;--muted:#93a1b2;--line:#233040;--ice:#18222f;
+  --accent:#58a6ff;--accent-soft:#1d3554;--gold:#e3b341;--gold-soft:#2b2410;--red:#ff5a6e;--pos:#3fb950;--neg:#f85149;color-scheme:dark}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+.wrap{max-width:1360px;margin:0 auto;padding:0 16px 64px}
+/* hero: a rink seen from above - red center line, blue lines, faceoff circle */
+.hero{position:relative;overflow:hidden;margin:0 -16px;padding:34px 24px 30px;color:#fff;
+  background:linear-gradient(90deg,transparent calc(50% - 2px),rgba(200,16,46,.85) calc(50% - 2px),rgba(200,16,46,.85) calc(50% + 2px),transparent calc(50% + 2px)),
+    linear-gradient(90deg,transparent 30%,rgba(31,111,235,.75) 30%,rgba(31,111,235,.75) calc(30% + 6px),transparent calc(30% + 6px),
+      transparent calc(70% - 6px),rgba(31,111,235,.75) calc(70% - 6px),rgba(31,111,235,.75) 70%,transparent 70%),
+    radial-gradient(circle at 50% 50%,transparent 58px,rgba(31,111,235,.6) 59px,rgba(31,111,235,.6) 61px,transparent 62px),
+    linear-gradient(160deg,#0d2440,#0a1a2e 60%,#081422)}
+.lastrun{position:absolute;top:14px;right:18px;text-align:right;font-size:11px;line-height:1.35;color:#c9d6e6;z-index:2}
+.lastrun b{display:block;font-size:13px;color:#fff;font-weight:700}.lastrun .tip{border-bottom-color:rgba(255,255,255,.45)}
+@media (max-width:600px){.lastrun{position:static;text-align:left;margin-top:8px}}
+.hero h1{margin:0;font-size:clamp(28px,5vw,44px);letter-spacing:-.02em;position:relative}
+.hero p{margin:6px 0 0;color:#c9d6e6;position:relative}
+.hero .stats{display:flex;gap:12px;flex-wrap:wrap;margin-top:18px;position:relative}
+.hero .stat{background:rgba(255,255,255,.1);backdrop-filter:blur(4px);border:1px solid rgba(255,255,255,.18);border-radius:10px;padding:8px 14px}
+.hero .stat b{font-size:22px;display:block}.hero .stat span{font-size:12px;color:#c9d6e6;text-transform:uppercase;letter-spacing:.05em}
+section{margin-top:28px}
+h2{margin:0 0 4px;font-size:21px;letter-spacing:-.01em}
+.sub{margin:0 0 14px;color:var(--muted)}.muted{color:var(--muted)}
+.rule{background:var(--card);border:1px solid var(--line);border-left:5px solid var(--gold);border-radius:10px;padding:12px 16px}
+.retro{border-left:4px solid var(--muted);padding:8px 14px;border-radius:8px;background:var(--ice);margin:0 0 12px}
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:14px}
+.card{position:relative;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 14px 12px;
+  display:flex;flex-direction:column}
+.card.flagged{border:2px solid var(--gold);background:linear-gradient(180deg,var(--gold-soft),var(--card) 55%)}
+.flagbar{margin:-14px -14px 8px;padding:6px 14px;min-height:29px;border-radius:12px 12px 0 0;background:var(--gold);color:#1a1200;font-size:12px;font-weight:800;letter-spacing:.05em}
+.flagbar.empty{background:transparent;padding:0;min-height:0;margin-bottom:0}
+.team{display:flex;align-items:center;gap:10px;padding:6px 0;min-height:78px}
+.team+.team{border-top:1px dashed var(--line)}
+.logo{display:inline-block;flex:none}.logo img{width:100%;height:100%;display:block}
+.tname{flex:1;min-width:0}.full{font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.goalie{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bar{position:relative;height:6px;border-radius:3px;background:var(--ice);margin-top:5px}
+.bar .fill{height:100%;border-radius:3px;background:var(--accent-soft)}.bar .fill.hot{background:var(--accent)}
+.bar .cut{position:absolute;top:-3px;width:2px;height:12px;background:var(--ink);opacity:.55;border-radius:1px}
+.pg{text-align:right;min-width:62px}.pg b{font-size:20px;font-variant-numeric:tabular-nums}
+.hot-tag{display:block;font-size:10px;font-weight:800;color:var(--accent);letter-spacing:.06em}
+.score{font-size:28px;font-weight:800;min-width:40px;text-align:right;font-variant-numeric:tabular-nums;line-height:1.1}
+.score small{display:block;font-size:11px;font-weight:600;color:var(--muted);white-space:nowrap}
+.meta{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px 12px;align-items:start;margin-top:10px;padding-top:10px;border-top:1px solid var(--line)}
+.meta .kv b{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.meta .kv.wide{grid-column:span 2}
+.kv{display:flex;flex-direction:column;min-width:0}.kv>span{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);white-space:nowrap}
+.kv b{font-variant-numeric:tabular-nums}.kv small{color:var(--muted);font-weight:500}
+.big-total{font-size:22px;font-weight:800;line-height:1}
+.pill{display:inline-block;font-size:12px;font-weight:800;padding:3px 10px;border-radius:999px;background:var(--ice);letter-spacing:.03em}
+.pill.over{background:var(--pos);color:#fff}.pill.under{background:var(--neg);color:#fff}.muted-pill{color:var(--muted)}
+.res.W{color:var(--pos)}.res.L{color:var(--neg)}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:16px}
+.tile{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+.tile .label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+.num-big{font-size:28px;font-weight:800;font-variant-numeric:tabular-nums}
+.panel{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px}
+.scroll{overflow-x:auto}table{border-collapse:collapse;width:100%;font-size:14px}
+th,td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}
+th{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:700}
+.num{text-align:right;font-variant-numeric:tabular-nums}tr.total td{font-weight:800}
+.pos{color:var(--pos)}.neg{color:var(--neg)}td.matchup{display:flex;align-items:center;gap:4px}
+ul.notes{margin:12px 0 0;padding-left:20px;color:var(--muted)}
+dl{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;margin:12px 0 0}
+dl div{background:var(--ice);border-radius:10px;padding:10px 12px}dt{font-weight:800}dd{margin:2px 0 0;color:var(--muted)}
+footer{margin-top:32px;font-size:13px;color:var(--muted)}a{color:var(--accent)}
+.small{font-size:12px}
+.gb{display:inline-block;font-size:10px;font-weight:800;letter-spacing:.03em;padding:1px 6px;border-radius:999px;margin-left:4px;vertical-align:1px}
+.gb.ok{background:rgba(26,127,55,.15);color:var(--pos)}.gb.likely{background:rgba(201,151,0,.18);color:var(--gold)}
+.gb.proj{background:var(--ice);color:var(--muted)}.gb.conflict{background:rgba(220,38,38,.18);color:var(--neg)}.gb.chg{background:var(--neg);color:#fff}
+.goalie{white-space:normal;min-height:34px}
+.injuries{min-height:16px;font-size:11px;line-height:1.35;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.inj.out{color:var(--neg);font-weight:700}.inj.dtd{color:var(--muted)}
+.b2b{display:inline-block;font-size:10px;font-weight:800;padding:1px 6px;border-radius:4px;background:var(--red);color:#fff;
+  margin-left:4px;vertical-align:2px;letter-spacing:.04em}
+.why{margin-top:auto;padding-top:10px;border-top:1px solid var(--line)}
+.meta+.why{margin-top:auto}.card .meta{margin-bottom:10px}
+.why-h{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:var(--accent)}
+.card.flagged .why-h{color:var(--gold)}
+.why table{font-size:12px;margin-top:4px}.why th,.why td{padding:4px 3px}.why th{font-size:10px}
+.why td:first-child{white-space:nowrap}
+.why td:first-child .logo{vertical-align:-4px;margin-right:2px}
+.small-hero{padding:24px 24px 20px}.small-hero h1{font-size:clamp(22px,4vw,32px)}
+.daynav{display:flex;justify-content:space-between;align-items:center;margin:16px 0 0;font-weight:700}
+.legend{margin:8px 0 0}
+/* table layout: two rows per game, sized to fit a desktop screen */
+.gtable{background:var(--card);border:4px solid color-mix(in srgb,var(--muted) 60%,transparent);border-radius:12px;overflow-x:auto}
+table.gt{font-size:12.5px;border-collapse:separate;border-spacing:0;width:100%;table-layout:fixed}
+.gt td,.gt th{overflow:hidden;text-overflow:ellipsis}
+.gt thead tr:not(.sec) th{white-space:normal;line-height:1.25;vertical-align:bottom}
+.gt td[rowspan]{white-space:normal}.gt td[rowspan].nowrap,.gt td[rowspan].tot{white-space:nowrap}
+.gt td.tot{padding-left:3px;padding-right:3px}
+.gt td.pickcell{line-height:1.15;padding-top:2px;padding-bottom:2px}.gt td.pickcell .small{font-size:10.5px}.gt td.pickcell .flagpill{margin-bottom:1px}
+.gt td.tm{white-space:nowrap}.gt td.tm .b2b{margin-left:4px}.gt td.tm img,.gt td.tm picture{margin-right:5px}
+.gt tbody.game tr.away td:not([rowspan]),.gt tbody.game tr.home td:not([rowspan]){height:34px;vertical-align:middle}
+.gt th.num,.gt td.num{text-align:right}.gt th:not(.num),.gt td:not(.num){text-align:left}
+.gt td,.gt th{vertical-align:middle}.gt thead tr:not(.sec) th{vertical-align:bottom}
+.gt td.num,.gt td[rowspan]{font-variant-numeric:tabular-nums}
+.gt th.projh{padding-right:15px}   /* lines the Proj header up with the numbers (room for the HIGH dot) */
+.gt th{background:var(--card);padding:8px 5px;border-bottom:2px solid var(--line);font-size:10px;white-space:nowrap}
+.gt td{padding:4px 5px;border-bottom:none;vertical-align:middle;white-space:nowrap}
+/* each game is its own block: strong border between games */
+.gt tbody.game tr.away td{border-top:4px solid color-mix(in srgb,var(--muted) 60%,transparent)}
+.gt thead + tbody.game tr.away td{border-top:none}
+.gt tbody.game tr.away td:not([rowspan]){padding-top:8px}.gt tbody.game tr.home td:not([rowspan]){padding-bottom:8px}
+.gt tbody.alt td{background:color-mix(in srgb,var(--ice) 45%,transparent)}
+.gt tbody.flagged td{background:var(--gold-soft)}
+.gt tbody.flagged tr.away td:first-child,.gt tbody.flagged tr.home td:first-child{box-shadow:inset 4px 0 0 var(--gold)}
+.gt td.tm,.gt thead tr:not(.sec) th:first-child{padding-left:10px}.gt td.tm img,.gt td.tm picture{vertical-align:middle;margin-right:6px}
+.gt tbody td.t-great,.tier-key .t-great{background:rgba(22,163,74,.50)}.gt tbody td.t-good,.tier-key .t-good{background:rgba(22,163,74,.22)}
+.gt tbody td.t-bad,.tier-key .t-bad{background:rgba(220,38,38,.22)}.gt tbody td.t-trash,.tier-key .t-trash{background:rgba(220,38,38,.50)}
+.tier-key{display:flex;gap:6px;flex-wrap:wrap;align-items:center;font-size:12px;color:var(--muted);margin:6px 0}
+.tier-key span{padding:1px 8px;border-radius:4px;color:var(--ink)}
+.tier-key .t-mid{border:1px solid var(--line)}
+.gt td.proj{font-weight:800;font-size:13px}.gt td.proj.hot{color:var(--accent)}
+.hot-dot{display:inline-block;width:10px;text-align:right;color:var(--accent);font-size:9px;vertical-align:2px}.hot-dot.off{visibility:hidden}
+/* every column gets its own border; sections get a stronger one */
+.gt th,.gt td{border-left:3px solid var(--line)}
+.gt tr > :first-child{border-left:none}
+.gt tbody.game tr.home td:not([rowspan]){border-top:3px solid var(--line)}
+.gt tr.srcrow td{border-left:none;border-top:1px dashed color-mix(in srgb,var(--line) 70%,transparent)}
+.gt td.gcol,.gt th.gcol,.gt td.bcol,.gt th.bcol{border-left:4px solid color-mix(in srgb,var(--muted) 60%,transparent)}
+.gt tr.sec th{border-left:none}.gt tr.sec th.gcol,.gt tr.sec th.bcol{border-left:4px solid color-mix(in srgb,var(--muted) 60%,transparent)}
+.gt thead tr:not(.sec) th{border-bottom:4px solid color-mix(in srgb,var(--muted) 60%,transparent)}
+.gt td[rowspan],.gt td[rowspan].num,.gt th.ctr{text-align:center}
+.gt tr.sec th{font-size:10.5px;font-weight:800;letter-spacing:.08em;color:var(--ink);text-align:left;padding:7px 8px 5px;
+  border-bottom:1px solid var(--line);background:color-mix(in srgb,var(--ice) 60%,var(--card))}
+.gt tr.sec th:first-child{border-top-left-radius:12px}.gt tr.sec th:last-child{border-top-right-radius:12px}
+.gt td[rowspan]{vertical-align:middle;font-weight:600}.gt td.p7{font-weight:800}
+.gt td.big-total{font-size:18px;font-weight:800}
+.gt td.tot .big-total{display:inline-block;width:2.1ch;text-align:right;font-size:18px;margin-right:6px;vertical-align:-2px}
+.gt .score-cell{font-size:15px;font-weight:800}
+.gt td.gl{white-space:normal}.gt .gc{white-space:normal;line-height:1.5}.gt .gc .gb{margin-left:2px;white-space:nowrap}
+.gt td.outs{white-space:normal;padding-top:5px;padding-bottom:5px}
+.gt .outlist{display:flex;flex-direction:column;gap:2px;font-size:11px;line-height:1.3}
+.gt .outlist .ip{color:var(--neg)}.gt .outlist .ip b{font-weight:700;white-space:nowrap}.gt .outlist .ip.dtd{color:var(--muted)}
+.gt .itag{font-size:9.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.03em}
+.gt .pill{font-size:11px;padding:2px 7px}
+.was{font-size:9.5px;color:var(--muted);white-space:nowrap}.was .tip{border-bottom-style:dotted}
+.callpill{display:inline-block;font-size:10px;font-weight:800;padding:1px 8px;border-radius:999px;margin-bottom:2px;letter-spacing:.04em}
+.callpill.c-slam{background:var(--gold);color:#1a1200}.callpill.c-1u{border:1.5px solid var(--gold);color:var(--ink)}
+.callpill.c-avoid{border:1px solid var(--line);color:var(--muted);font-weight:700}.callpill .tip{border-bottom:none}
+.flagpill{display:inline-block;background:var(--gold);color:#1a1200;font-size:10px;font-weight:800;padding:1px 7px;border-radius:999px;margin-bottom:2px}
+.gt tr.srcrow td{padding:0 8px 6px 38px;white-space:nowrap}
+.gt tr.whyrow td{white-space:normal;padding:7px 14px 9px;text-align:left!important}
+.gt .why-text{font-size:12.5px;line-height:1.5;color:var(--muted);max-width:none}.gt .why-text b{color:var(--ink)}.gt tr.srcrow .lineup-src{margin-top:1px;font-size:10.5px}
+.gt .trends{font-size:11px;color:var(--ink);line-height:1.5}.gt .trends b{font-weight:700}
+.lean{display:inline-block;font-size:10px;font-weight:800;padding:1px 7px;border-radius:999px;margin-left:6px;text-transform:uppercase;letter-spacing:.03em}
+.lean.over{background:rgba(26,127,55,.16);color:var(--pos)}.lean.under{background:rgba(198,40,40,.14);color:var(--neg)}
+.lineup-src{margin-top:6px;font-size:11px;color:var(--muted);line-height:1.35}
+.tip{position:relative;cursor:help;border-bottom:1px dotted currentColor;outline:none}
+#tipbox{position:fixed;left:0;top:0;max-width:260px;white-space:pre-line;font-size:12px;font-weight:500;line-height:1.4;
+  text-align:left;color:#f2f5f9;background:#0f1a2a;border:1px solid rgba(255,255,255,.18);padding:7px 10px;border-radius:8px;
+  box-shadow:0 8px 22px rgba(0,0,0,.3);opacity:0;visibility:hidden;transition:opacity .12s;z-index:100;pointer-events:none}
+#tipbox.on{opacity:1;visibility:visible}
+.tip.injwrap{display:block;border-bottom:none}.tip.injwrap .injuries{text-decoration:underline dotted;text-underline-offset:2px}
+.gb .tip,.b2b .tip,.flagbar .tip,.hot-tag .tip{border-bottom-color:rgba(127,127,127,.6)}
+ul.archive{list-style:none;margin:0;padding:0}ul.archive li{padding:8px 0;border-bottom:1px solid var(--line)}
+ul.archive li:last-child{border-bottom:none}
+</style></head>
+<body><div class="wrap"><header class='hero small-hero'><h1>Sunday, October 4, 2026</h1>
+      <p>5 games · <b>1 flag</b></p></header>
+      <nav class='daynav'><a href='2026-10-03.html'>← Oct 3</a><a href='../index.html'>Dashboard</a><span></span></nav>
+      <section><div class='tier-key'>Breakdown (for scoring):<span class='t-great'>great</span><span class='t-good'>good</span><span class='t-mid'>mid</span><span class='t-bad'>bad</span><span class='t-trash'>trash</span></div><div class='gtable'><table class='gt'><colgroup><col style='width:10.000%'><col style='width:8.000%'><col style='width:10.000%'><col style='width:8.000%'><col style='width:16.000%'><col style='width:17.000%'><col style='width:4.400%'><col style='width:3.900%'><col style='width:3.900%'><col style='width:5.200%'><col style='width:4.800%'><col style='width:4.400%'><col style='width:4.400%'></colgroup><thead><tr class='sec'><th colspan='2'>Team</th><th class='gcol' colspan='3'>Game</th><th class='gcol'>Goalies</th><th class='bcol' colspan='7'>Projection breakdown</th></tr><tr><th><span class='tip tl' tabindex='0' data-tip='Team, away first then home.'>Team</span></th><th class='num projh'><span class='tip ' tabindex='0' data-tip='Projected goals = (5v5 + PP + Oth) × goalie × back-to-back × team speed × injury adjustments.'>Proj</span></th><th class='gcol ctr'><span class='tip ' tabindex='0' data-tip='Projected total goals for the game (away + home), from the model.'>Proj total</span></th><th class='ctr'><span class='tip ' tabindex='0' data-tip='Model&#x27;s chance of 7 or more total goals. 7+ wins an over 6.5 and an over 6 (exactly 6 pushes an over 6). NHL average ≈ 45%.'>P(7+)</span></th><th class='ctr'><span class='tip ' tabindex='0' data-tip='Consensus total: opening line → now, and the over price (−120 = risk 120 to win 100). ★ FLAG = the model’s over pick.'>Line</span></th><th class='gcol'><span class='tip ' tabindex='0' data-tip='Starting goalie, checked against DailyFaceoff, Rotowire and GoaliePost: ✓ confirmed, Likely, Proj (not announced), ⚠ sources disagree. Hover the badge for which sources said what. On results: who actually started (NHL box score), ⇄ = not the goalie the projection used.'>Goalie</span></th><th class='num bcol'><span class='tip ' tabindex='0' data-tip='Goals this team should score at full strength (5 skaters vs 5). Most of a team&#x27;s goals come from here.
+
+Great: above 2.19
+Good: 2.05 to 2.19
+Mid: 1.94 to 2.05
+Bad: 1.83 to 1.94
+Trash: below 1.83'>5v5</span></th><th class='num'><span class='tip ' tabindex='0' data-tip='Goals this team should score on the power play: how good its power play is, how bad the other team&#x27;s penalty kill is, and how many penalties are expected.
+
+Great: above 0.65
+Good: 0.59 to 0.65
+Mid: 0.53 to 0.59
+Bad: 0.46 to 0.53
+Trash: below 0.46'>PP</span></th><th class='num'><span class='tip ' tabindex='0' data-tip='Goals from everything else (4-on-4, overtime, empty nets). Same league-average number for every team, so it has no colors.'>Oth</span></th><th class='num'><span class='tip tr' tabindex='0' data-tip='How the other team&#x27;s goalie changes this team&#x27;s scoring. + = weak goalie, more goals. − = strong goalie, fewer goals.
+
+Great: above +0.4%
+Good: -1.4% to +0.4%
+Mid: -3.0% to -1.4%
+Bad: -5.2% to -3.0%
+Trash: below -5.2%'>Gl</span></th><th class='num'><span class='tip tr' tabindex='0' data-tip='Tired legs: a team that played yesterday scores 8% less. A team whose opponent played yesterday scores 6.5% more.
+
+Great: +6.5% (opponent tired)
+Mid: no back-to-back
+Bad: −2% (both tired)
+Trash: −8% (this team tired)'>B2B</span></th><th class='num'><span class='tip tr' tabindex='0' data-tip='How fast this team skates compared with the opponent (20+ mph bursts last season). Fast teams score a bit more and allow a bit less.
+
+Great: above +1.8%
+Good: +0.5% to +1.8%
+Mid: -0.6% to +0.5%
+Bad: -1.9% to -0.6%
+Trash: below -1.9%'>Spd</span></th><th class='num'><span class='tip tr' tabindex='0' data-tip='Injuries and scratches: this team&#x27;s missing scorers (fewer goals) plus the other team&#x27;s missing defenders (more goals).
+
+Great: above +1.5%
+Good: +0.5% to +1.5%
+Mid: -0.5% to +0.5%
+Bad: -2.0% to -0.5%
+Trash: below -2.0%'>Inj</span></th></tr></thead><tbody class='game flagged '><tr class='away'><td class='tm'><picture class='logo' style='width:22px;height:22px'><source srcset='https://assets.nhle.com/logos/nhl/svg/FLA_dark.svg' media='(prefers-color-scheme: dark)'><img src='https://assets.nhle.com/logos/nhl/svg/FLA_light.svg' alt='FLA' width='22' height='22' loading='lazy'></picture><b title='Florida Panthers'>FLA</b></td><td class='num proj hot'><span class='tip ' tabindex='0' data-tip='Florida Panthers projected goals (high-scoring cutoff 2.98). HIGH: above the cutoff.'>3.14</span><span class='hot-dot'>●</span></td><td class='num gcol big-total' rowspan='2'>6.32</td><td class='num p7' rowspan='2'>49%</td><td rowspan='2'><span class='callpill c-1u'><span class='tip ' tabindex='0' data-tip='Flagged over, but not both teams good at 5-on-5. Went over 53% in 2021-26.'>1U</span></span><br>6.5 → 6.5 <span class='muted'>o-118</span></td><td class='gl gcol'><span class='gc'>J. Markstrom <span class='gb likely'><span class='tip ' tabindex='0' data-tip='Jacob Markstrom: expected to start, not confirmed yet. Sources: GoaliePost: ✓ (likely); DailyFaceoff: Akira Schmid (projected).'>Likely</span></span></span></td><td class='num bcol t-mid' title='mid'>2.03</td><td class='num t-great' title='great'>0.72</td><td class='num'>0.40</td><td class='num t-great' title='great'>+2.6%</td><td class='num t-mid' title='mid'>–</td><td class='num t-bad' title='bad'>-1.6%</td><td class='num t-bad' title='bad'>-1.2%</td></tr><tr class='home'><td class='tm'><picture class='logo' style='width:22px;height:22px'><source srcset='https://assets.nhle.com/logos/nhl/svg/ANA_dark.svg' media='(prefers-color-scheme: dark)'><img src='https://assets.nhle.com/logos/nhl/svg/ANA_light.svg' alt='ANA' width='22' height='22' loading='lazy'></picture><b title='Anaheim Ducks'>ANA</b></td><td class='num proj hot'><span class='tip ' tabindex='0' data-tip='Anaheim Ducks projected goals (high-scoring cutoff 2.98). HIGH: above the cutoff.'>3.18</span><span class='hot-dot'>●</span></td><td class='gl gcol'><span class='gc'>V. Husso <span class='gb likely'><span class='tip ' tabindex='0' data-tip='Ville Husso: expected to start, not confirmed yet. Sources: GoaliePost: ✓ (likely); DailyFaceoff: Lukas Dostal (projected).'>Likely</span></span></span></td><td class='num bcol t-good' title='good'>2.13</td><td class='num t-good' title='good'>0.61</td><td class='num'>0.40</td><td class='num t-good' title='good'>-0.1%</td><td class='num t-mid' title='mid'>–</td><td class='num t-good' title='good'>+1.7%</td><td class='num t-mid' title='mid'>+0.2%</td></tr><tr class='srcrow whyrow'><td colspan='22'><div class='why-text'><b>1U:</b> both teams project as high-scoring (FLA 3.14, ANA 3.18; cutoff 2.98) and the line is 6.5, but FLA is only mid at 5-on-5, so it's an over but not a slam. At 5-on-5, FLA is mid (2.03) and ANA is good (2.13); on the power play, FLA is great (0.72) and ANA is good (0.61). FLA faces Ville Husso, a weak goalie (+2.6%); ANA faces Jacob Markstrom, a beatable goalie (-0.1%). Starters aren't confirmed yet, so this can change. The model projects 6.32 total goals against a 6.5 line, with a 49% chance of 7 or more (a typical game is about 45%). Games like this went over about 53% of the time in 2021-26.</div></td></tr></tbody><tbody class='game alt'><tr class='away'><td class='tm'><picture class='logo' style='width:22px;height:22px'><source srcset='https://assets.nhle.com/logos/nhl/svg/VGK_dark.svg' media='(prefers-color-scheme: dark)'><img src='https://assets.nhle.com/logos/nhl/svg/VGK_light.svg' alt='VGK' width='22' height='22' loading='lazy'></picture><b title='Vegas Golden Knights'>VGK</b></td><td class='num proj hot'><span class='tip ' tabindex='0' data-tip='Vegas Golden Knights projected goals (high-scoring cutoff 2.98). HIGH: above the cutoff.'>3.86</span><span class='hot-dot'>●</span></td><td class='num gcol big-total' rowspan='2'>6.24</td><td class='num p7' rowspan='2'>48%</td><td rowspan='2'><span class='callpill c-avoid'><span class='tip ' tabindex='0' data-tip='Not flagged, or flagged but both teams face strong goalies. These went over only 45-49% in 2021-26.'>AVOID</span></span><br>6.5 → 6.5 <span class='muted'>o-100</span></td><td class='gl gcol'><span class='gc'>A. Hill <span class='gb likely'><span class='tip ' tabindex='0' data-tip='Adin Hill: expected to start, not confirmed yet. Sources: GoaliePost: ✓ (likely); DailyFaceoff: Carter Hart (projected).'>Likely</span></span></span></td><td class='num bcol t-great' title='great'>2.28</td><td class='num t-great' title='great'>0.71</td><td class='num'>0.40</td><td class='num t-great' title='great'>+5.5%</td><td class='num t-great' title='great'>+6.5%</td><td class='num t-good' title='good'>+0.8%</td><td class='num t-good' title='good'>+0.5%</td></tr><tr class='home'><td class='tm'><picture class='logo' style='width:22px;height:22px'><source srcset='https://assets.nhle.com/logos/nhl/svg/VAN_dark.svg' media='(prefers-color-scheme: dark)'><img src='https://assets.nhle.com/logos/nhl/svg/VAN_light.svg' alt='VAN' width='22' height='22' loading='lazy'></picture><b title='Vancouver Canucks'>VAN</b> <span class='b2b'><span class='tip ' tabindex='0' data-tip='Played yesterday: the model cuts this team&#x27;s scoring ~8% and raises its opponent&#x27;s ~6.5%.'>B2B</span></span></td><td class='num proj'><span class='tip ' tabindex='0' data-tip='Vancouver Canucks projected goals (high-scoring cutoff 2.98).'>2.38</span><span class='hot-dot off'>●</span></td><td class='gl gcol'><span class='gc'>K. Lankinen <span class='gb likely'><span class='tip ' tabindex='0' data-tip='Kevin Lankinen: expected to start, not confirmed yet. Sources: GoaliePost: ✓ (likely); DailyFaceoff: Leevi Merilainen (projected).'>Likely</span></span></span></td><td class='num bcol t-trash' title='trash'>1.80</td><td class='num t-trash' title='trash'>0.46</td><td class='num'>0.40</td><td class='num t-good' title='good'>+0.3%</td><td class='num t-trash' title='trash'>-8.0%</td><td class='num t-bad' title='bad'>-1.1%</td><td class='num t-bad' title='bad'>-1.6%</td></tr><tr class='srcrow whyrow'><td colspan='22'><div class='why-text'><b>AVOID:</b> VAN projects under the 2.98-goal high-scoring cutoff (VAN 2.38). The 6.24 total looks high, but most of it comes from VGK; the over rule needs both teams scoring. At 5-on-5, VGK is great (2.28) and VAN is trash (1.80); on the power play, VGK is great (0.71) and VAN is trash (0.46). VGK faces Kevin Lankinen, a weak goalie (+5.5%); VAN faces Adin Hill, a beatable goalie (+0.3%). Starters aren't confirmed yet, so this can change. Other factors: VGK's opponent played yesterday (+6.5%); VAN played yesterday (-8%); injuries cost VAN 1.6%. The model projects 6.24 total goals against a 6.5 line, with a 48% chance of 7 or more (a typical game is about 45%). Games like this went over only 45-49% of the time in 2021-26.</div></td></tr></tbody><tbody class='game '><tr class='away'><td class='tm'><picture class='logo' style='width:22px;height:22px'><source srcset='https://assets.nhle.com/logos/nhl/svg/WPG_dark.svg' media='(prefers-color-scheme: dark)'><img src='https://assets.nhle.com/logos/nhl/svg/WPG_light.svg' alt='WPG' width='22' height='22' loading='lazy'></picture><b title='Winnipeg Jets'>WPG</b></td><td class='num proj'><span class='tip ' tabindex='0' data-tip='Winnipeg Jets projected goals (high-scoring cutoff 2.98).'>2.94</span><span class='hot-dot off'>●</span></td><td class='num gcol big-total' rowspan='2'>5.74</td><td class='num p7' rowspan='2'>43%</td><td rowspan='2'><span class='callpill c-avoid'><span class='tip ' tabindex='0' data-tip='Not flagged, or flagged but both teams face strong goalies. These went over only 45-49% in 2021-26.'>AVOID</span></span><br>5.5 → 5.5 <span class='muted'>o-121</span></td><td class='gl gcol'><span class='gc'>S. Skinner <span class='gb likely'><span class='tip ' tabindex='0' data-tip='Stuart Skinner: expected to start, not confirmed yet. Sources: DailyFaceoff: ✓ (projected); GoaliePost: ✓ (likely).'>Likely</span></span></span></td><td class='num bcol t-bad' title='bad'>1.93</td><td class='num t-mid' title='mid'>0.58</td><td class='num'>0.40</td><td class='num t-great' title='great'>+1.4%</td><td class='num t-mid' title='mid'>–</td><td class='num t-bad' title='bad'>-1.7%</td><td class='num t-great' title='great'>+1.7%</td></tr><tr class='home'><td class='tm'><picture class='logo' style='width:22px;height:22px'><source srcset='https://assets.nhle.com/logos/nhl/svg/DET_dark.svg' media='(prefers-color-scheme: dark)'><img src='https://assets.nhle.com/logos/nhl/svg/DET_light.svg' alt='DET' width='22' height='22' loading='lazy'></picture><b title='Detroit Red Wings'>DET</b></td><td class='num proj'><span class='tip ' tabindex='0' data-tip='Detroit Red Wings projected goals (high-scoring cutoff 2.98).'>2.80</span><span class='hot-dot off'>●</span></td><td class='gl gcol'><span class='gc'>D. Tarasov <span class='gb likely'><span class='tip ' tabindex='0' data-tip='Daniil Tarasov: expected to start, not confirmed yet. Sources: GoaliePost: ✓ (likely); DailyFaceoff: John Gibson (projected).'>Likely</span></span></span></td><td class='num bcol t-bad' title='bad'>1.89</td><td class='num t-mid' title='mid'>0.55</td><td class='num'>0.40</td><td class='num t-mid' title='mid'>-1.4%</td><td class='num t-mid' title='mid'>–</td><td class='num t-good' title='good'>+1.3%</td><td class='num t-bad' title='bad'>-1.2%</td></tr><tr class='srcrow whyrow'><td colspan='22'><div class='why-text'><b>AVOID:</b> WPG and DET project under the 2.98-goal high-scoring cutoff (WPG 2.94, DET 2.80); the line is 5.5, and only 6 and 6.5 qualify. At 5-on-5, WPG is bad (1.93) and DET is bad (1.89); on the power play, WPG is mid (0.58) and DET is mid (0.55). WPG faces Daniil Tarasov, a weak goalie (+1.4%); DET faces Stuart Skinner, an average goalie (-1.4%). Starters aren't confirmed yet, so this can change. Other factors: injuries help WPG 1.7%. The model projects 5.74 total goals against a 5.5 line, with a 43% chance of 7 or more (a typical game is about 45%). Games like this went over only 45-49% of the time in 2021-26.</div></td></tr></tbody><tbody class='game alt'><tr class='away'><td class='tm'><picture class='logo' style='width:22px;height:22px'><source srcset='https://assets.nhle.com/logos/nhl/svg/CGY_dark.svg' media='(prefers-color-scheme: dark)'><img src='https://assets.nhle.com/logos/nhl/svg/CGY_light.svg' alt='CGY' width='22' height='22' loading='lazy'></picture><b title='Calgary Flames'>CGY</b> <span class='b2b'><span class='tip ' tabindex='0' data-tip='Played yesterday: the model cuts this team&#x27;s scoring ~8% and raises its opponent&#x27;s ~6.5%.'>B2B</span></span></td><td class='num proj'><span class='tip ' tabindex='0' data-tip='Calgary Flames projected goals (high-scoring cutoff 2.98).'>2.53</span><span class='hot-dot off'>●</span></td><td class='num gcol big-total' rowspan='2'>5.64</td><td class='num p7' rowspan='2'>42%</td><td rowspan='2'><span class='callpill c-avoid'><span class='tip ' tabindex='0' data-tip='Not flagged, or flagged but both teams face strong goalies. These went over only 45-49% in 2021-26.'>AVOID</span></span><br>5.5 → 5.5 <span class='muted'>o-120</span></td><td class='gl gcol'><span class='gc'>D. Wolf <span class='gb likely'><span class='tip ' tabindex='0' data-tip='Dustin Wolf: expected to start, not confirmed yet. Sources: GoaliePost: ✓ (likely); DailyFaceoff: Devin Cooley (projected).'>Likely</span></span></span></td><td class='num bcol t-bad' title='bad'>1.94</td><td class='num t-trash' title='trash'>0.38</td><td class='num'>0.40</td><td class='num t-mid' title='mid'>-1.6%</td><td class='num t-bad' title='bad'>-2.0%</td><td class='num t-trash' title='trash'>-2.5%</td><td class='num t-bad' title='bad'>-0.9%</td></tr><tr class='home'><td class='tm'><picture class='logo' style='width:22px;height:22px'><source srcset='https://assets.nhle.com/logos/nhl/svg/SEA_dark.svg' media='(prefers-color-scheme: dark)'><img src='https://assets.nhle.com/logos/nhl/svg/SEA_light.svg' alt='SEA' width='22' height='22' loading='lazy'></picture><b title='Seattle Kraken'>SEA</b> <span class='b2b'><span class='tip ' tabindex='0' data-tip='Played yesterday: the model cuts this team&#x27;s scoring ~8% and raises its opponent&#x27;s ~6.5%.'>B2B</span></span></td><td class='num proj hot'><span class='tip ' tabindex='0' data-tip='Seattle Kraken projected goals (high-scoring cutoff 2.98). HIGH: above the cutoff.'>3.11</span><span class='hot-dot'>●</span></td><td class='gl gcol'><span class='gc'>J. Daccord <span class='gb likely'><span class='tip ' tabindex='0' data-tip='Joey Daccord: expected to start, not confirmed yet. Sources: DailyFaceoff: ✓ (projected); GoaliePost: ✓ (likely).'>Likely</span></span></span></td><td class='num bcol t-good' title='good'>2.15</td><td class='num t-mid' title='mid'>0.54</td><td class='num'>0.40</td><td class='num t-good' title='good'>+0.2%</td><td class='num t-bad' title='bad'>-2.0%</td><td class='num t-great' title='great'>+1.8%</td><td class='num t-good' title='good'>+1.1%</td></tr><tr class='srcrow whyrow'><td colspan='22'><div class='why-text'><b>AVOID:</b> CGY projects under the 2.98-goal high-scoring cutoff (CGY 2.53); the line is 5.5, and only 6 and 6.5 qualify. At 5-on-5, CGY is bad (1.94) and SEA is good (2.15); on the power play, CGY is trash (0.38) and SEA is mid (0.54). CGY faces Joey Daccord, an average goalie (-1.6%); SEA faces Dustin Wolf, a beatable goalie (+0.2%). Starters aren't confirmed yet, so this can change. Other factors: both teams played yesterday (-2% each); CGY's team speed costs 2.5%. The model projects 5.64 total goals against a 5.5 line, with a 42% chance of 7 or more (a typical game is about 45%). Games like this went over only 45-49% of the time in 2021-26.</div></td></tr></tbody><tbody class='game '><tr class='away'><td class='tm'><picture class='logo' style='width:22px;height:22px'><source srcset='https://assets.nhle.com/logos/nhl/svg/UTA_dark.svg' media='(prefers-color-scheme: dark)'><img src='https://assets.nhle.com/logos/nhl/svg/UTA_light.svg' alt='UTA' width='22' height='22' loading='lazy'></picture><b title='Utah Mammoth'>UTA</b> <span class='b2b'><span class='tip ' tabindex='0' data-tip='Played yesterday: the model cuts this team&#x27;s scoring ~8% and raises its opponent&#x27;s ~6.5%.'>B2B</span></span></td><td class='num proj'><span class='tip ' tabindex='0' data-tip='Utah Mammoth projected goals (high-scoring cutoff 2.98).'>2.75</span><span class='hot-dot off'>●</span></td><td class='num gcol big-total' rowspan='2'>5.55</td><td class='num p7' rowspan='2'>42%</td><td rowspan='2'><span class='callpill c-avoid'><span class='tip ' tabindex='0' data-tip='Not flagged, or flagged but both teams face strong goalies. These went over only 45-49% in 2021-26.'>AVOID</span></span><br>5.5 → 5.5 <span class='muted'>o-123</span></td><td class='gl gcol'><span class='gc'>K. Vejmelka <span class='gb likely'><span class='tip ' tabindex='0' data-tip='Karel Vejmelka: expected to start, not confirmed yet. Sources: DailyFaceoff: ✓ (projected); GoaliePost: ✓ (likely).'>Likely</span></span></span></td><td class='num bcol t-great' title='great'>2.20</td><td class='num t-mid' title='mid'>0.55</td><td class='num'>0.40</td><td class='num t-trash' title='trash'>-8.5%</td><td class='num t-trash' title='trash'>-8.0%</td><td class='num t-great' title='great'>+3.6%</td><td class='num t-mid' title='mid'>–</td></tr><tr class='home'><td class='tm'><picture class='logo' style='width:22px;height:22px'><source srcset='https://assets.nhle.com/logos/nhl/svg/NYR_dark.svg' media='(prefers-color-scheme: dark)'><img src='https://assets.nhle.com/logos/nhl/svg/NYR_light.svg' alt='NYR' width='22' height='22' loading='lazy'></picture><b title='New York Rangers'>NYR</b></td><td class='num proj'><span class='tip ' tabindex='0' data-tip='New York Rangers projected goals (high-scoring cutoff 2.98).'>2.80</span><span class='hot-dot off'>●</span></td><td class='gl gcol'><span class='gc'>I. Shesterkin <span class='gb likely'><span class='tip ' tabindex='0' data-tip='Igor Shesterkin: expected to start, not confirmed yet. Sources: DailyFaceoff: ✓ (projected); GoaliePost: ✓ (likely).'>Likely</span></span></span></td><td class='num bcol t-trash' title='trash'>1.76</td><td class='num t-good' title='good'>0.60</td><td class='num'>0.40</td><td class='num t-mid' title='mid'>-2.0%</td><td class='num t-great' title='great'>+6.5%</td><td class='num t-trash' title='trash'>-3.4%</td><td class='num t-good' title='good'>+0.9%</td></tr><tr class='srcrow whyrow'><td colspan='22'><div class='why-text'><b>AVOID:</b> UTA and NYR project under the 2.98-goal high-scoring cutoff (UTA 2.75, NYR 2.80); the line is 5.5, and only 6 and 6.5 qualify. At 5-on-5, UTA is great (2.20) and NYR is trash (1.76); on the power play, UTA is mid (0.55) and NYR is good (0.60). UTA faces Igor Shesterkin, a top goalie (-8.5%); NYR faces Karel Vejmelka, an average goalie (-2.0%). Starters aren't confirmed yet, so this can change. Other factors: UTA played yesterday (-8%); UTA's team speed adds 3.6%; NYR's opponent played yesterday (+6.5%); NYR's team speed costs 3.4%. The model projects 5.55 total goals against a 5.5 line, with a 42% chance of 7 or more (a typical game is about 45%). Games like this went over only 45-49% of the time in 2021-26.</div></td></tr></tbody></table></div><p class='muted small legend'>Two rows per game (away, then home). <span style='color:var(--accent)'>●</span> = team projected high-scoring. Proj = (5v5 + PP + Oth) × goalie (Gl) × back-to-back (B2B) × team speed (Spd) × injuries (Inj). Hover or tap any underlined label for an explanation.</p></section>
+<script>
+// one floating explanation box, placed next to the hovered/tapped label (fixed, so tables can't clip it)
+const box = document.createElement("div"); box.id = "tipbox"; document.body.appendChild(box);
+document.addEventListener("mouseover", show); document.addEventListener("focusin", show);
+document.addEventListener("mouseout", hide); document.addEventListener("focusout", hide);
+window.addEventListener("scroll", () => box.classList.remove("on"), {passive: true});
+function show(ev) {
+  const t = ev.target.closest && ev.target.closest(".tip"); if (!t) return;
+  box.textContent = t.dataset.tip; box.classList.add("on");
+  const r = t.getBoundingClientRect(), b = box.getBoundingClientRect();
+  const left = Math.max(8, Math.min(r.left + r.width / 2 - b.width / 2, window.innerWidth - b.width - 8));
+  const top = r.top - b.height - 8 >= 8 ? r.top - b.height - 8 : r.bottom + 8;
+  box.style.left = left + "px"; box.style.top = top + "px";
+}
+function hide(ev) {
+  const t = ev.target.closest && ev.target.closest(".tip");
+  if (t && !(ev.relatedTarget && t.contains(ev.relatedTarget))) box.classList.remove("on");
+}
+</script>
+
+<footer>Paper trading only, not betting advice · Team logos © NHL and its teams ·
+<a href="https://github.com/Prezbo8/nhl-total-model">github.com/Prezbo8/nhl-total-model</a></footer>
+</div></body></html>
