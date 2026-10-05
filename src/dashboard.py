@@ -559,13 +559,13 @@ def day_table(g):
         head += (f"<th class='gcol ctr'>{tip('Proj total')}</th><th class='ctr'>{tip('P(7+)')}</th>"
                  f"<th class='ctr'>{tip('Line', 'Consensus total: opening line → now, and the over price (−120 = risk 120 to win 100). ★ FLAG = the model’s over pick.')}</th>")
     head += (f"<th class='gcol'>{tip('Goalie', 'Starting goalie, checked against DailyFaceoff, Rotowire and GoaliePost: ✓ confirmed, Likely, Proj (not announced), ⚠ sources disagree. Hover the badge for which sources said what. On results: who actually started (NHL box score), ⇄ = not the goalie the projection used.')}</th>"
-             f"<th class='num bcol'>{tip('5v5')}</th><th class='num'>{tip('PP')}</th><th class='num'>{tip('Oth')}</th>"
-             f"<th class='num'>{tip('Gl', cls='tr')}</th><th class='num'>{tip('B2B', cls='tr')}</th><th class='num'>{tip('Spd', cls='tr')}</th>"
+             f"<th class='num bcol'>{tip('5v5')}</th><th class='num'>{tip('PP')}</th>"
+             f"<th class='num'>{tip('Gl', cls='tr')}</th><th class='num'>{tip('Oth', cls='tr')}</th><th class='num'>{tip('B2B', cls='tr')}</th><th class='num'>{tip('Spd', cls='tr')}</th>"
              f"<th class='num'>{tip('Inj', cls='tr')}</th>")
     # fixed widths (%), same section sizes in both tables so they line up:
     # Team 18 | Game/Result 34 | Goalies 17 | Breakdown 31
     widths = ([9, 3.5, 5.5] if final_day else [10, 8]) \
-        + ([8.5, 5.5, 5, 7, 8] if final_day else [10, 8, 16]) + [17] + [4.4, 3.9, 3.9, 5.2, 4.8, 4.4, 4.4]
+        + ([8.5, 5.5, 5, 7, 8] if final_day else [10, 8, 16]) + [17] + [4.4, 3.9, 5.2, 3.9, 4.8, 4.4, 4.4]
     cols = "<colgroup>" + "".join(f"<col style='width:{w:.3f}%'>" for w in widths) + "</colgroup>"
     sections = (f"<tr class='sec'><th colspan='{3 if final_day else 2}'>Team</th>"
                 f"<th class='gcol' colspan='{5 if final_day else 3}'>{'Result' if final_day else 'Game'}</th>"
@@ -595,8 +595,8 @@ def day_table(g):
             def td(stat, text, extra=""):
                 t = tier(stat, g_(stat))
                 return f"<td class='num{extra}{' t-' + t if t else ''}'{f' title={chr(39)}{t}{chr(39)}' if t else ''}>{text}</td>"
-            return cells + (td("ev", f"{g_('ev'):.2f}", " bcol") + td("pp", f"{g_('pp'):.2f}") + td("oth", f"{g_('oth'):.2f}")
-                            + td("gadj", adj(g_("gadj"))) + td("b2badj", adj(g_("b2badj"))) + td("spd", adj(g_("spd")))
+            return cells + (td("ev", f"{g_('ev'):.2f}", " bcol") + td("pp", f"{g_('pp'):.2f}") + td("gadj", adj(g_("gadj")))
+                            + td("oth", f"{g_('oth'):.2f}") + td("b2badj", adj(g_("b2badj"))) + td("spd", adj(g_("spd")))
                             + td("inj", adj(g_("inj"))))
 
         c = call(r, flagged)
