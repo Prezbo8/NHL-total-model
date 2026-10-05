@@ -787,6 +787,37 @@ def record(d):
     return f"<div class='tiles'>{tiles_html}</div>{table}"
 
 
+def rule_check():
+    """SLAM rule check (src/rule_check.py), written once the log reaches 75 settled picks; '' until then."""
+    path = paths.data("rule_check.json")
+    if not os.path.exists(path):
+        return ""
+    import json
+    rc = json.load(open(path))
+    b, lv = rc["backtest"], rc["live"]
+    names = {"current": "Current: both teams good/great at 5v5", "combined": f"Combined 5v5 above {rc['alt_ev_sum']:.2f}"}
+
+    def cell(x, units=True):
+        if not x or not x["n"]:
+            return "<td class='num'>–</td>"
+        roi = x["roi"] * 100
+        return (f"<td class='num'>{x['w']}-{x['l']}-{x['p']}<br><span class='muted small'>{x['over']:.1%} · "
+                f"<span class='{'pos' if roi > 0 else 'neg'}'>{pct(roi)}</span>{f' · {x['units']:+.1f}u' if units else ''}</span></td>")
+    rows = ""
+    for c in ("SLAM", "1U"):
+        for rule in ("current", "combined"):
+            k = f"{rule}|{c}"
+            rows += (f"<tr><td><b>{c}</b> · {names[rule]}</td>{cell(b[k + '|close|all'])}{cell(b[k + '|close|2021-23'], False)}"
+                     f"{cell(b[k + '|close|2023-26'], False)}{cell(b[k + '|open|all'])}{cell(lv[k])}</tr>")
+    return f"""<p class='sub'>Run {e(rc['date'])}, when the paper log reached {rc['picks']} settled picks. Report only: the calls
+      on this page still use the current rule.</p>
+      <div class='scroll'><table><thead><tr><th>Call · SLAM rule</th><th>2021-26 at close</th><th>2021-23 close</th>
+      <th>2023-26 close</th><th>2021-26 at open</th><th>This season (live)</th></tr></thead><tbody>{rows}</tbody></table></div>
+      <ul class='notes'><li>Each cell: won-lost-push over the line, then over %, ROI and units (1 unit per bet).</li>
+      <li>Same flag and goalie AVOID for both rules; only which flagged games are SLAM vs 1U changes.</li>
+      <li>This season = last pre-game call at its line, as the results table grades it.</li></ul>"""
+
+
 def backtest():
     def roi(v):
         return "<td class='num'>–</td>" if v is None else f"<td class='num {'pos' if v > 0 else 'neg'}'>{pct(v)}</td>"
@@ -1034,6 +1065,8 @@ def build():
 <section><h2>Yesterday's results</h2>{yesterday(d)}</section>
 
 <section><h2>Paper trading record</h2>{record(d)}</section>
+
+{f"<section><h2>SLAM rule check · 75 picks</h2><div class='panel'>{rc}</div></section>" if (rc := rule_check()) else ""}
 
 <section><h2>Projection accuracy</h2><div class="panel">{accuracy(d)}</div></section>
 

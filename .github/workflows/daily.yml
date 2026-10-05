@@ -71,6 +71,10 @@ jobs:
         if: ${{ !cancelled() && steps.gate.outputs.run == 'true' }}
         run: python src/paper.py report
 
+      - name: SLAM rule check (runs once, when the paper log reaches 75 settled picks)
+        if: ${{ !cancelled() && steps.gate.outputs.run == 'true' }}
+        run: python src/rule_check.py || echo "rule check failed (will retry next run)"
+
       - name: Rebuild dashboard
         if: ${{ !cancelled() && steps.gate.outputs.run == 'true' }}
         run: python src/dashboard.py
