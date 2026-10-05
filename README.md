@@ -2,7 +2,7 @@
 
 Projects NHL game totals, flags overs worth a look, and paper-trades them live.
 
-**Live dashboard:** https://prezbo8.github.io/nhl-total-model/
+**Live dashboard:** https://prezbo8.github.io/NHL-total-model/
 
 ## The rule
 

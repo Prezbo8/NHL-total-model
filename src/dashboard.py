@@ -1035,7 +1035,7 @@ def shell(title, body, root=""):
 <body><div class="wrap">{body}
 {SCRIPT}
 <footer>Paper trading only, not betting advice · Team logos © NHL and its teams ·
-<a href="https://github.com/Prezbo8/nhl-total-model">github.com/Prezbo8/nhl-total-model</a></footer>
+<a href="https://github.com/Prezbo8/NHL-total-model">github.com/Prezbo8/NHL-total-model</a></footer>
 </div></body></html>"""
 
 
