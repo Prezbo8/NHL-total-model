@@ -12,7 +12,6 @@ import sys
 from datetime import date
 
 import numpy as np
-import pandas as pd
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "research"))
 import dashboard
