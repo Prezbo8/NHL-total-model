@@ -580,7 +580,7 @@ def day_table(g):
     sections = (f"<tr class='sec'><th colspan='{3 if final_day else 2}'>Team</th>"
                 f"<th class='gcol' colspan='{5 if final_day else 3}'>{'Result' if final_day else 'Game'}</th>"
                 f"<th class='gcol'>Goalies</th><th class='bcol' colspan='7'>Projection breakdown</th></tr>")
-    body = []
+    body, mcards = [], []
     for i, r in enumerate(g.itertuples()):
         flagged, final = bool(r.flag), not pd.isna(r.final_total)
         cls = ("flagged " if flagged else "") + ("alt" if i % 2 else "")
@@ -600,14 +600,20 @@ def day_table(g):
             def adj(v):
                 return "–" if pd.isna(v) or abs(v) < 0.0005 else f"{v * 100:+.1f}%"
             cells = f"<td class='gl gcol'>{goalie_compact(g_('goalie'), g_('goalie_now'), g_('goalie_src'), g_('goalie_actual'))}</td>"
+            return cells + breakdown_cells(side)
+
+        def breakdown_cells(side):
+            g_ = lambda c: getattr(r, f"{side}_{c}", float("nan"))
+            def adj(v):
+                return "–" if pd.isna(v) or abs(v) < 0.0005 else f"{v * 100:+.1f}%"
             if pd.isna(g_("ev")):
-                return cells + "<td class='num muted bcol' colspan='7'>n/a</td>"
+                return "<td class='num muted bcol' colspan='7'>n/a</td>"
             def td(stat, text, extra=""):
                 t = tier(stat, g_(stat))
                 if stat == "b2badj" and t == "mid":  # no back-to-back: the usual case, left uncolored
                     t = ""
                 return f"<td class='num{extra}{' t-' + t if t else ''}'{f' title={chr(39)}{t}{chr(39)}' if t else ''}>{text}</td>"
-            return cells + (td("ev", f"{g_('ev'):.2f}", " bcol") + td("pp", f"{g_('pp'):.2f}") + td("gadj", adj(g_("gadj")))
+            return (td("ev", f"{g_('ev'):.2f}", " bcol") + td("pp", f"{g_('pp'):.2f}") + td("gadj", adj(g_("gadj")))
                             + td("oth", f"{g_('oth'):.2f}") + td("b2badj", adj(g_("b2badj"))) + td("spd", adj(g_("spd")))
                             + td("inj", adj(g_("inj"))))
 
@@ -643,15 +649,43 @@ def day_table(g):
             game = (f"<td class='num gcol big-total' rowspan='2'>{r.proj:.2f}</td><td class='num p7' rowspan='2'>{r.p7:.0%}</td>"
                     f"<td rowspan='2'>{gtime}{callpill}<br>{ln}</td>")
         ctx = f"<div class='why-text'>{reasoning(r, flagged)}</div>"
+        mcards.append(mobile_card(r, final, callpill, st, f"{vs} {outcome}" if final_day else ln,
+                                  breakdown_cells, cls))
         away = team("away", r.away, r.proj_away, r.away_score if final else None) + game + detail("away")
         home = team("home", r.home, r.proj_home, r.home_score if final else None) + detail("home")
         body.append(f"<tbody class='game {cls}'><tr class='away'>{away}</tr><tr class='home'>{home}</tr>"
                     + (f"<tr class='srcrow whyrow'><td colspan='22'>{ctx}</td></tr>" if ctx else "") + "</tbody>")
     key = ("<div class='tier-key'>Breakdown (for scoring):" + "".join(f"<span class='t-{t}'>{t}</span>" for t in reversed(TIER_NAMES)) + "</div>")
     return (f"{key}<div class='gtable'><table class='gt'>{cols}<thead>{sections}<tr>{head}</tr></thead>{''.join(body)}</table></div>"
-            "<p class='muted small legend'>Two rows per game (away, then home). <span style='color:var(--accent)'>●</span> = team projected "
+            f"<div class='mcards'>{''.join(mcards)}</div>"
+            "<p class='muted small legend tbl-only'>Two rows per game (away, then home). <span style='color:var(--accent)'>●</span> = team projected "
             "high-scoring. Proj = (5v5 + PP + Oth) × goalie (Gl) × back-to-back (B2B) × team speed (Spd) × injuries (Inj). "
             "Hover or tap any underlined label for an explanation.</p>")
+
+
+def mobile_card(r, final, callpill, st, status, breakdown_cells, cls):
+    """Phone layout (shown under 760px wide instead of the table): one card per game with the same
+    call, line/result, teams, goalies, tier-colored breakdown and reasoning."""
+    def team(side, abbr, proj, score):
+        hot = proj >= r.cutoff
+        b2b = " <span class='b2b'>B2B</span>" if _is(getattr(r, f"{side}_b2b")) else ""
+        g_ = lambda c: getattr(r, f"{side}_{c}", float("nan"))
+        return (f"<div class='mc-team'>{logo(abbr, 26)}<b>{e(abbr)}</b>{b2b}"
+                + (f"<span class='mc-score'>{int(score)}</span>" if final else "")
+                + f"<span class='mc-proj{' hot' if hot else ''}'>{proj:.2f}<span class='hot-dot{'' if hot else ' off'}'>●</span></span>"
+                + f"<div class='mc-gl'>{goalie_compact(g_('goalie'), g_('goalie_now'), g_('goalie_src'), g_('goalie_actual'))}</div></div>")
+    total = (f"<span class='big-total'>{int(r.final_total)}</span> goals · proj {r.proj:.2f}" if final
+             else f"Proj total <b>{r.proj:.2f}</b>")
+    head = "".join(f"<th class='num'>{h}</th>" for h in ("5v5", "PP", "Gl", "Oth", "B2B", "Spd", "Inj"))
+    bd = (f"<table class='gt mc-bd'><thead><tr><th></th>{head}</tr></thead><tbody>"
+          f"<tr><td>{e(r.away)}</td>{breakdown_cells('away')}</tr><tr><td>{e(r.home)}</td>{breakdown_cells('home')}</tr></tbody></table>")
+    return (f"<article class='mc {cls}'><div class='mc-top'>{f'<span class=gtime>{st} ET</span>' if st else ''}"
+            f"<span class='mc-call'>{callpill}</span></div>"
+            f"<div class='mc-status'>{status}</div>"
+            f"{team('away', r.away, r.proj_away, r.away_score if final else None)}"
+            f"{team('home', r.home, r.proj_home, r.home_score if final else None)}"
+            f"<div class='mc-sum'>{total} · P(7+) <b>{r.p7:.0%}</b></div>{bd}"
+            f"<details class='mc-why'><summary>Why this call</summary><div class='why-text'>{reasoning(r, bool(r.flag))}</div></details></article>")
 
 
 def day_cards(g):
@@ -894,6 +928,20 @@ body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 -apple-system
 .lastrun{position:absolute;top:14px;right:18px;text-align:right;font-size:11px;line-height:1.35;color:#c9d6e6;z-index:2}
 .lastrun b{display:block;font-size:13px;color:#fff;font-weight:700}.lastrun .tip{border-bottom-color:rgba(255,255,255,.45)}
 @media (max-width:600px){.lastrun{position:static;text-align:left;margin-top:8px}}
+.mcards{display:none}
+@media (max-width:760px){.gtable,.legend.tbl-only{display:none}.mcards{display:grid;gap:12px}}
+.mc{background:var(--card);border:2px solid color-mix(in srgb,var(--muted) 45%,transparent);border-radius:12px;padding:12px 12px 8px}
+.mc.flagged{border-color:var(--gold)}
+.mc-top{display:flex;align-items:center;justify-content:space-between;gap:8px}.mc-top .gtime{font-size:15px}
+.mc-status{margin:6px 0 4px;font-size:13px;line-height:1.35}
+.mc-team{display:grid;grid-template-columns:auto auto 1fr auto auto;align-items:center;gap:6px;padding:6px 0;border-top:1px solid var(--line)}
+.mc-team b{font-size:15px}.mc-team .b2b{justify-self:start}
+.mc-score{font-size:18px;font-weight:800;grid-column:4}.mc-proj{grid-column:5;font-weight:700;font-variant-numeric:tabular-nums}
+.mc-proj.hot{color:var(--accent)}.mc-gl{grid-column:1/-1;font-size:12.5px;color:var(--muted)}
+.mc-sum{font-size:13px;padding:6px 0;border-top:1px solid var(--line)}.mc-sum .big-total{font-size:18px}
+table.mc-bd{table-layout:auto;font-size:11px;margin:2px 0 6px}table.mc-bd td,table.mc-bd th{padding:4px 2px;overflow:visible;text-overflow:clip;white-space:nowrap}
+table.mc-bd th{font-size:9.5px}table.mc-bd td:first-child{font-weight:700;padding-right:4px}
+.mc-why summary{cursor:pointer;font-size:13px;color:var(--muted);padding:4px 0}.mc-why .why-text{font-size:13px;line-height:1.45}
 .hero h1{margin:0;font-size:clamp(28px,5vw,44px);letter-spacing:-.02em;position:relative}
 .hero p{margin:6px 0 0;color:#c9d6e6;position:relative}
 .hero .stats{display:flex;gap:12px;flex-wrap:wrap;margin-top:18px;position:relative}
