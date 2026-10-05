@@ -2,7 +2,7 @@
 
 1. Tier cutoffs (great/good/mid/bad/trash) for 5v5, PP, Gl, Spd: recomputed as quintiles of the last two
    full seasons + this season so far, compared with dashboard.TIERS.
-2. SLAM / 1U / AVOID record this season (last pre-game call at its line) vs the 2021-26 backtest.
+2. SLAM / 1U / PASS / AVOID record this season (last pre-game call at its line) vs the 2021-26 backtest.
 3. Calibration this season: projected vs actual goals, model P(7+) vs actual 7+ rate.
 4. Goalie predictions: how often the goalie the projection used actually started.
 
@@ -29,7 +29,7 @@ import split_model as sm
 
 OUT_DIR = paths.data("monthly")
 # 2021-26 backtest, closing lines (what the dashboard's history sentences quote)
-BACKTEST = {"SLAM": 0.568, "1U": 0.533, "AVOID": 0.49}
+BACKTEST = {"SLAM": 0.568, "1U": 0.585, "PASS": 0.452, "AVOID": 0.49}
 STATS = (("ev", "5v5", False), ("pp", "PP", False), ("gadj", "Gl", True), ("spd", "Spd", True))
 
 
@@ -68,10 +68,10 @@ def season_rows(season):
 
 
 def calls_section(g):
-    lines = ["## 2. SLAM / 1U / AVOID this season (last pre-game call, at its line)", "",
+    lines = ["## 2. SLAM / 1U / PASS / AVOID this season (last pre-game call, at its line)", "",
              "| Call | Games | Went over | Over % | 2021-26 backtest | Different? |", "|---|---|---|---|---|---|"]
     drift = []
-    for c in ("SLAM", "1U", "AVOID"):
+    for c in ("SLAM", "1U", "PASS", "AVOID"):
         res = [dashboard.call_result(r, bool(r.flag)) for r in g.itertuples()]
         x = [(r.final_total > r.bet_total) for r, (cc, o) in zip(g.itertuples(), res) if cc == c and o in ("W", "L")]
         n, w = len(x), sum(x)

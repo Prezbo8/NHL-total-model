@@ -1,6 +1,6 @@
 """One-time SLAM rule check, run by the daily job: once the paper log has 75 settled flagged picks, re-run the
-backtest for the current SLAM rule (both teams good/great at 5v5) vs combined 5v5 above 4.20, plus this season's
-live games, and save it to data/rule_check.json. The dashboard shows that section only once the file exists.
+backtest for the current call rule (SLAM both teams good/great at 5v5, 1U one team great, else PASS) vs
+SLAM = combined 5v5 above 4.20 (no PASS), plus this season's live games, and save it to data/rule_check.json. The dashboard shows that section only once the file exists.
 Report only: the call rule doesn't change by itself.
 
   python3 src/rule_check.py          # does nothing until 75 settled picks, or if it already ran
@@ -27,7 +27,8 @@ RULES = ("current", "combined")
 
 
 def rule_call(rule, r, flagged):
-    """SLAM / 1U / AVOID under either rule. Both share the flag and the both-goalies-strong AVOID."""
+    """SLAM / 1U / PASS / AVOID under either rule. Both share the flag and the both-goalies-strong AVOID;
+    the combined rule has no PASS (every other flagged game is SLAM or 1U by combined 5v5)."""
     c = dashboard.call(r, flagged)
     if rule == "current" or c == "AVOID":
         return c
@@ -57,7 +58,7 @@ def backtest():
     out = {}
     for rule in RULES:
         calls = np.array([rule_call(rule, r, True) for r in d.itertuples()])
-        for c in ("SLAM", "1U"):
+        for c in ("SLAM", "1U", "PASS"):
             x = d[calls == c]
             for when in ("open", "close"):
                 b = h.bet_results(x, when)
@@ -75,7 +76,7 @@ def live(d):
     out = {}
     for rule in RULES:
         calls = np.array([rule_call(rule, r, bool(r.flag)) for r in g.itertuples()])
-        for c in ("SLAM", "1U"):
+        for c in ("SLAM", "1U", "PASS"):
             x = g[calls == c]
             res = np.sign(x.final_total - x.bet_total)
             prof = np.where(res == 0, 0.0, np.where(res > 0, grade.payout(x.bet_over), -1.0))

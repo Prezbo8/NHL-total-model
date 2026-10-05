@@ -172,7 +172,7 @@ check("run saved: 1 run, only not-started games projected", len(by.get("nhl_runs
       [p["away"] for p in by.get("nhl_projections", [])] == ["AAA"] and by["nhl_projections"][0]["run_id"] == rid)
 unknown = {f"{t}.{k}" for t, rows in by.items() for r in rows for k in r if k not in cols.get(t, set())}
 check("every field sent exists in supabase/schema.sql", not unknown and len(cols) == 4, ", ".join(sorted(unknown)))
-check("call saved with each projection, no NaN sent", by["nhl_projections"][0]["call"] in ("SLAM", "1U", "AVOID")
+check("call saved with each projection, no NaN sent", by["nhl_projections"][0]["call"] in ("SLAM", "1U", "PASS", "AVOID")
       and "NaN" not in json.dumps([r for _, r in sent]))
 store._send = lambda *a, **k: (_ for _ in ()).throw(RuntimeError("supabase down"))
 check("supabase failure never stops a run", store.record_run("2026-10-03", run_rows) is None)

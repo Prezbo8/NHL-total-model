@@ -87,7 +87,7 @@ def safe(fn):
 
 def projection_rows(run_id, rows, now=None):
     """nhl_projections rows for the games in a run that haven't started yet."""
-    import dashboard  # the same SLAM / 1U / AVOID rule the page shows
+    import dashboard  # the same SLAM / 1U / PASS / AVOID rule the page shows
     now = now or pd.Timestamp.now(tz="UTC")
     out = []
     for r in rows:

@@ -31,7 +31,7 @@ TIPS = {
     "Best over": "Best-value over at 6 or 6.5 across DraftKings, FanDuel, BetRivers, BetMGM and Caesars, chosen with the model's probabilities (an over 6 can push).",
     "Total goals": "Final total goals (a shootout winner counts as one goal, as sportsbooks settle it).",
     "vs line": "Did the game go over or under the line that was logged before it started?",
-    "Pick": "The call (SLAM / 1U / AVOID) and how it did at the logged consensus line. SLAM / 1U: W = went over (units at 1 unit risked). AVOID: ✓ = stayed under, ✗ = went over.",
+    "Pick": "The call (SLAM / 1U / PASS / AVOID) and how it did at the logged consensus line. SLAM / 1U: W = went over (units at 1 unit risked). PASS / AVOID: ✓ = stayed under, ✗ = went over.",
     "Best book": "Same pick at the best sportsbook price (the 'Best over' book), in units.",
     "Team": "Team, away first then home.",
     "5v5": "Goals this team should score at full strength (5 skaters vs 5). Most of a team's goals come from here.",
@@ -52,7 +52,8 @@ TIPS = {
     "H2H": "Head-to-head since 2020-21: meetings, average total, how many went 7+, and the last 3 scores. Context only: tested on 2023-26, it adds very little beyond the projection.",
     "Lean": "Trend lean: OVER/UNDER when both teams' last-10 7+ rates and the head-to-head 7+ rate run clearly above/below the league's ~45%. Weak signal: it supports or questions the model's pick, it doesn't make one.",
     "SLAM": "Flagged over where both teams are good or great at 5-on-5. Went over 54% (opening line) / 57% (closing line) in 2021-26.",
-    "1U": "Flagged over, but not both teams good at 5-on-5. Went over 53% in 2021-26.",
+    "1U": "Flagged over where one team is great at 5-on-5 (above 2.19) but the other isn't good. Went over 58% (opening and closing line) in 2021-26.",
+    "PASS": "Flagged over, but neither team is great at 5-on-5 and they aren't both good. No bet: these went over only 45% in 2021-26.",
     "AVOID": "Not flagged, or flagged but both teams face strong goalies. These went over only 45-49% in 2021-26.",
     "Paper bet": "The paper-trading record's bet: the first time this game was flagged, at that line. It never changes after it's logged.",
     "B2B tag": "Played yesterday: the model cuts this team's scoring ~8% and raises its opponent's ~6.5%.",
@@ -90,15 +91,19 @@ def tier(stat, v):
 
 
 def call(r, flagged):
-    """'SLAM' / '1U' / 'AVOID' for a game. Tested 2021-26 at 6/6.5 lines (over %, open / close):
-    flagged + both teams good/great at 5v5 54% / 57%; other flagged 53% / 53%; flagged but both teams
-    facing strong goalies (Gl bad/trash) 46% / 45%; not flagged 47% / 49%."""
+    """'SLAM' / '1U' / 'PASS' / 'AVOID' for a game. Tested 2021-26 at 6/6.5 lines (over %, open / close):
+    flagged + both teams good/great at 5v5 54% / 57%; flagged + one team great at 5v5 58% / 58.5%;
+    other flagged (PASS) 45% / 45%; flagged but both teams facing strong goalies (Gl bad/trash) 46% / 45%;
+    not flagged 47% / 49%."""
     if not flagged:
         return "AVOID"
     both = lambda stat, ts: all(tier(stat, getattr(r, f"{s}_{stat}", float("nan"))) in ts for s in ("away", "home"))
     if both("gadj", ("bad", "trash")):
         return "AVOID"
-    return "SLAM" if both("ev", ("good", "great")) else "1U"
+    if both("ev", ("good", "great")):
+        return "SLAM"
+    great = any(tier("ev", getattr(r, f"{s}_ev", float("nan"))) == "great" for s in ("away", "home"))
+    return "1U" if great else "PASS"
 
 
 def current(g):
@@ -123,20 +128,21 @@ def current(g):
 
 def call_result(r, flagged):
     """(call, outcome) for a finished game vs the logged line: SLAM/1U -> 'W'/'L'/'P' (over won / lost / push);
-    AVOID -> 'W' when it stayed under (avoiding was right), 'L' when it went over, 'P' on a push; None without a line."""
+    PASS/AVOID -> 'W' when it stayed under (avoiding was right), 'L' when it went over, 'P' on a push; None without a line."""
     c = call(r, flagged)
     if pd.isna(r.bet_total) or pd.isna(r.final_total):
         return c, None
     over = r.final_total > r.bet_total
     if r.final_total == r.bet_total:
         return c, "P"
-    return c, ("L" if over else "W") if c == "AVOID" else ("W" if over else "L")
+    return c, ("L" if over else "W") if c in ("PASS", "AVOID") else ("W" if over else "L")
 
 
 GL_WORDS = {"great": "a weak goalie", "good": "a beatable goalie", "mid": "an average goalie",
             "bad": "a strong goalie", "trash": "a top goalie"}
 CALL_HISTORY = {"SLAM": "Games like this went over 54% of the time at the opening line and 57% at the closing line in 2021-26.",
-                "1U": "Games like this went over about 53% of the time in 2021-26.",
+                "1U": "Games like this went over 58% of the time at both the opening and closing line in 2021-26.",
+                "PASS": "Flagged games like this went over only 45% of the time in 2021-26.",
                 "AVOID": "Games like this went over only 45-49% of the time in 2021-26."}
 
 
@@ -163,10 +169,14 @@ def reasoning(r, flagged):
         out.append(f"<b>🔨 SLAM:</b> both teams project as high-scoring ({both_proj}), the line is {line(t)}, "
                    "and both are good or better at 5-on-5, the strongest over spot the model has.")
     elif c == "1U":
-        short = [x for s_, x in S if ev_t[s_] not in ("good", "great")]
-        out.append(f"<b>1U:</b> both teams project as high-scoring ({both_proj}) and the line is {line(t)}, "
-                   f"but {' and '.join(short)} {'is' if len(short) == 1 else 'are'} only "
-                   f"{' / '.join(ev_t[s_] for s_, x in S if x in short)} at 5-on-5, so it's an over but not a slam.")
+        big = [x for s_, x in S if ev_t[s_] == "great"][0]
+        (s1, other), = [(s_, x) for s_, x in S if x != big]
+        out.append(f"<b>1U:</b> both teams project as high-scoring ({both_proj}) and the line is {line(t)}; "
+                   f"{big} is great at 5-on-5 and can carry the over, but {other} is only {ev_t[s1]}, so it's an over but not a slam.")
+    elif c == "PASS":
+        out.append(f"<b>PASS:</b> both teams project as high-scoring ({both_proj}) and the line is {line(t)}, "
+                   f"but neither is great at 5-on-5 ({a} {ev_t['away']}, {h} {ev_t['home']}) and they aren't both good, "
+                   "so there's no team to carry the over.")
     elif flagged:
         out.append(f"<b>AVOID:</b> both teams project as high-scoring ({both_proj}), but both face a strong goalie, "
                    "and overs in that spot went only 45-46% in 2021-26.")
@@ -247,7 +257,7 @@ def reasoning(r, flagged):
     out.append(CALL_HISTORY[c])
     if final and not pd.isna(t):
         went = "went over" if r.final_total > t else "stayed under" if r.final_total < t else "pushed"
-        right = (r.final_total > t) if c != "AVOID" else (r.final_total < t)
+        right = (r.final_total > t) if c not in ("PASS", "AVOID") else (r.final_total < t)
         score = "" if pd.isna(r.away_score) or pd.isna(r.home_score) else f" ({a} {int(r.away_score)}, {h} {int(r.home_score)})"
         out.append(f"Final: {int(r.final_total)} goals{score}, so it {went} {line(t)}"
                    + ("" if r.final_total == t else f" and the call was {'right' if right else 'wrong'}") + ".")
@@ -616,7 +626,7 @@ def day_table(g):
             c, res = call_result(r, flagged)
             if res is None:
                 outcome = "<span class='muted small'>no line</span>"
-            elif c == "AVOID":
+            elif c in ("PASS", "AVOID"):
                 outcome = {"W": "<span class='res W'>✓ under</span>", "L": "<span class='res L'>✗ went over</span>"}.get(res, "<span class='res P'>push</span>")
             else:
                 outcome = f"<span class='res {res}'>{res}</span>"
@@ -667,8 +677,8 @@ def day_summary(g):
 
 
 def call_record(done):
-    """'🔨 SLAM 1-0-0 · 1U 0-1-0 · AVOID 6 of 10 stayed under' for finished games (vs the logged line)."""
-    res = {"SLAM": [], "1U": [], "AVOID": []}
+    """'🔨 SLAM 1-0-0 · 1U 0-1-0 · PASS 1 of 2 stayed under · AVOID 6 of 10 stayed under' for finished games (vs the logged line)."""
+    res = {"SLAM": [], "1U": [], "PASS": [], "AVOID": []}
     for r in done.itertuples():
         c, o = call_result(r, _is(r.flag))
         if o:
@@ -677,8 +687,9 @@ def call_record(done):
     for c in ("SLAM", "1U"):
         x = res[c]
         out.append(f"{'🔨 ' if c == 'SLAM' else ''}{c} <b>{x.count('W')}-{x.count('L')}-{x.count('P')}</b>" if x else f"{c} –")
-    a = res["AVOID"]
-    out.append(f"AVOID <b>{a.count('W')} of {len(a)}</b> stayed under" if a else "AVOID –")
+    for c in ("PASS", "AVOID"):
+        a = res[c]
+        out.append(f"{c} <b>{a.count('W')} of {len(a)}</b> stayed under" if a else f"{c} –")
     return "calls: " + " · ".join(out)
 
 
@@ -797,7 +808,7 @@ def rule_check():
     import json
     rc = json.load(open(path))
     b, lv = rc["backtest"], rc["live"]
-    names = {"current": "Current: both teams good/great at 5v5", "combined": f"Combined 5v5 above {rc['alt_ev_sum']:.2f}"}
+    names = {"current": "Current: SLAM both good/great, 1U needs a great team", "combined": f"Combined 5v5 above {rc['alt_ev_sum']:.2f}"}
 
     def cell(x, units=True):
         if not x or not x["n"]:
@@ -806,17 +817,19 @@ def rule_check():
         return (f"<td class='num'>{x['w']}-{x['l']}-{x['p']}<br><span class='muted small'>{x['over']:.1%} · "
                 f"<span class='{'pos' if roi > 0 else 'neg'}'>{pct(roi)}</span>{f' · {x['units']:+.1f}u' if units else ''}</span></td>")
     rows = ""
-    for c in ("SLAM", "1U"):
+    for c in ("SLAM", "1U", "PASS"):
         for rule in ("current", "combined"):
             k = f"{rule}|{c}"
-            rows += (f"<tr><td><b>{c}</b> · {names[rule]}</td>{cell(b[k + '|close|all'])}{cell(b[k + '|close|2021-23'], False)}"
-                     f"{cell(b[k + '|close|2023-26'], False)}{cell(b[k + '|open|all'])}{cell(lv[k])}</tr>")
+            if c == "PASS" and rule == "combined":
+                continue
+            rows += (f"<tr><td><b>{c}</b> · {names[rule]}</td>{cell(b.get(k + '|close|all'))}{cell(b.get(k + '|close|2021-23'), False)}"
+                     f"{cell(b.get(k + '|close|2023-26'), False)}{cell(b.get(k + '|open|all'))}{cell(lv.get(k))}</tr>")
     return f"""<p class='sub'>Run {e(rc['date'])}, when the paper log reached {rc['picks']} settled picks. Report only: the calls
       on this page still use the current rule.</p>
       <div class='scroll'><table><thead><tr><th>Call · SLAM rule</th><th>2021-26 at close</th><th>2021-23 close</th>
       <th>2023-26 close</th><th>2021-26 at open</th><th>This season (live)</th></tr></thead><tbody>{rows}</tbody></table></div>
       <ul class='notes'><li>Each cell: won-lost-push over the line, then over %, ROI and units (1 unit per bet).</li>
-      <li>Same flag and goalie AVOID for both rules; only which flagged games are SLAM vs 1U changes.</li>
+      <li>Same flag and goalie AVOID for both rules. The combined rule has no PASS: every other flagged game is SLAM or 1U by combined 5v5. PASS rows count as overs (how they would have done if bet).</li>
       <li>This season = last pre-game call at its line, as the results table grades it.</li></ul>"""
 
 
@@ -1006,6 +1019,7 @@ table.gt{font-size:12.5px;border-collapse:separate;border-spacing:0;width:100%;t
 .gtime{font-size:13px;font-weight:800;color:var(--ink)}
 .callpill{display:inline-block;font-size:10px;font-weight:800;padding:1px 8px;border-radius:999px;margin-bottom:2px;letter-spacing:.04em}
 .callpill.c-slam{background:var(--gold);color:#1a1200}.callpill.c-1u{border:1.5px solid var(--gold);color:var(--ink)}
+.callpill.c-pass{border:1px dashed var(--gold);color:var(--muted);font-weight:700}
 .callpill.c-avoid{border:1px solid var(--line);color:var(--muted);font-weight:700}.callpill .tip{border-bottom:none}
 .flagpill{display:inline-block;background:var(--gold);color:#1a1200;font-size:10px;font-weight:800;padding:1px 7px;border-radius:999px;margin-bottom:2px}
 .gt tr.srcrow td{padding:0 8px 6px 38px;white-space:nowrap}
