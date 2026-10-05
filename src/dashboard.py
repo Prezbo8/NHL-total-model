@@ -594,6 +594,8 @@ def day_table(g):
                 return cells + "<td class='num muted bcol' colspan='7'>n/a</td>"
             def td(stat, text, extra=""):
                 t = tier(stat, g_(stat))
+                if stat == "b2badj" and t == "mid":  # no back-to-back: the usual case, left uncolored
+                    t = ""
                 return f"<td class='num{extra}{' t-' + t if t else ''}'{f' title={chr(39)}{t}{chr(39)}' if t else ''}>{text}</td>"
             return cells + (td("ev", f"{g_('ev'):.2f}", " bcol") + td("pp", f"{g_('pp'):.2f}") + td("gadj", adj(g_("gadj")))
                             + td("oth", f"{g_('oth'):.2f}") + td("b2badj", adj(g_("b2badj"))) + td("spd", adj(g_("spd")))
@@ -975,7 +977,7 @@ table.gt{font-size:12.5px;border-collapse:separate;border-spacing:0;width:100%;t
 .gt tbody td.t-bad,.tier-key .t-bad{background:rgba(220,38,38,.22)}.gt tbody td.t-trash,.tier-key .t-trash{background:rgba(220,38,38,.50)}
 .tier-key{display:flex;gap:6px;flex-wrap:wrap;align-items:center;font-size:12px;color:var(--muted);margin:6px 0}
 .tier-key span{padding:1px 8px;border-radius:4px;color:var(--ink)}
-.tier-key .t-mid{border:1px solid var(--line)}
+.gt tbody td.t-mid,.tier-key .t-mid{background:rgba(234,179,8,.28)}
 .gt td.proj{font-weight:800;font-size:13px}.gt td.proj.hot{color:var(--accent)}
 .hot-dot{display:inline-block;width:10px;text-align:right;color:var(--accent);font-size:9px;vertical-align:2px}.hot-dot.off{visibility:hidden}
 /* every column gets its own border; sections get a stronger one */
