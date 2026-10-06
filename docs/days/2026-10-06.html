@@ -550,7 +550,7 @@ Mid: -0.5% to +0.5%
 Bad: -2.0% to -0.5%
 Trash: below -2.0%'>Inj</span></th></tr></thead><tbody><tr><td>FLA</td><td class='num bcol t-trash' title='trash'>1.78</td><td class='num t-good' title='good'>0.65</td><td class='num t-good' title='good'>-1.4%</td><td class='num'>0.39</td><td class='num'>–</td><td class='num t-mid' title='mid'>–</td><td class='num t-good' title='good'>+1.1%</td></tr><tr><td>LAK</td><td class='num bcol t-trash' title='trash'>1.81</td><td class='num t-mid' title='mid'>0.55</td><td class='num t-good' title='good'>–</td><td class='num'>0.39</td><td class='num'>–</td><td class='num t-mid' title='mid'>-0.1%</td><td class='num t-bad' title='bad'>-1.2%</td></tr></tbody></table><details class='mc-why'><summary>Why this call</summary><div class='why-text'><b>AVOID:</b> FLA and LAK project under the 2.98-goal high-scoring cutoff (FLA 2.81, LAK 2.71). At 5-on-5, FLA is trash (1.78) and LAK is trash (1.81); on the power play, FLA is good (0.65) and LAK is mid (0.55). FLA faces Darcy Kuemper, a beatable goalie (-1.4%); LAK faces Jacob Markstrom, a beatable goalie (-0.0%). The model projects 5.53 total goals against a 6 line, with a 41% chance of 7 or more (a typical game is about 45%). The line moved from 5.5 to 6, toward the over. Games like this went over only 45-49% of the time in 2021-26.</div></details></article></div><p class='muted small legend tbl-only'>Two rows per game (away, then home). <span style='color:var(--accent)'>●</span> = team projected high-scoring. Proj = (5v5 + PP + Oth) × goalie (Gl) × back-to-back (B2B) × team speed (Spd) × injuries (Inj). Hover or tap any underlined label for an explanation.</p></section>
 <script>
-(function(){  // Team rankings: click a column header to sort by it (best first), click again to reverse
+(function(){  // Team rankings: click a column header (not Team) to sort by it (best first), click again to reverse
   document.querySelectorAll('table.rk-t').forEach(function(t){
     var ths = t.tHead.rows[0].cells;
     function sort(i, rev){
@@ -565,10 +565,12 @@ Trash: below -2.0%'>Inj</span></th></tr></thead><tbody><tr><td>FLA</td><td class
       t.dataset.sort = i; t.dataset.rev = rev ? '1' : '';
     }
     Array.prototype.forEach.call(ths, function(h, i){
+      if (i === 1) return;  // Team name: not sortable
       h.classList.add('sortable');
       h.addEventListener('click', function(){ sort(i, String(t.dataset.sort) === String(i) && !t.dataset.rev); });
     });
-    sort(2, false);  // default: Total
+    sort(2, false);  // always start sorted by Total
+    window.addEventListener('pageshow', function(e){ if (e.persisted) sort(2, false); });  // also when restored from the back/forward cache
   });
 })();
 (function(){  // Team rankings: Offense / Defense switch (remembers the choice in the address, e.g. #defense)

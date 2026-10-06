@@ -802,7 +802,7 @@ Data from the 2020-21 season onward only (MoneyPuck, NHL API, DailyFaceoff, Acti
 <div><dt>Team speed (Spd)</dt><dd>How often a team's skaters hit 20+ mph (NHL EDGE), last season vs the league. Fast teams score a little more and allow a little less, so it shifts team projections but barely changes totals.</dd></div>
 </dl></div></section>
 <script>
-(function(){  // Team rankings: click a column header to sort by it (best first), click again to reverse
+(function(){  // Team rankings: click a column header (not Team) to sort by it (best first), click again to reverse
   document.querySelectorAll('table.rk-t').forEach(function(t){
     var ths = t.tHead.rows[0].cells;
     function sort(i, rev){
@@ -817,10 +817,12 @@ Data from the 2020-21 season onward only (MoneyPuck, NHL API, DailyFaceoff, Acti
       t.dataset.sort = i; t.dataset.rev = rev ? '1' : '';
     }
     Array.prototype.forEach.call(ths, function(h, i){
+      if (i === 1) return;  // Team name: not sortable
       h.classList.add('sortable');
       h.addEventListener('click', function(){ sort(i, String(t.dataset.sort) === String(i) && !t.dataset.rev); });
     });
-    sort(2, false);  // default: Total
+    sort(2, false);  // always start sorted by Total
+    window.addEventListener('pageshow', function(e){ if (e.persisted) sort(2, false); });  // also when restored from the back/forward cache
   });
 })();
 (function(){  // Team rankings: Offense / Defense switch (remembers the choice in the address, e.g. #defense)

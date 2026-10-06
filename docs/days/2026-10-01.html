@@ -515,7 +515,7 @@ Mid: -0.5% to +0.5%
 Bad: -2.0% to -0.5%
 Trash: below -2.0%'>Inj</span></th></tr></thead><tbody><tr><td>TBL</td><td class='num bcol t-great' title='great'>2.22</td><td class='num t-mid' title='mid'>0.56</td><td class='num t-trash' title='trash'>-11.2%</td><td class='num'>0.39</td><td class='num'>–</td><td class='num'><span class='muted' title='Not part of the model yet on this date'>n/a</span></td><td class='num'><span class='muted' title='Not part of the model yet on this date'>n/a</span></td></tr><tr><td>NYR</td><td class='num bcol t-trash' title='trash'>1.76</td><td class='num t-mid' title='mid'>0.57</td><td class='num t-trash' title='trash'>-11.2%</td><td class='num'>0.39</td><td class='num'>–</td><td class='num'><span class='muted' title='Not part of the model yet on this date'>n/a</span></td><td class='num'><span class='muted' title='Not part of the model yet on this date'>n/a</span></td></tr></tbody></table><details class='mc-why'><summary>Why this call</summary><div class='why-text'><b>AVOID:</b> TBL and NYR project under the 2.95-goal high-scoring cutoff (TBL 2.81, NYR 2.42); the line is 5.5, and only 6 and 6.5 qualify. At 5-on-5, TBL is great (2.22) and NYR is trash (1.76); on the power play, TBL is mid (0.56) and NYR is mid (0.57). TBL faces Igor Shesterkin, a top goalie (-11.2%); NYR faces Andrei Vasilevskiy, a top goalie (-11.2%). The model projects 5.23 total goals against a 5.5 line, with a 40% chance of 7 or more (a typical game is about 45%). Games like this went over only 45-49% of the time in 2021-26. Final: 6 goals (TBL 1, NYR 5), so it went over 5.5 and the call was wrong.</div></details></article></div><p class='muted small legend tbl-only'>Two rows per game (away, then home). <span style='color:var(--accent)'>●</span> = team projected high-scoring. Proj = (5v5 + PP + Oth) × goalie (Gl) × back-to-back (B2B) × team speed (Spd) × injuries (Inj). Hover or tap any underlined label for an explanation.</p></section>
 <script>
-(function(){  // Team rankings: click a column header to sort by it (best first), click again to reverse
+(function(){  // Team rankings: click a column header (not Team) to sort by it (best first), click again to reverse
   document.querySelectorAll('table.rk-t').forEach(function(t){
     var ths = t.tHead.rows[0].cells;
     function sort(i, rev){
@@ -530,10 +530,12 @@ Trash: below -2.0%'>Inj</span></th></tr></thead><tbody><tr><td>TBL</td><td class
       t.dataset.sort = i; t.dataset.rev = rev ? '1' : '';
     }
     Array.prototype.forEach.call(ths, function(h, i){
+      if (i === 1) return;  // Team name: not sortable
       h.classList.add('sortable');
       h.addEventListener('click', function(){ sort(i, String(t.dataset.sort) === String(i) && !t.dataset.rev); });
     });
-    sort(2, false);  // default: Total
+    sort(2, false);  // always start sorted by Total
+    window.addEventListener('pageshow', function(e){ if (e.persisted) sort(2, false); });  // also when restored from the back/forward cache
   });
 })();
 (function(){  // Team rankings: Offense / Defense switch (remembers the choice in the address, e.g. #defense)
