@@ -5,6 +5,7 @@ home goals = 5v5 (home 5v5 offense x away 5v5 defense x 5v5 minutes)
            + other (4v4, 3v3 OT, empty nets...: league average)
 then scaled by the opposing starter's goalie skill and back-to-backs, as in model.py.
 """
+import numpy as np
 import pandas as pd
 
 import model as m
@@ -72,9 +73,10 @@ def team_rankings(project, teams, season, games=None):
         opp = pd.concat([g[g.home == t].away, g[g.away == t].home])
         opp = [x for x in opp if x in leak]
         return (len(opp), sum(leak[x] for x in opp) / len(opp), sum(punch[x] for x in opp) / len(opp)) if opp else (0, 0.0, 0.0)
+    stats = team_stats(games, season).reindex(r.team)
     prior = m.K * (1 - m.REGRESS)
     cur_g, last_g = games[games.season == season], games[games.season == season - 1]
-    sos = []
+    sos, effs = [], []
     for t in r.team:
         n, d_now, o_now = faced(cur_g, t)
         _, d_last, o_last = faced(last_g, t)
@@ -82,7 +84,72 @@ def team_rankings(project, teams, season, games=None):
         o_eff = (prior * o_last + n * o_now) / (m.K + n)
         sos.append({"games": n, "opp_d": round(d_now, 4), "opp_o": round(o_now, 4), "gf_adj": round(r.gf[r.team == t].iloc[0] / (1 + d_eff), 3),
                     "ga_adj": round(r.ga[r.team == t].iloc[0] / (1 + o_eff), 3)})
-    return pd.concat([r, pd.DataFrame(sos)], axis=1)
+        effs.append((d_eff, o_eff))
+    out = pd.concat([r, pd.DataFrame(sos)], axis=1)
+    for c in stats.columns:
+        out[c] = stats[c].round(4).values
+    out["score_off"], out["score_def"] = composite(stats, "F").round(3).values, composite(stats, "A").round(3).values
+    # schedule-corrected: stats for scaled by the defenses faced, stats against by the offenses faced
+    adj = stats.copy()
+    d_eff, o_eff = np.array([x[0] for x in effs]), np.array([x[1] for x in effs])
+    for k in KEYS:
+        adj[f"{k}F"] = stats[f"{k}F"].values / (1 + d_eff)
+        adj[f"{k}A"] = stats[f"{k}A"].values / (1 + o_eff)
+    out["score_off_adj"], out["score_def_adj"] = composite(adj, "F").round(3).values, composite(adj, "A").round(3).values
+    return out
+
+
+# --- Total Offense / Total Defense (Team rankings tab) ---
+STATS = {"goals": "goals", "xg": "xGoals", "sog": "shotsOnGoal", "att": "shotAttempts", "hd": "highDangerShots",
+         "hdxg": "highDangerxGoals", "reb": "rebounds", "rebg": "reboundGoals"}  # + pp goals (5on4) added below
+
+
+def team_games(first_season=2021):
+    """One row per team-game: stats for (F) and against (A), all situations, plus power-play goals."""
+    cols = ["season", "gameId", "playerTeam", "situation", "playoffGame", "gameDate"] + [f"{v}{s}" for v in STATS.values() for s in ("For", "Against")]
+    d = pd.read_csv(m.DATA, usecols=cols)
+    d = d[(d.playoffGame == 0) & (d.season >= first_season)].replace({"playerTeam": m.MP_ABBR})
+    allsit = d[d.situation == "all"].drop_duplicates(["gameId", "playerTeam"])
+    pp = d[d.situation == "5on4"].drop_duplicates(["gameId", "playerTeam"])[["gameId", "playerTeam", "goalsFor", "goalsAgainst"]]
+    pp = pp.rename(columns={"goalsFor": "ppgF"})  # 5on4 = this team's power play
+    pk = d[d.situation == "4on5"].drop_duplicates(["gameId", "playerTeam"])[["gameId", "playerTeam", "goalsAgainst"]].rename(columns={"goalsAgainst": "ppgA"})
+    g = allsit.merge(pp[["gameId", "playerTeam", "ppgF"]], on=["gameId", "playerTeam"], how="left").merge(pk, on=["gameId", "playerTeam"], how="left")
+    out = pd.DataFrame({"season": g.season, "gameId": g.gameId, "team": g.playerTeam, "date": g.gameDate})
+    for k, v in STATS.items():
+        out[f"{k}F"], out[f"{k}A"] = g[f"{v}For"], g[f"{v}Against"]
+    out["ppgF"], out["ppgA"] = g.ppgF.fillna(0), g.ppgA.fillna(0)
+    return out.sort_values(["team", "date", "gameId"]).reset_index(drop=True)
+
+
+KEYS = list(STATS) + ["ppg"]
+
+
+# weight = how well the stat predicts a team's future goals for (F) / against (A), r squared normalised
+# (research/offense_weights.py: 320 half-seasons, 2021-22 to 2025-26)
+WEIGHTS = {"F": {"goals": .208, "xg": .207, "sog": .133, "ppg": .120, "att": .116, "hdxg": .097, "hd": .077, "rebg": .032, "reb": .009},
+           "A": {"goals": .259, "xg": .187, "sog": .144, "att": .119, "hdxg": .086, "hd": .073, "ppg": .070, "rebg": .038, "reb": .023}}
+
+
+def team_stats(games, season):
+    """Per-game averages of every ranking stat, built like the ratings: last season's average pulled
+    REGRESS of the way to league average and worth K games, then this season's games 1 each."""
+    tg = team_games(season - 1)
+    tg = tg[tg.gameId.isin(set(games.gameId))]  # only games the rest of the model sees (e.g. before a given day)
+    cols = [f"{k}{s}" for k in KEYS for s in "FA"]
+    last, cur = tg[tg.season == season - 1], tg[tg.season == season]
+    lg = last[cols].mean()
+    out = {}
+    for t in set(last.team) | set(cur.team):
+        prior = lg + (1 - m.REGRESS) * (last[last.team == t][cols].mean().fillna(lg) - lg)
+        c = cur[cur.team == t][cols]
+        out[t] = (m.K * prior + c.sum()) / (m.K + len(c))
+    return pd.DataFrame(out).T
+
+
+def composite(stats, side):
+    """Weighted sum of z-scores (higher = more goals for / allowed)."""
+    z = (stats - stats.mean()) / stats.std(ddof=0)
+    return sum(w * z[f"{k}{side}"] for k, w in WEIGHTS[side].items())
 
 
 RANKINGS_HISTORY = paths.data("team_rankings_history.csv")
