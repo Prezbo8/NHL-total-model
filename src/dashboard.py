@@ -558,6 +558,7 @@ def day_table(g):
     desktop screen: decision columns first, then goalie, injuries and the projection breakdown."""
     g = current(g).sort_values(["p7", "proj"], ascending=[False, False])  # most likely to go 7+ first
     final_day = bool(len(g)) and g.final_total.notna().all()
+    ranks = {} if final_day else rank_tags()  # current ratings, so only on the upcoming slate
     head = f"<th>{tip('Team', cls='tl')}</th>"
     if final_day:
         head += f"<th class='num'>{tip('G', 'Final goals for this team (shootout winner gets +1, as sportsbooks settle).')}</th>"
@@ -572,10 +573,10 @@ def day_table(g):
              f"<th class='num bcol'>{tip('5v5')}</th><th class='num'>{tip('PP')}</th>"
              f"<th class='num'>{tip('Gl', cls='tr')}</th><th class='num'>{tip('Oth', cls='tr')}</th><th class='num'>{tip('B2B', cls='tr')}</th><th class='num'>{tip('Spd', cls='tr')}</th>"
              f"<th class='num'>{tip('Inj', cls='tr')}</th>")
-    # fixed widths (%), same section sizes in both tables so they line up:
-    # Team 18 | Game/Result 34 | Goalies 17 | Breakdown 31
-    widths = ([9, 3.5, 5.5] if final_day else [10, 8]) \
-        + ([8.5, 5.5, 5, 7, 8] if final_day else [10, 8, 16]) + [17] + [4.4, 3.9, 5.2, 3.9, 4.8, 4.4, 4.4]
+    # fixed widths (%): results Team 18 | Result 34, slate Team 24 (room for the OFF/DEF ranks) | Game 27;
+    # both: Goalies 17 | Breakdown 31
+    widths = ([9, 3.5, 5.5] if final_day else [17, 7]) \
+        + ([8.5, 5.5, 5, 7, 8] if final_day else [8, 6, 13]) + [17] + [4.4, 3.9, 5.2, 3.9, 4.8, 4.4, 4.4]
     cols = "<colgroup>" + "".join(f"<col style='width:{w:.3f}%'>" for w in widths) + "</colgroup>"
     sections = (f"<tr class='sec'><th colspan='{3 if final_day else 2}'>Team</th>"
                 f"<th class='gcol' colspan='{5 if final_day else 3}'>{'Result' if final_day else 'Game'}</th>"
@@ -587,11 +588,12 @@ def day_table(g):
 
         def team(side, abbr, proj, score):
             hot = proj >= r.cutoff
-            b2b = f" <span class='b2b'>{tip('B2B', TIPS['B2B tag'])}</span>" if _is(getattr(r, f"{side}_b2b")) else ""
-            cells = (f"<td class='tm'>{logo(abbr, 22)}<b title='{e(TEAMS.get(abbr, abbr))}'>{e(abbr)}</b>{b2b}</td>")
+            rk = f"<span class='rk-tag'>{e(ranks[abbr])}</span>" if abbr in ranks else ""
+            cells = (f"<td class='tm'>{logo(abbr, 22)}<b title='{e(TEAMS.get(abbr, abbr))}'>{e(abbr)}</b>{rk}</td>")
             if final_day:
                 cells += f"<td class='num score-cell'>{int(score)}</td>"
-            cells += (f"<td class='num proj{' hot' if hot else ''}'>{tip(f'{proj:.2f}', f'{TEAMS.get(abbr, abbr)} projected goals (high-scoring cutoff {r.cutoff:.2f}).' + (' HIGH: above the cutoff.' if hot else ''))}"
+            sq = f"<span class='b2b-sq' title='{e(TIPS['B2B tag'])}'></span>" if _is(getattr(r, f"{side}_b2b")) else ""
+            cells += (f"<td class='num proj{' hot' if hot else ''}'>{sq}{tip(f'{proj:.2f}', f'{TEAMS.get(abbr, abbr)} projected goals (high-scoring cutoff {r.cutoff:.2f}).' + (' HIGH: above the cutoff.' if hot else ''))}"
                       f"<span class='hot-dot{'' if hot else ' off'}'>●</span></td>")
             return cells
 
@@ -650,7 +652,7 @@ def day_table(g):
                     f"<td rowspan='2'>{gtime}{callpill}<br>{ln}</td>")
         ctx = f"<div class='why-text'>{reasoning(r, flagged)}</div>"
         mcards.append(mobile_card(r, final, callpill, st, f"{vs} {outcome}" if final_day else ln,
-                                  breakdown_cells, cls))
+                                  breakdown_cells, cls, ranks))
         away = team("away", r.away, r.proj_away, r.away_score if final else None) + game + detail("away")
         home = team("home", r.home, r.proj_home, r.home_score if final else None) + detail("home")
         body.append(f"<tbody class='game {cls}'><tr class='away'>{away}</tr><tr class='home'>{home}</tr>"
@@ -663,16 +665,17 @@ def day_table(g):
             "Hover or tap any underlined label for an explanation.</p>")
 
 
-def mobile_card(r, final, callpill, st, status, breakdown_cells, cls):
+def mobile_card(r, final, callpill, st, status, breakdown_cells, cls, ranks):
     """Phone layout (shown under 760px wide instead of the table): one card per game with the same
     call, line/result, teams, goalies, tier-colored breakdown and reasoning."""
     def team(side, abbr, proj, score):
         hot = proj >= r.cutoff
-        b2b = " <span class='b2b'>B2B</span>" if _is(getattr(r, f"{side}_b2b")) else ""
         g_ = lambda c: getattr(r, f"{side}_{c}", float("nan"))
-        return (f"<div class='mc-team'>{logo(abbr, 26)}<b>{e(abbr)}</b>{b2b}"
+        rk = f"<span class='rk-tag'>{e(ranks[abbr])}</span>" if abbr in ranks else ""
+        sq = f"<span class='b2b-sq' title='{e(TIPS['B2B tag'])}'></span>" if _is(getattr(r, f"{side}_b2b")) else ""
+        return (f"<div class='mc-team'>{logo(abbr, 26)}<b>{e(abbr)}</b><span>{rk}</span>"
                 + (f"<span class='mc-score'>{int(score)}</span>" if final else "")
-                + f"<span class='mc-proj{' hot' if hot else ''}'>{proj:.2f}<span class='hot-dot{'' if hot else ' off'}'>●</span></span>"
+                + f"<span class='mc-proj{' hot' if hot else ''}'>{sq}{proj:.2f}<span class='hot-dot{'' if hot else ' off'}'>●</span></span>"
                 + f"<div class='mc-gl'>{goalie_compact(g_('goalie'), g_('goalie_now'), g_('goalie_src'), g_('goalie_actual'))}</div></div>")
     total = (f"<span class='big-total'>{int(r.final_total)}</span> goals · proj {r.proj:.2f}" if final
              else f"Proj total <b>{r.proj:.2f}</b>")
@@ -867,6 +870,53 @@ def rule_check():
       <li>This season = last pre-game call at its line, as the results table grades it.</li></ul>"""
 
 
+def load_rankings():
+    """data/team_rankings.csv (written by each model run) with rank columns r_*; None when missing."""
+    path = paths.data("team_rankings.csv")
+    if not os.path.exists(path):
+        return None
+    r = pd.read_csv(path)
+    for c, best_high in (("gf", True), ("gf_ev", True), ("gf_pp", True), ("ga", False), ("ga_ev", False), ("ga_pp", False)):
+        r[f"r_{c}"] = r[c].rank(ascending=not best_high, method="min").astype(int)
+    return r
+
+
+def rank_tags():
+    """{team: '#3 OFF / #10 DEF'} for today's slate; {} when there are no rankings."""
+    r = load_rankings()
+    return {} if r is None else {x.team: f"#{x.r_gf} OFF / #{x.r_ga} DEF" for x in r.itertuples()}
+
+
+def rankings():
+    """Team rankings vs a league-average opponent (data/team_rankings.csv, written by each model run)."""
+    r = load_rankings()
+    if r is None:
+        return ""
+    n = len(r)
+
+    def tcls(rank):  # rank fifths: 1st fifth = great ... last fifth = trash (green = strong unit)
+        return "t-" + TIER_NAMES[4 - min(4, (rank - 1) * 5 // n)]
+
+    def table(kind):
+        tot, ev, pp = (("gf", "gf_ev", "gf_pp") if kind == "off" else ("ga", "ga_ev", "ga_pp"))
+        rows = "".join(f"<tr><td class='num'>{x[f'r_{tot}']}</td><td class='tm'>{logo(x.team, 20)}<b title='{e(TEAMS.get(x.team, x.team))}'>{e(x.team)}</b></td>"
+                       f"<td class='num {tcls(x[f'r_{tot}'])}'><b>{x[tot]:.2f}</b></td>"
+                       f"<td class='num {tcls(x[f'r_{ev}'])}'>{x[ev]:.2f} <span class='muted small'>#{x[f'r_{ev}']}</span></td>"
+                       f"<td class='num {tcls(x[f'r_{pp}'])}'>{x[pp]:.2f} <span class='muted small'>#{x[f'r_{pp}']}</span></td></tr>"
+                       for _, x in r.sort_values(f"r_{tot}").iterrows())
+        title = "Offense · goals scored" if kind == "off" else "Defense · goals allowed (skaters)"
+        third = "PP" if kind == "off" else "PK"
+        return (f"<div class='rk'><h3>{title}</h3><table class='gt rk-t'><thead><tr><th class='num'>#</th><th>Team</th>"
+                f"<th class='num'>Total</th><th class='num'>5v5</th><th class='num'>{third}</th></tr></thead><tbody>{rows}</tbody></table></div>")
+    return (f"<div class='rk-wrap'>{table('off')}{table('def')}</div>"
+            "<ul class='notes'><li>Each team against a league-average opponent, using the model's own ratings and formula "
+            "(5v5, power play, penalties drawn/taken, team speed), so nothing is weighted by hand. Goalies and back-to-backs "
+            "are left out (they change game to game).</li><li>Defense = goals its skaters allow; PK = power-play goals allowed "
+            "(how often they take penalties × how well they kill them). Lower is better.</li>"
+            "<li>Colors = rank fifths, green = strong unit, red = weak. Early in the season these are mostly last season's "
+            "ratings pulled toward average; they firm up over the first month.</li></ul>")
+
+
 def backtest():
     def roi(v):
         return "<td class='num'>–</td>" if v is None else f"<td class='num {'pos' if v > 0 else 'neg'}'>{pct(v)}</td>"
@@ -929,6 +979,12 @@ body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 -apple-system
 .lastrun b{display:block;font-size:13px;color:#fff;font-weight:700}.lastrun .tip{border-bottom-color:rgba(255,255,255,.45)}
 @media (max-width:600px){.lastrun{position:static;text-align:left;margin-top:8px}}
 .mcards{display:none}
+.rk-tag{margin-left:6px;font-size:10px;font-weight:700;color:var(--muted);white-space:nowrap}
+.b2b-sq{display:inline-block;width:9px;height:9px;background:#dc2626;border-radius:2px;margin-right:5px;vertical-align:middle}
+.rk-wrap{display:flex;flex-wrap:wrap;gap:16px}.rk{flex:1 1 360px;min-width:0}.rk h3{margin:0 0 8px;font-size:15px}
+table.gt.rk-t{table-layout:auto;font-size:13px}table.gt.rk-t td,table.gt.rk-t th{padding:4px 8px;white-space:nowrap;overflow:visible;text-overflow:clip}
+@media (max-width:760px){table.gt.rk-t{font-size:12px}table.gt.rk-t td,table.gt.rk-t th{padding:4px 4px}table.gt.rk-t td.tm img{display:none}}
+table.rk-t tbody tr:nth-child(even) td:not([class*=t-]){background:color-mix(in srgb,var(--ice) 50%,transparent)}
 @media (max-width:760px){.gtable,.legend.tbl-only{display:none}.mcards{display:grid;gap:12px}}
 .mc{background:var(--card);border:2px solid color-mix(in srgb,var(--muted) 45%,transparent);border-radius:12px;padding:12px 12px 8px}
 .mc.flagged{border-color:var(--gold)}
@@ -1127,6 +1183,8 @@ def build():
 <section><h2>Today's slate</h2>{slate(d)}</section>
 
 <section><h2>Yesterday's results</h2>{yesterday(d)}</section>
+
+{f"<section><h2>Team rankings</h2><div class='panel'>{rk}</div></section>" if (rk := rankings()) else ""}
 
 <section><h2>Paper trading record</h2>{record(d)}</section>
 

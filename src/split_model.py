@@ -49,6 +49,18 @@ class Rate:
         self.sum = {}
 
 
+def team_rankings(project, teams, season):
+    """Each team vs a league-average opponent ('AVG' falls back to league rates; no goalie or back-to-back):
+    goals scored (offense) and goals allowed by its skaters (defense), with the 5v5 and power-play parts."""
+    rows = []
+    for t in sorted(teams):
+        gf, ga, det = project(t, "AVG", None, None, detail=True, season=season)
+        o, d = det["home"], det["away"]
+        rows.append({"team": t, "gf": round(gf, 3), "gf_ev": round(o["ev"], 3), "gf_pp": round(o["pp"], 3),
+                     "ga": round(ga, 3), "ga_ev": round(d["ev"], 3), "ga_pp": round(d["pp"], 3)})
+    return pd.DataFrame(rows)
+
+
 def season_of(day):
     """NHL season (start year) a date belongs to: Aug-Dec -> that year, Jan-Jul -> the year before."""
     return day.year if day.month >= 8 else day.year - 1

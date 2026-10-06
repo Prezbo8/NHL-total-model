@@ -507,6 +507,11 @@ def today(day=None):
         import store  # run history in Supabase (skipped when not configured; never stops the run)
         store.record_run(day, log_rows, sources={"dailyfaceoff": bool(dfo), "lines": bool(lines), "sportsbooks": bool(shop),
                                                  "lineups": bool(lineup_info), "injuries": bool(inj)})
+        try:  # team rankings for the dashboard (each team vs a league-average opponent)
+            sm.team_rankings(project, set(games[games.season >= season - 1].home), season).to_csv(
+                paths.data("team_rankings.csv"), index=False)
+        except Exception as e:
+            print(f"(team rankings not saved: {e})")
         try:  # games already under way: record who actually started (NHL box score)
             paper.update_actual_starters()
         except Exception as e:
