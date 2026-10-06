@@ -50,16 +50,39 @@ class Rate:
         self.sum = {}
 
 
-def team_rankings(project, teams, season):
+def team_rankings(project, teams, season, games=None):
     """Each team vs a league-average opponent ('AVG' falls back to league rates; no goalie or back-to-back):
-    goals scored (offense) and goals allowed by its skaters (defense), with the 5v5 and power-play parts."""
+    goals scored (offense) and goals allowed by its skaters (defense), with the 5v5 and power-play parts.
+    With games: strength of schedule too. opp_d / opp_o = how much more (+) or less (-) than average the
+    defenses / offenses faced this season allow / score; gf_adj / ga_adj = the totals corrected for the
+    schedule behind the rating (last season's opponents count K*(1-REGRESS) games, this season's 1 each)."""
     rows = []
     for t in sorted(teams):
         gf, ga, det = project(t, "AVG", None, None, detail=True, season=season)
         o, d = det["home"], det["away"]
         rows.append({"team": t, "gf": round(gf, 3), "gf_ev": round(o["ev"], 3), "gf_pp": round(o["pp"], 3),
                      "ga": round(ga, 3), "ga_ev": round(d["ev"], 3), "ga_pp": round(d["pp"], 3)})
-    return pd.DataFrame(rows)
+    r = pd.DataFrame(rows)
+    if games is None:
+        return r
+    lg = r.gf.mean()
+    leak, punch = dict(zip(r.team, r.ga / lg - 1)), dict(zip(r.team, r.gf / lg - 1))
+
+    def faced(g, t):
+        opp = pd.concat([g[g.home == t].away, g[g.away == t].home])
+        opp = [x for x in opp if x in leak]
+        return (len(opp), sum(leak[x] for x in opp) / len(opp), sum(punch[x] for x in opp) / len(opp)) if opp else (0, 0.0, 0.0)
+    prior = m.K * (1 - m.REGRESS)
+    cur_g, last_g = games[games.season == season], games[games.season == season - 1]
+    sos = []
+    for t in r.team:
+        n, d_now, o_now = faced(cur_g, t)
+        _, d_last, o_last = faced(last_g, t)
+        d_eff = (prior * d_last + n * d_now) / (m.K + n)
+        o_eff = (prior * o_last + n * o_now) / (m.K + n)
+        sos.append({"games": n, "opp_d": round(d_now, 4), "opp_o": round(o_now, 4), "gf_adj": round(r.gf[r.team == t].iloc[0] / (1 + d_eff), 3),
+                    "ga_adj": round(r.ga[r.team == t].iloc[0] / (1 + o_eff), 3)})
+    return pd.concat([r, pd.DataFrame(sos)], axis=1)
 
 
 RANKINGS_HISTORY = paths.data("team_rankings_history.csv")

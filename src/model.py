@@ -508,7 +508,7 @@ def today(day=None):
         store.record_run(day, log_rows, sources={"dailyfaceoff": bool(dfo), "lines": bool(lines), "sportsbooks": bool(shop),
                                                  "lineups": bool(lineup_info), "injuries": bool(inj)})
         try:  # team rankings for the dashboard (each team vs a league-average opponent)
-            rk = sm.team_rankings(project, set(games[games.season >= season - 1].home), season)
+            rk = sm.team_rankings(project, set(games[games.season >= season - 1].home), season, games)
             rk.to_csv(paths.data("team_rankings.csv"), index=False)
             sm.save_rankings_day(rk, day)
         except Exception as e:

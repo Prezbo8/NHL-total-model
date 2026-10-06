@@ -47,6 +47,9 @@ TIPS = {
     "Rank OFF PP": "Its power-play goals against an average penalty kill: PP strength × how many penalties it draws. Rank 1 = most.",
     "Rank DEF total": "Goals its skaters would allow to a league-average offense (goalie rated separately). Rank 1 = fewest.",
     "Rank DEF 5v5": "5-on-5 goals it allows to an average offense. Rank 1 = fewest.",
+    "Rank OFF sched": "Strength of schedule this season: the defenses this team has faced. #1 = toughest. % = how many more (+) or fewer (−) goals those defenses allow than average, so − means it has scored against good defenses.",
+    "Rank DEF sched": "Strength of schedule this season: the offenses this team has faced. #1 = toughest. % = how many more (+) or fewer (−) goals those offenses score than average, so + means it has defended against good offenses.",
+    "Rank adj": "Rank after correcting for the schedule behind the rating (last season's opponents count as ~10 games, this season's games 1 each). ↑/↓ = places gained/lost vs the raw rank. Display only: projections use the raw ratings.",
     "Rank DEF PK": "Power-play goals it allows: penalty-kill quality × how many penalties it takes. Rank 1 = fewest.",
     "Proj": "Projected goals = (5v5 + PP + Oth) × goalie × back-to-back × team speed × injury adjustments.",
     "HIGH": "Projected 2.95+ goals (top 40% of last season's team projections). An OVER FLAG needs both teams HIGH.",
@@ -887,8 +890,10 @@ def load_rankings(day=None):
         r = r[r.date == day]
         if r.empty:
             return None
-    for c, best_high in (("gf", True), ("gf_ev", True), ("gf_pp", True), ("ga", False), ("ga_ev", False), ("ga_pp", False)):
-        r[f"r_{c}"] = r[c].rank(ascending=not best_high, method="min").astype(int)
+    for c, best_high in (("gf", True), ("gf_ev", True), ("gf_pp", True), ("ga", False), ("ga_ev", False), ("ga_pp", False),
+                         ("gf_adj", True), ("ga_adj", False), ("opp_d", False), ("opp_o", True)):
+        if c in r and r[c].notna().all():
+            r[f"r_{c}"] = r[c].rank(ascending=not best_high, method="min").astype(int)
     return r
 
 
@@ -911,17 +916,30 @@ def rankings():
 
     def table(kind):
         tot, ev, pp = (("gf", "gf_ev", "gf_pp") if kind == "off" else ("ga", "ga_ev", "ga_pp"))
+        opp, adj = ("opp_d", "gf_adj") if kind == "off" else ("opp_o", "ga_adj")
+        sos = f"r_{adj}" in r
+
+        def sched(x):  # this season's opponents: rank 1 = toughest, % = how much they allow (offense) / score (defense) vs average
+            if not x["games"]:
+                return "<td class='num muted'>–</td><td class='num muted'>–</td>"
+            mv = x[f"r_{tot}"] - x[f"r_{adj}"]
+            arrow = "" if mv == 0 else f" <span class='{'pos' if mv > 0 else 'neg'} small'>{'↑' if mv > 0 else '↓'}{abs(mv)}</span>"
+            return (f"<td class='num'>#{x[f'r_{opp}']} <span class='muted small'>{x[opp] * 100:+.1f}%</span></td>"
+                    f"<td class='num'><b>#{x[f'r_{adj}']}</b>{arrow}</td>")
         rows = "".join(f"<tr><td class='num'>{x[f'r_{tot}']}</td><td class='tm'>{logo(x.team, 20)}<b title='{e(TEAMS.get(x.team, x.team))}'>{e(x.team)}</b></td>"
                        f"<td class='num {tcls(x[f'r_{tot}'])}'><b>{x[tot]:.2f}</b></td>"
                        f"<td class='num {tcls(x[f'r_{ev}'])}'>{x[ev]:.2f} <span class='muted small'>#{x[f'r_{ev}']}</span></td>"
-                       f"<td class='num {tcls(x[f'r_{pp}'])}'>{x[pp]:.2f} <span class='muted small'>#{x[f'r_{pp}']}</span></td></tr>"
+                       f"<td class='num {tcls(x[f'r_{pp}'])}'>{x[pp]:.2f} <span class='muted small'>#{x[f'r_{pp}']}</span></td>"
+                       + (sched(x) if sos else "") + "</tr>"
                        for _, x in r.sort_values(f"r_{tot}").iterrows())
         title = "Offense · goals scored" if kind == "off" else "Defense · goals allowed (skaters)"
         third = "PP" if kind == "off" else "PK"
         k = "Rank OFF" if kind == "off" else "Rank DEF"
         return (f"<div class='rk'><h3>{title}</h3><table class='gt rk-t'><thead><tr><th class='num'>#</th><th>Team</th>"
                 f"<th class='num'>{tip('Total', TIPS[k + ' total'])}</th><th class='num'>{tip('5v5', TIPS[k + ' 5v5'])}</th>"
-                f"<th class='num'>{tip(third, TIPS[k + ' ' + third], 'tr')}</th></tr></thead><tbody>{rows}</tbody></table></div>")
+                f"<th class='num'>{tip(third, TIPS[k + ' ' + third], 'tr')}</th>"
+                + (f"<th class='num'>{tip('Sched', TIPS[k + ' sched'], 'tr')}</th><th class='num'>{tip('Adj #', TIPS['Rank adj'], 'tr')}</th>" if sos else "")
+                + f"</tr></thead><tbody>{rows}</tbody></table></div>")
     return (f"<div class='rk-wrap'>{table('off')}{table('def')}</div>"
             "<ul class='notes'><li>Each team against a league-average opponent, using the model's own ratings and formula "
             "(5v5, power play, penalties drawn/taken, team speed), so nothing is weighted by hand. Goalies and back-to-backs "
@@ -995,9 +1013,9 @@ body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 -apple-system
 .mcards{display:none}
 .rk-tag{margin-left:6px;font-size:10px;font-weight:700;color:var(--muted);white-space:nowrap}
 .b2b-sq{display:inline-block;width:9px;height:9px;background:#dc2626;border-radius:2px;margin-right:5px;vertical-align:middle}
-.rk-wrap{display:flex;flex-wrap:wrap;gap:16px}.rk{flex:1 1 360px;min-width:0}.rk h3{margin:0 0 8px;font-size:15px}
+.rk-wrap{display:flex;flex-wrap:wrap;gap:16px}.rk{flex:1 1 360px;min-width:0;overflow-x:auto}.rk h3{margin:0 0 8px;font-size:15px}
 table.gt.rk-t{table-layout:auto;font-size:13px}table.gt.rk-t td,table.gt.rk-t th{padding:4px 8px;white-space:nowrap;overflow:visible;text-overflow:clip}
-@media (max-width:760px){table.gt.rk-t{font-size:12px}table.gt.rk-t td,table.gt.rk-t th{padding:4px 4px}table.gt.rk-t td.tm img{display:none}}
+@media (max-width:760px){table.gt.rk-t{font-size:11.5px}table.gt.rk-t td,table.gt.rk-t th{padding:4px 3px}table.gt.rk-t td.tm img{display:none}table.gt.rk-t .small{font-size:9.5px}}
 table.rk-t tbody tr:nth-child(even) td:not([class*=t-]){background:color-mix(in srgb,var(--ice) 50%,transparent)}
 @media (max-width:760px){.gtable,.legend.tbl-only{display:none}.mcards{display:grid;gap:12px}}
 .mc{background:var(--card);border:2px solid color-mix(in srgb,var(--muted) 45%,transparent);border-radius:12px;padding:12px 12px 8px}
@@ -1078,6 +1096,9 @@ footer{margin-top:32px;font-size:13px;color:var(--muted)}a{color:var(--accent)}
 .why td:first-child{white-space:nowrap}
 .why td:first-child .logo{vertical-align:-4px;margin-right:2px}
 .small-hero{padding:24px 24px 20px}.small-hero h1{font-size:clamp(22px,4vw,32px)}
+.tabs{display:flex;gap:6px;margin:14px 0 4px;border-bottom:2px solid var(--line)}
+.tab{padding:8px 16px;font-weight:700;font-size:14px;color:var(--muted);text-decoration:none;border-radius:8px 8px 0 0;margin-bottom:-2px;border:2px solid transparent}
+.tab:hover{color:var(--ink)}.tab.on{color:var(--ink);background:var(--card);border-color:var(--line);border-bottom-color:var(--card)}
 .daynav{display:flex;justify-content:space-between;align-items:center;margin:16px 0 0;font-weight:700}
 .legend{margin:8px 0 0}
 /* table layout: two rows per game, sized to fit a desktop screen */
@@ -1159,6 +1180,15 @@ ul.archive li:last-child{border-bottom:none}
 """
 
 
+def tabs(active, has_rankings):
+    """Tab bar between the dashboard and the team rankings page."""
+    if not has_rankings:
+        return ""
+    t = [("dash", "index.html", "Dashboard"), ("rank", "rankings.html", "Team rankings")]
+    return ("<nav class='tabs'>" + "".join(f"<a href='{u}' class='tab{' on' if k == active else ''}'>{n}</a>" for k, u, n in t)
+            + "</nav>")
+
+
 def shell(title, body, root=""):
     return f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>{e(title)}</title>
@@ -1191,14 +1221,14 @@ def build():
     lr = last_run()
     stamp = (f"<div class='lastrun'>{tip('Last model run', 'When the model last ran: re-checked goalies, lineups, injuries and lines, and re-projected every game that had not started. It runs every hour from 11:17 AM to 10:17 PM Eastern and 15 minutes before each game.', 'tr down')}"
              f"<b>{e(lr)}</b></div>") if lr else ""
+    rk = rankings()
     body = f"""
 <header class="hero"><h1>NHL Total Model</h1>{stamp}</header>
+{tabs("dash", bool(rk))}
 
 <section><h2>Today's slate</h2>{slate(d)}</section>
 
 <section><h2>Yesterday's results</h2>{yesterday(d)}</section>
-
-{f"<section><h2>Team rankings</h2><div class='panel'>{rk}</div></section>" if (rk := rankings()) else ""}
 
 <section><h2>Paper trading record</h2>{record(d)}</section>
 
@@ -1229,6 +1259,14 @@ Data from the 2020-21 season onward only (MoneyPuck, NHL API, DailyFaceoff, Acti
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
     with open(OUT, "w") as f:
         f.write(shell("NHL Total Model", body))
+    rk_path = os.path.join(os.path.dirname(OUT), "rankings.html")
+    if rk:
+        with open(rk_path, "w") as f:
+            f.write(shell("NHL Total Model · Team rankings",
+                          f"<header class='hero'><h1>Team rankings</h1>{stamp}</header>{tabs('rank', True)}"
+                          f"<section><div class='panel'>{rk}</div></section>"))
+    elif os.path.exists(rk_path):
+        os.remove(rk_path)
     days = sorted(d.date.unique())
     os.makedirs(os.path.join(os.path.dirname(OUT), "days"), exist_ok=True)
     for day in days:
