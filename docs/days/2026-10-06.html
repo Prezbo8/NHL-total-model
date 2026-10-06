@@ -24,6 +24,10 @@ body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 -apple-system
 .mcards{display:none}
 .rk-tag{margin-left:6px;font-size:10px;font-weight:700;color:var(--muted);white-space:nowrap}
 .b2b-sq{display:inline-block;width:9px;height:9px;background:#dc2626;border-radius:2px;margin-right:5px;vertical-align:middle}
+.rk-switch{display:inline-flex;gap:4px;padding:4px;margin:0 0 14px;background:var(--ice);border:1px solid var(--line);border-radius:999px}
+.rk-switch button{font:inherit;font-size:14px;font-weight:800;padding:7px 22px;border:0;border-radius:999px;background:transparent;color:var(--muted);cursor:pointer}
+.rk-switch button.on{background:var(--card);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.25)}
+.rk[hidden]{display:none!important}
 .rk-wrap{display:flex;flex-wrap:wrap;gap:16px}.rk-stack{flex-direction:column}.rk-stack .rk{flex:0 0 auto;width:100%;max-width:100%}.rk{flex:1 1 360px;min-width:0;overflow-x:auto}.rk h3{margin:0 0 8px;font-size:15px}
 table.gt.rk-t{table-layout:auto;font-size:13px}table.gt.rk-t td.tm b{font-size:16px;letter-spacing:.01em}table.gt.rk-t td.tm img{margin-right:8px;vertical-align:middle}table.gt.rk-t td,table.gt.rk-t th{padding:4px 8px;white-space:nowrap;overflow:visible;text-overflow:clip}
 @media (max-width:760px){table.gt.rk-t{font-size:11.5px}table.gt.rk-t td,table.gt.rk-t th{padding:4px 3px}table.gt.rk-t td.tm b{font-size:14px}table.gt.rk-t td.tm picture,table.gt.rk-t td.tm img{width:24px!important;height:24px!important}table.gt.rk-t .small{font-size:9.5px}}
@@ -544,6 +548,15 @@ Mid: -0.5% to +0.5%
 Bad: -2.0% to -0.5%
 Trash: below -2.0%'>Inj</span></th></tr></thead><tbody><tr><td>FLA</td><td class='num bcol t-trash' title='trash'>1.78</td><td class='num t-good' title='good'>0.65</td><td class='num t-good' title='good'>-1.4%</td><td class='num'>0.39</td><td class='num'>–</td><td class='num t-mid' title='mid'>–</td><td class='num t-good' title='good'>+1.1%</td></tr><tr><td>LAK</td><td class='num bcol t-trash' title='trash'>1.81</td><td class='num t-mid' title='mid'>0.55</td><td class='num t-good' title='good'>–</td><td class='num'>0.39</td><td class='num'>–</td><td class='num t-mid' title='mid'>-0.1%</td><td class='num t-bad' title='bad'>-1.2%</td></tr></tbody></table><details class='mc-why'><summary>Why this call</summary><div class='why-text'><b>AVOID:</b> FLA and LAK project under the 2.98-goal high-scoring cutoff (FLA 2.81, LAK 2.71). At 5-on-5, FLA is trash (1.78) and LAK is trash (1.81); on the power play, FLA is good (0.65) and LAK is mid (0.55). FLA faces Darcy Kuemper, a beatable goalie (-1.4%); LAK faces Jacob Markstrom, a beatable goalie (-0.0%). The model projects 5.53 total goals against a 6 line, with a 41% chance of 7 or more (a typical game is about 45%). The line moved from 5.5 to 6, toward the over. Games like this went over only 45-49% of the time in 2021-26.</div></details></article></div><p class='muted small legend tbl-only'>Two rows per game (away, then home). <span style='color:var(--accent)'>●</span> = team projected high-scoring. Proj = (5v5 + PP + Oth) × goalie (Gl) × back-to-back (B2B) × team speed (Spd) × injuries (Inj). Hover or tap any underlined label for an explanation.</p></section>
 <script>
+(function(){  // Team rankings: Offense / Defense switch (remembers the choice in the address, e.g. #defense)
+  var sw = document.querySelector('.rk-switch'); if (!sw) return;
+  function show(k){
+    document.querySelectorAll('.rk[data-kind]').forEach(function(t){ t.hidden = t.dataset.kind !== k; });
+    sw.querySelectorAll('button').forEach(function(b){ b.classList.toggle('on', b.dataset.show === k); b.setAttribute('aria-selected', b.dataset.show === k); });
+  }
+  sw.addEventListener('click', function(e){ var b = e.target.closest('button'); if (!b) return; show(b.dataset.show); history.replaceState(null, '', '#' + b.dataset.show); });
+  show(location.hash === '#defense' ? 'defense' : 'offense');
+})();
 // one floating explanation box, placed next to the hovered/tapped label (fixed, so tables can't clip it)
 const box = document.createElement("div"); box.id = "tipbox"; document.body.appendChild(box);
 document.addEventListener("mouseover", show); document.addEventListener("focusin", show);

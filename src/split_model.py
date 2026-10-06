@@ -54,8 +54,9 @@ class Rate:
 def team_rankings(project, teams, season, games=None):
     """Each team vs a league-average opponent ('AVG' falls back to league rates; no goalie or back-to-back):
     goals scored (offense) and goals allowed by its skaters (defense), with the 5v5 and power-play parts.
-    With games: strength of schedule too. opp_d / opp_o = how much more (+) or less (-) than average the
-    defenses / offenses faced this season allow / score; gf_adj / ga_adj = the totals corrected for the
+    With games: the Total Offense / Total Defense stats and scores, and strength of schedule judged by them:
+    opp_d / opp_o = how many more (+) or fewer (-) goals than average the defenses / offenses faced this
+    season allow / score, read off their Total Defense / Total Offense scores; gf_adj / ga_adj = the totals corrected for the
     schedule behind the rating (last season's opponents count K*(1-REGRESS) games, this season's 1 each)."""
     rows = []
     for t in sorted(teams):
@@ -66,14 +67,20 @@ def team_rankings(project, teams, season, games=None):
     r = pd.DataFrame(rows)
     if games is None:
         return r
-    lg = r.gf.mean()
-    leak, punch = dict(zip(r.team, r.ga / lg - 1)), dict(zip(r.team, r.gf / lg - 1))
+    stats = team_stats(games, season).reindex(r.team)
+    score_off, score_def = composite(stats, "F"), composite(stats, "A")
+
+    def scale(score, goals):
+        """Total score -> how many more (+) / fewer (-) goals than average, via a straight-line fit of goals per
+        game on the score across the league (so schedule strength is judged by the Total ranks)."""
+        slope, icpt = np.polyfit(score.values, goals.values, 1)
+        return dict(zip(r.team, (icpt + slope * score.values) / goals.mean() - 1))
+    leak, punch = scale(score_def, stats.goalsA), scale(score_off, stats.goalsF)
 
     def faced(g, t):
         opp = pd.concat([g[g.home == t].away, g[g.away == t].home])
         opp = [x for x in opp if x in leak]
         return (len(opp), sum(leak[x] for x in opp) / len(opp), sum(punch[x] for x in opp) / len(opp)) if opp else (0, 0.0, 0.0)
-    stats = team_stats(games, season).reindex(r.team)
     prior = m.K * (1 - m.REGRESS)
     cur_g, last_g = games[games.season == season], games[games.season == season - 1]
     sos, effs = [], []
@@ -88,7 +95,7 @@ def team_rankings(project, teams, season, games=None):
     out = pd.concat([r, pd.DataFrame(sos)], axis=1)
     for c in stats.columns:
         out[c] = stats[c].round(4).values
-    out["score_off"], out["score_def"] = composite(stats, "F").round(3).values, composite(stats, "A").round(3).values
+    out["score_off"], out["score_def"] = score_off.round(3).values, score_def.round(3).values
     # schedule-corrected: stats for scaled by the defenses faced, stats against by the offenses faced
     adj = stats.copy()
     d_eff, o_eff = np.array([x[0] for x in effs]), np.array([x[1] for x in effs])

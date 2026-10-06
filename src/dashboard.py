@@ -50,9 +50,9 @@ TIPS = {
     "Rank OFF PP": "Its power-play goals against an average penalty kill: PP strength × how many penalties it draws. Rank 1 = most.",
     "Rank DEF total": "Goals its skaters would allow to a league-average offense (goalie rated separately). Rank 1 = fewest.",
     "Rank DEF 5v5": "5-on-5 goals it allows to an average offense. Rank 1 = fewest.",
-    "Rank OFF sched": "Strength of schedule this season: the defenses this team has faced. #1 = toughest. % = how many more (+) or fewer (−) goals those defenses allow than average, so − means it has scored against good defenses.",
-    "Rank DEF sched": "Strength of schedule this season: the offenses this team has faced. #1 = toughest. % = how many more (+) or fewer (−) goals those offenses score than average, so + means it has defended against good offenses.",
-    "Rank adj": "Rank after correcting for the schedule behind the rating (last season's opponents count as ~10 games, this season's games 1 each). ↑/↓ = places gained/lost vs the raw rank. Display only: projections use the raw ratings.",
+    "Rank OFF sched": "Strength of schedule this season: the defenses this team has faced, judged by their Total Defense scores. #1 = toughest. % = how many more (+) or fewer (−) goals those defenses allow than average, so − means it has scored against good defenses.",
+    "Rank DEF sched": "Strength of schedule this season: the offenses this team has faced, judged by their Total Offense scores. #1 = toughest. % = how many more (+) or fewer (−) goals those offenses score than average, so + means it has defended against good offenses.",
+    "Rank adj": "Total rank after correcting every stat for the schedule behind it (last season's opponents count as ~10 games, this season's games 1 each). ↑/↓ = places gained/lost vs the raw rank. Display only: projections use the raw ratings.",
     "Rank DEF PK": "Power-play goals it allows: penalty-kill quality × how many penalties it takes. Rank 1 = fewest.",
     "Proj": "Projected goals = (5v5 + PP + Oth) × goalie × back-to-back × team speed × injury adjustments.",
     "HIGH": "Projected 2.95+ goals (top 40% of last season's team projections). An OVER FLAG needs both teams HIGH.",
@@ -955,20 +955,23 @@ def rankings():
         heads = "".join(f"<th class='num'>{tip(h, f'{expl}{(' ' + verb) if verb else ''}. Weight in the total: {w[c] * 100:.0f}%. ' + ('Rank 1 = most.' if kind == 'off' else 'Rank 1 = fewest.'), 'tr' if i > 4 else '')}</th>"
                         for i, (c, h, _, expl) in enumerate(RANK_STATS))
         title = "Total Offense" if kind == "off" else "Total Defense (stats allowed)"
-        return (f"<div class='rk'><h3>{title}</h3><table class='gt rk-t'><thead><tr><th class='num'>#</th><th>Team</th>"
+        return (f"<div class='rk' data-kind='{'offense' if kind == 'off' else 'defense'}'><h3>{title}</h3><table class='gt rk-t'><thead><tr><th class='num'>#</th><th>Team</th>"
                 f"<th class='num'>{tip('Total', TIPS[k + ' composite'])}</th>{heads}"
                 f"<th class='num'>{tip('Model', TIPS[k + ' total'], 'tr')}</th>"
                 f"<th class='num'>{tip('Sched', TIPS[k + ' sched'], 'tr')}</th><th class='num'>{tip('Adj #', TIPS['Rank adj'], 'tr')}</th>"
                 f"</tr></thead><tbody>{rows}</tbody></table></div>")
     wf = split_model.WEIGHTS
     fmt = lambda side: ", ".join(f"{h} {wf[side][c] * 100:.0f}%" for c, h, *_ in sorted(RANK_STATS, key=lambda t: -wf[side][t[0]]))
-    return (f"<div class='rk-wrap rk-stack'>{table('off')}{table('def')}</div>"
+    switch = ("<div class='rk-switch' role='tablist'><button type='button' data-show='offense' class='on'>Offense</button>"
+              "<button type='button' data-show='defense'>Defense</button></div>")
+    return (f"{switch}<div class='rk-wrap rk-stack'>{table('off')}{table('def')}</div>"
             "<ul class='notes'><li><b>Total</b> = the nine stats combined, each weighted by how well it predicted a team's "
             "future goals in 2021-26 (half a season vs the other half, 320 team-halves). Offense: " + fmt("F") + ". Defense: " + fmt("A") + ".</li>"
             "<li>Stats are per game and built like the model's ratings: last season pulled a third of the way to league average "
             "and worth 15 games, then this season's games. Early in the season they are mostly last season.</li>"
             "<li><b>Model</b> = the goals the model projects against a league-average opponent (what the picks use). "
-            "<b>Sched</b> / <b>Adj #</b> = strength of schedule and the rank after correcting for it.</li>"
+            "<b>Sched</b> = how tough the opponents faced have been, judged by their Total Defense (for offense) or Total Offense "
+            "(for defense) scores. <b>Adj #</b> = the Total rank after correcting every stat for that schedule.</li>"
             "<li>Colors = rank fifths, green = strong, red = weak. The #OFF / #DEF tags on the dashboard use these Total ranks.</li></ul>")
 
 
@@ -995,6 +998,15 @@ def backtest():
 
 
 SCRIPT = """<script>
+(function(){  // Team rankings: Offense / Defense switch (remembers the choice in the address, e.g. #defense)
+  var sw = document.querySelector('.rk-switch'); if (!sw) return;
+  function show(k){
+    document.querySelectorAll('.rk[data-kind]').forEach(function(t){ t.hidden = t.dataset.kind !== k; });
+    sw.querySelectorAll('button').forEach(function(b){ b.classList.toggle('on', b.dataset.show === k); b.setAttribute('aria-selected', b.dataset.show === k); });
+  }
+  sw.addEventListener('click', function(e){ var b = e.target.closest('button'); if (!b) return; show(b.dataset.show); history.replaceState(null, '', '#' + b.dataset.show); });
+  show(location.hash === '#defense' ? 'defense' : 'offense');
+})();
 // one floating explanation box, placed next to the hovered/tapped label (fixed, so tables can't clip it)
 const box = document.createElement("div"); box.id = "tipbox"; document.body.appendChild(box);
 document.addEventListener("mouseover", show); document.addEventListener("focusin", show);
@@ -1036,6 +1048,10 @@ body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 -apple-system
 .mcards{display:none}
 .rk-tag{margin-left:6px;font-size:10px;font-weight:700;color:var(--muted);white-space:nowrap}
 .b2b-sq{display:inline-block;width:9px;height:9px;background:#dc2626;border-radius:2px;margin-right:5px;vertical-align:middle}
+.rk-switch{display:inline-flex;gap:4px;padding:4px;margin:0 0 14px;background:var(--ice);border:1px solid var(--line);border-radius:999px}
+.rk-switch button{font:inherit;font-size:14px;font-weight:800;padding:7px 22px;border:0;border-radius:999px;background:transparent;color:var(--muted);cursor:pointer}
+.rk-switch button.on{background:var(--card);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.25)}
+.rk[hidden]{display:none!important}
 .rk-wrap{display:flex;flex-wrap:wrap;gap:16px}.rk-stack{flex-direction:column}.rk-stack .rk{flex:0 0 auto;width:100%;max-width:100%}.rk{flex:1 1 360px;min-width:0;overflow-x:auto}.rk h3{margin:0 0 8px;font-size:15px}
 table.gt.rk-t{table-layout:auto;font-size:13px}table.gt.rk-t td.tm b{font-size:16px;letter-spacing:.01em}table.gt.rk-t td.tm img{margin-right:8px;vertical-align:middle}table.gt.rk-t td,table.gt.rk-t th{padding:4px 8px;white-space:nowrap;overflow:visible;text-overflow:clip}
 @media (max-width:760px){table.gt.rk-t{font-size:11.5px}table.gt.rk-t td,table.gt.rk-t th{padding:4px 3px}table.gt.rk-t td.tm b{font-size:14px}table.gt.rk-t td.tm picture,table.gt.rk-t td.tm img{width:24px!important;height:24px!important}table.gt.rk-t .small{font-size:9.5px}}
