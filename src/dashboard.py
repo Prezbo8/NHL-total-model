@@ -937,28 +937,33 @@ def rankings():
         k = "Rank OFF" if kind == "off" else "Rank DEF"
         w = split_model.WEIGHTS[side]
 
-        def adj_sched(x):  # Adj # then Sched (last column)
+        def adj(x):  # Total rank after the schedule correction
             if not x["games"]:
-                return "<td class='num muted' data-k='99'>–</td><td class='num muted' data-k='99'>–</td>"
+                return "<td class='num muted' data-k='99'>–</td>"
             mv = x[f"r_{score}"] - x[f"r_{score}_adj"]
             arrow = "" if mv == 0 else f" <span class='{'pos' if mv > 0 else 'neg'} small'>{'↑' if mv > 0 else '↓'}{abs(mv)}</span>"
-            return (f"<td class='num' data-k='{x[f'r_{score}_adj']}'><b>#{x[f'r_{score}_adj']}</b>{arrow}</td>"
-                    f"<td class='num' data-k='{x[f'r_{opp}']}'>#{x[f'r_{opp}']} <span class='muted small'>{x[opp] * 100:+.1f}%</span></td>")
+            return f"<td class='num {tcls(x[f'r_{score}_adj'])}' data-k='{x[f'r_{score}_adj']}'><b>#{x[f'r_{score}_adj']}</b>{arrow}</td>"
+
+        def sched(x):  # last column
+            if not x["games"]:
+                return "<td class='num muted' data-k='99'>–</td>"
+            return f"<td class='num' data-k='{x[f'r_{opp}']}'>#{x[f'r_{opp}']} <span class='muted small'>{x[opp] * 100:+.1f}%</span></td>"
         rows = "".join(
             f"<tr><td class='num' data-k='{x[f'r_{score}']}'>{x[f'r_{score}']}</td><td class='tm' data-k='{e(x['team'])}'>{logo(x['team'], 30)}<b title='{e(TEAMS.get(x['team'], x['team']))}'>{e(x['team'])}</b></td>"
             f"<td class='num {tcls(x[f'r_{score}'])}' data-k='{x[f'r_{score}']}'><b>{x[score] * (1 if kind == 'off' else -1):+.2f}</b></td>"
+            f"<td class='num {tcls(x[f'r_{model}'])}' data-k='{x[f'r_{model}']}'>{x[model]:.2f} <span class='muted small'>#{x[f'r_{model}']}</span></td>" + adj(x)
             + "".join(f"<td class='num {tcls(x[f'r_{c}{side}'])}' data-k='{x[f'r_{c}{side}']}'>{x[f'{c}{side}']:.{dec}f} <span class='muted small'>#{x[f'r_{c}{side}']}</span></td>"
                       for c, _, dec, _ in RANK_STATS)
-            + f"<td class='num' data-k='{x[f'r_{model}']}'>{x[model]:.2f} <span class='muted small'>#{x[f'r_{model}']}</span></td>" + adj_sched(x) + "</tr>"
+            + sched(x) + "</tr>"
             for _, x in r.sort_values(f"r_{score}").iterrows())
         verb = "allowed" if kind == "def" else ""
         heads = "".join(f"<th class='num'>{tip(h, f'{expl}{(' ' + verb) if verb else ''}. Weight in the total: {w[c] * 100:.0f}%. ' + ('Rank 1 = most.' if kind == 'off' else 'Rank 1 = fewest.'), 'tr' if i > 4 else '')}</th>"
                         for i, (c, h, _, expl) in enumerate(RANK_STATS))
         title = "Total Offense" if kind == "off" else "Total Defense (stats allowed)"
         return (f"<div class='rk' data-kind='{'offense' if kind == 'off' else 'defense'}'><h3>{title}</h3><table class='gt rk-t' data-sort='2'><thead><tr><th class='num'>#</th><th>Team</th>"
-                f"<th class='num'>{tip('Total', TIPS[k + ' composite'])}</th>{heads}"
-                f"<th class='num'>{tip('Model', TIPS[k + ' total'], 'tr')}</th>"
-                f"<th class='num'>{tip('Adj #', TIPS['Rank adj'], 'tr')}</th><th class='num'>{tip('Sched', TIPS[k + ' sched'], 'tr')}</th>"
+                f"<th class='num'>{tip('Total', TIPS[k + ' composite'])}</th><th class='num'>{tip('Model', TIPS[k + ' total'])}</th>"
+                f"<th class='num'>{tip('Adj #', TIPS['Rank adj'])}</th>{heads}"
+                f"<th class='num'>{tip('Sched', TIPS[k + ' sched'], 'tr')}</th>"
                 f"</tr></thead><tbody>{rows}</tbody></table></div>")
     wf = split_model.WEIGHTS
     fmt = lambda side: ", ".join(f"{h} {wf[side][c] * 100:.0f}%" for c, h, *_ in sorted(RANK_STATS, key=lambda t: -wf[side][t[0]]))
