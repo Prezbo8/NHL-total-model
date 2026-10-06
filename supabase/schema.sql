@@ -28,7 +28,7 @@ create table if not exists nhl_projections (
   start_utc     timestamptz,
   proj          real, proj_away real, proj_home real, p7 real, cutoff real,
   flag          boolean,
-  call          text,              -- SLAM / 1U / AVOID
+  call          text,              -- SLAM / 1U / PASS / AVOID
   open_total    real, open_over int,
   line_total    real, line_over int, line_under int,
   best_book     text, best_total real, best_over int, best_under int,
@@ -91,7 +91,7 @@ create or replace view nhl_call_by_lead_time with (security_invoker = on) as
 select p.call,
        floor(extract(epoch from (p.start_utc - r.run_at)) / 3600)::int as hours_before,
        count(*) as games,
-       sum(case when (p.call <> 'AVOID') = (g.final_total > p.line_total) and g.final_total <> p.line_total then 1 else 0 end) as right_calls,
+       sum(case when (p.call in ('SLAM', '1U')) = (g.final_total > p.line_total) and g.final_total <> p.line_total then 1 else 0 end) as right_calls,
        sum(case when g.final_total = p.line_total then 1 else 0 end) as pushes
 from nhl_projections p
 join nhl_runs r using (run_id)
