@@ -8,6 +8,7 @@ then scaled by the opposing starter's goalie skill and back-to-backs, as in mode
 import pandas as pd
 
 import model as m
+import paths
 import players
 import speed
 
@@ -59,6 +60,19 @@ def team_rankings(project, teams, season):
         rows.append({"team": t, "gf": round(gf, 3), "gf_ev": round(o["ev"], 3), "gf_pp": round(o["pp"], 3),
                      "ga": round(ga, 3), "ga_ev": round(d["ev"], 3), "ga_pp": round(d["pp"], 3)})
     return pd.DataFrame(rows)
+
+
+RANKINGS_HISTORY = paths.data("team_rankings_history.csv")
+
+
+def save_rankings_day(rk, day):
+    """Keep the day's latest rankings in data/team_rankings_history.csv, so results pages show the ranks
+    teams had on game day."""
+    import os
+    old = pd.read_csv(RANKINGS_HISTORY) if os.path.exists(RANKINGS_HISTORY) else pd.DataFrame()
+    if len(old):
+        old = old[old.date != day]
+    pd.concat([old, rk.assign(date=day)], ignore_index=True).to_csv(RANKINGS_HISTORY, index=False)
 
 
 def season_of(day):

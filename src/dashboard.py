@@ -558,7 +558,7 @@ def day_table(g):
     desktop screen: decision columns first, then goalie, injuries and the projection breakdown."""
     g = current(g).sort_values(["p7", "proj"], ascending=[False, False])  # most likely to go 7+ first
     final_day = bool(len(g)) and g.final_total.notna().all()
-    ranks = {} if final_day else rank_tags()  # current ratings, so only on the upcoming slate
+    ranks = rank_tags(g.date.iloc[0]) if len(g) else {}  # the ranks teams had on game day
     head = f"<th>{tip('Team', cls='tl')}</th>"
     if final_day:
         head += f"<th class='num'>{tip('G', 'Final goals for this team (shootout winner gets +1, as sportsbooks settle).')}</th>"
@@ -573,10 +573,9 @@ def day_table(g):
              f"<th class='num bcol'>{tip('5v5')}</th><th class='num'>{tip('PP')}</th>"
              f"<th class='num'>{tip('Gl', cls='tr')}</th><th class='num'>{tip('Oth', cls='tr')}</th><th class='num'>{tip('B2B', cls='tr')}</th><th class='num'>{tip('Spd', cls='tr')}</th>"
              f"<th class='num'>{tip('Inj', cls='tr')}</th>")
-    # fixed widths (%): results Team 18 | Result 34, slate Team 24 (room for the OFF/DEF ranks) | Game 27;
-    # both: Goalies 17 | Breakdown 31
-    widths = ([9, 3.5, 5.5] if final_day else [17, 7]) \
-        + ([8.5, 5.5, 5, 7, 8] if final_day else [8, 6, 13]) + [17] + [4.4, 3.9, 5.2, 3.9, 4.8, 4.4, 4.4]
+    # fixed widths (%): Team (room for the OFF/DEF ranks) + Game/Result = 53.5 | Goalies 15.5 | Breakdown 31
+    widths = ([15.5, 2.5, 5.5] if final_day else [18.5, 7]) \
+        + ([8, 4.5, 4, 6.5, 7] if final_day else [8, 6, 14]) + [15.5] + [4.4, 3.9, 5.2, 3.9, 4.8, 4.4, 4.4]
     cols = "<colgroup>" + "".join(f"<col style='width:{w:.3f}%'>" for w in widths) + "</colgroup>"
     sections = (f"<tr class='sec'><th colspan='{3 if final_day else 2}'>Team</th>"
                 f"<th class='gcol' colspan='{5 if final_day else 3}'>{'Result' if final_day else 'Game'}</th>"
@@ -870,20 +869,26 @@ def rule_check():
       <li>This season = last pre-game call at its line, as the results table grades it.</li></ul>"""
 
 
-def load_rankings():
-    """data/team_rankings.csv (written by each model run) with rank columns r_*; None when missing."""
-    path = paths.data("team_rankings.csv")
+def load_rankings(day=None):
+    """data/team_rankings.csv (written by each model run) with rank columns r_*, or with day= the rankings
+    saved for that game day (data/team_rankings_history.csv); None when missing."""
+    path = paths.data("team_rankings.csv" if day is None else "team_rankings_history.csv")
     if not os.path.exists(path):
         return None
     r = pd.read_csv(path)
+    if day is not None:
+        r = r[r.date == day]
+        if r.empty:
+            return None
     for c, best_high in (("gf", True), ("gf_ev", True), ("gf_pp", True), ("ga", False), ("ga_ev", False), ("ga_pp", False)):
         r[f"r_{c}"] = r[c].rank(ascending=not best_high, method="min").astype(int)
     return r
 
 
-def rank_tags():
-    """{team: '#3 OFF / #10 DEF'} for today's slate; {} when there are no rankings."""
-    r = load_rankings()
+def rank_tags(day=None):
+    """{team: '#3 OFF / #10 DEF'} (current, or as of game day with day=); {} when there are no rankings."""
+    r = load_rankings(day) if day is not None else None
+    r = load_rankings() if r is None and (day is None or day == date.today().isoformat()) else r
     return {} if r is None else {x.team: f"#{x.r_gf} OFF / #{x.r_ga} DEF" for x in r.itertuples()}
 
 
