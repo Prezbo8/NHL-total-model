@@ -41,6 +41,13 @@ TIPS = {
     "B2B": "Tired legs: a team that played yesterday scores 8% less. A team whose opponent played yesterday scores 6.5% more.",
     "Spd": "How fast this team skates compared with the opponent (20+ mph bursts last season). Fast teams score a bit more and allow a bit less.",
     "Inj": "Injuries and scratches: this team's missing scorers (fewer goals) plus the other team's missing defenders (more goals).",
+    "Rank tag": "Team rankings as of this game day, against a league-average opponent: OFF = goals scored (1 = most), DEF = goals its skaters allow (1 = fewest). Goalies and back-to-backs not included. Full tables under Team rankings.",
+    "Rank OFF total": "Goals this team would score against a league-average opponent: 5v5 + power play + other situations, with team speed. Rank 1 = most.",
+    "Rank OFF 5v5": "Its 5-on-5 goals against an average defense (xG/goals blend). Rank 1 = most.",
+    "Rank OFF PP": "Its power-play goals against an average penalty kill: PP strength × how many penalties it draws. Rank 1 = most.",
+    "Rank DEF total": "Goals its skaters would allow to a league-average offense (goalie rated separately). Rank 1 = fewest.",
+    "Rank DEF 5v5": "5-on-5 goals it allows to an average offense. Rank 1 = fewest.",
+    "Rank DEF PK": "Power-play goals it allows: penalty-kill quality × how many penalties it takes. Rank 1 = fewest.",
     "Proj": "Projected goals = (5v5 + PP + Oth) × goalie × back-to-back × team speed × injury adjustments.",
     "HIGH": "Projected 2.95+ goals (top 40% of last season's team projections). An OVER FLAG needs both teams HIGH.",
     "Confirmed": "Starter confirmed (DailyFaceoff). Refreshed every run.",
@@ -575,7 +582,7 @@ def day_table(g):
              f"<th class='num'>{tip('Inj', cls='tr')}</th>")
     # fixed widths (%): Team (room for the OFF/DEF ranks) + Game/Result = 53.5 | Goalies 15.5 | Breakdown 31
     widths = ([15.5, 2.5, 5.5] if final_day else [18.5, 7]) \
-        + ([8, 4.5, 4, 6.5, 7] if final_day else [8, 6, 14]) + [15.5] + [4.4, 3.9, 5.2, 3.9, 4.8, 4.4, 4.4]
+        + ([7.5, 4.5, 4, 6, 8] if final_day else [8, 6, 14]) + [15.5] + [4.4, 3.9, 5.2, 3.9, 4.8, 4.4, 4.4]
     cols = "<colgroup>" + "".join(f"<col style='width:{w:.3f}%'>" for w in widths) + "</colgroup>"
     sections = (f"<tr class='sec'><th colspan='{3 if final_day else 2}'>Team</th>"
                 f"<th class='gcol' colspan='{5 if final_day else 3}'>{'Result' if final_day else 'Game'}</th>"
@@ -587,7 +594,7 @@ def day_table(g):
 
         def team(side, abbr, proj, score):
             hot = proj >= r.cutoff
-            rk = f"<span class='rk-tag'>{e(ranks[abbr])}</span>" if abbr in ranks else ""
+            rk = f"<span class='rk-tag' title='{e(TIPS['Rank tag'])}'>{e(ranks[abbr])}</span>" if abbr in ranks else ""
             cells = (f"<td class='tm'>{logo(abbr, 22)}<b title='{e(TEAMS.get(abbr, abbr))}'>{e(abbr)}</b>{rk}</td>")
             if final_day:
                 cells += f"<td class='num score-cell'>{int(score)}</td>"
@@ -598,15 +605,15 @@ def day_table(g):
 
         def detail(side):
             g_ = lambda c: getattr(r, f"{side}_{c}", float("nan"))
-            def adj(v):
-                return "–" if pd.isna(v) or abs(v) < 0.0005 else f"{v * 100:+.1f}%"
             cells = f"<td class='gl gcol'>{goalie_compact(g_('goalie'), g_('goalie_now'), g_('goalie_src'), g_('goalie_actual'))}</td>"
             return cells + breakdown_cells(side)
 
         def breakdown_cells(side):
             g_ = lambda c: getattr(r, f"{side}_{c}", float("nan"))
             def adj(v):
-                return "–" if pd.isna(v) or abs(v) < 0.0005 else f"{v * 100:+.1f}%"
+                if pd.isna(v):
+                    return "<span class='muted' title='Not part of the model yet on this date'>n/a</span>"
+                return "–" if abs(v) < 0.0005 else f"{v * 100:+.1f}%"
             if pd.isna(g_("ev")):
                 return "<td class='num muted bcol' colspan='7'>n/a</td>"
             def td(stat, text, extra=""):
@@ -642,7 +649,7 @@ def day_table(g):
             pick = f"{gtime}{callpill}<br>{outcome}"
             game = (f"<td class='gcol tot' rowspan='2'><span class='big-total'>{int(r.final_total)}</span>{vs}</td>"
                     f"<td class='num' rowspan='2'>{r.proj:.2f}</td><td class='num' rowspan='2'>{r.p7:.0%}</td>"
-                    f"<td rowspan='2' class='nowrap'>{'–' if pd.isna(t) else f'{line(t)} → {line(r.close_total)}{moved}'}</td>"
+                    f"<td rowspan='2' class='linecell'>{'–' if pd.isna(t) else f'{line(t)} → {line(r.close_total)}{moved}'}</td>"
                     f"<td rowspan='2' class='pickcell'>{pick}</td>")
         else:
             ln = ("<span class='muted'>not posted</span>" if pd.isna(r.bet_total) else
@@ -670,7 +677,7 @@ def mobile_card(r, final, callpill, st, status, breakdown_cells, cls, ranks):
     def team(side, abbr, proj, score):
         hot = proj >= r.cutoff
         g_ = lambda c: getattr(r, f"{side}_{c}", float("nan"))
-        rk = f"<span class='rk-tag'>{e(ranks[abbr])}</span>" if abbr in ranks else ""
+        rk = f"<span class='rk-tag' title='{e(TIPS['Rank tag'])}'>{e(ranks[abbr])}</span>" if abbr in ranks else ""
         sq = f"<span class='b2b-sq' title='{e(TIPS['B2B tag'])}'></span>" if _is(getattr(r, f"{side}_b2b")) else ""
         return (f"<div class='mc-team'>{logo(abbr, 26)}<b>{e(abbr)}</b><span>{rk}</span>"
                 + (f"<span class='mc-score'>{int(score)}</span>" if final else "")
@@ -678,7 +685,7 @@ def mobile_card(r, final, callpill, st, status, breakdown_cells, cls, ranks):
                 + f"<div class='mc-gl'>{goalie_compact(g_('goalie'), g_('goalie_now'), g_('goalie_src'), g_('goalie_actual'))}</div></div>")
     total = (f"<span class='big-total'>{int(r.final_total)}</span> goals · proj {r.proj:.2f}" if final
              else f"Proj total <b>{r.proj:.2f}</b>")
-    head = "".join(f"<th class='num'>{h}</th>" for h in ("5v5", "PP", "Gl", "Oth", "B2B", "Spd", "Inj"))
+    head = "".join(f"<th class='num'>{tip(h, cls='tr' if i > 3 else '')}</th>" for i, h in enumerate(("5v5", "PP", "Gl", "Oth", "B2B", "Spd", "Inj")))
     bd = (f"<table class='gt mc-bd'><thead><tr><th></th>{head}</tr></thead><tbody>"
           f"<tr><td>{e(r.away)}</td>{breakdown_cells('away')}</tr><tr><td>{e(r.home)}</td>{breakdown_cells('home')}</tr></tbody></table>")
     return (f"<article class='mc {cls}'><div class='mc-top'>{f'<span class=gtime>{st} ET</span>' if st else ''}"
@@ -911,8 +918,10 @@ def rankings():
                        for _, x in r.sort_values(f"r_{tot}").iterrows())
         title = "Offense · goals scored" if kind == "off" else "Defense · goals allowed (skaters)"
         third = "PP" if kind == "off" else "PK"
+        k = "Rank OFF" if kind == "off" else "Rank DEF"
         return (f"<div class='rk'><h3>{title}</h3><table class='gt rk-t'><thead><tr><th class='num'>#</th><th>Team</th>"
-                f"<th class='num'>Total</th><th class='num'>5v5</th><th class='num'>{third}</th></tr></thead><tbody>{rows}</tbody></table></div>")
+                f"<th class='num'>{tip('Total', TIPS[k + ' total'])}</th><th class='num'>{tip('5v5', TIPS[k + ' 5v5'])}</th>"
+                f"<th class='num'>{tip(third, TIPS[k + ' ' + third], 'tr')}</th></tr></thead><tbody>{rows}</tbody></table></div>")
     return (f"<div class='rk-wrap'>{table('off')}{table('def')}</div>"
             "<ul class='notes'><li>Each team against a league-average opponent, using the model's own ratings and formula "
             "(5v5, power play, penalties drawn/taken, team speed), so nothing is weighted by hand. Goalies and back-to-backs "
@@ -1000,8 +1009,8 @@ table.rk-t tbody tr:nth-child(even) td:not([class*=t-]){background:color-mix(in 
 .mc-score{font-size:18px;font-weight:800;grid-column:4}.mc-proj{grid-column:5;font-weight:700;font-variant-numeric:tabular-nums}
 .mc-proj.hot{color:var(--accent)}.mc-gl{grid-column:1/-1;font-size:12.5px;color:var(--muted)}
 .mc-sum{font-size:13px;padding:6px 0;border-top:1px solid var(--line)}.mc-sum .big-total{font-size:18px}
-table.mc-bd{table-layout:auto;font-size:11px;margin:2px 0 6px}table.mc-bd td,table.mc-bd th{padding:4px 2px;overflow:visible;text-overflow:clip;white-space:nowrap}
-table.mc-bd th{font-size:9.5px}table.mc-bd td:first-child{font-weight:700;padding-right:4px}
+table.gt.mc-bd{table-layout:auto;font-size:11px;margin:2px 0 6px}table.gt.mc-bd td,table.gt.mc-bd th{padding:4px 2px;overflow:visible;text-overflow:clip;white-space:nowrap}
+table.gt.mc-bd th{font-size:9.5px}table.gt.mc-bd td:first-child{font-weight:700;padding-right:4px}
 .mc-why summary{cursor:pointer;font-size:13px;color:var(--muted);padding:4px 0}.mc-why .why-text{font-size:13px;line-height:1.45}
 .hero h1{margin:0;font-size:clamp(28px,5vw,44px);letter-spacing:-.02em;position:relative}
 .hero p{margin:6px 0 0;color:#c9d6e6;position:relative}
@@ -1077,7 +1086,7 @@ table.gt{font-size:12.5px;border-collapse:separate;border-spacing:0;width:100%;t
 .gt td,.gt th{overflow:hidden;text-overflow:ellipsis}
 .gt thead tr:not(.sec) th{white-space:normal;line-height:1.25;vertical-align:bottom}
 .gt td[rowspan]{white-space:normal}.gt td[rowspan].nowrap,.gt td[rowspan].tot{white-space:nowrap}
-.gt td.tot{padding-left:3px;padding-right:3px}
+.gt td.tot{padding-left:3px;padding-right:3px}.gt td.linecell{white-space:normal;overflow:visible;text-overflow:clip;text-align:center}
 .gt td.pickcell{line-height:1.15;padding-top:2px;padding-bottom:2px}.gt td.pickcell .small{font-size:10.5px}.gt td.pickcell .flagpill{margin-bottom:1px}
 .gt td.tm{white-space:nowrap}.gt td.tm .b2b{margin-left:4px}.gt td.tm img,.gt td.tm picture{margin-right:5px}
 .gt tbody.game tr.away td:not([rowspan]),.gt tbody.game tr.home td:not([rowspan]){height:34px;vertical-align:middle}
@@ -1125,7 +1134,7 @@ table.gt{font-size:12.5px;border-collapse:separate;border-spacing:0;width:100%;t
 .gt .itag{font-size:9.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.03em}
 .gt .pill{font-size:11px;padding:2px 7px}
 .was{font-size:9.5px;color:var(--muted);white-space:nowrap}.was .tip{border-bottom-style:dotted}
-.gtime{font-size:13px;font-weight:800;color:var(--ink)}
+.gtime{font-size:13px;font-weight:800;color:var(--ink);white-space:nowrap}
 .callpill{display:inline-block;font-size:10px;font-weight:800;padding:1px 8px;border-radius:999px;margin-bottom:2px;letter-spacing:.04em}
 .callpill.c-slam{background:var(--gold);color:#1a1200}.callpill.c-1u{border:1.5px solid var(--gold);color:var(--ink)}
 .callpill.c-pass{border:1px dashed var(--gold);color:var(--muted);font-weight:700}
