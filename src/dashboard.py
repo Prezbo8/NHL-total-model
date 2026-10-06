@@ -6,8 +6,10 @@ import html
 import os
 from datetime import date
 
+import numpy as np
 import pandas as pd
 
+import grade
 import paper
 import paths
 import split_model
@@ -68,7 +70,7 @@ TIPS = {
     "1U": "Flagged over where one team is great at 5-on-5 (above 2.19) but the other isn't good. Went over 58% (opening and closing line) in 2021-26.",
     "PASS": "Flagged over, but neither team is great at 5-on-5 and they aren't both good. No bet: these went over only 45% in 2021-26.",
     "AVOID": "Not flagged, or flagged but both teams face strong goalies. These went over only 45-49% in 2021-26.",
-    "Paper bet": "The paper-trading record's bet: the first time this game was flagged, at that line. It never changes after it's logged.",
+    "Paper bet": "The paper-trading record's pick: flagged at the last model run before puck drop, graded at the closing consensus total and over price.",
     "B2B tag": "Played yesterday: the model cuts this team's scoring ~8% and raises its opponent's ~6.5%.",
 }
 
@@ -650,8 +652,10 @@ def day_table(g):
                 outcome = {"W": "<span class='res W'>✓ under</span>", "L": "<span class='res L'>✗ went over</span>"}.get(res, "<span class='res P'>push</span>")
             else:
                 outcome = f"<span class='res {res}'>{res}</span>"
-            if r.paper_flag and not pd.isna(r.result):  # the paper-trading bet (first-logged line)
-                outcome += f"<br><span class='muted small'>{tip('paper', TIPS['Paper bet'])} {e(r.result)} {r.profit:+.2f}u</span>"
+            if flagged and not pd.isna(r.close_total) and not pd.isna(r.close_over):  # paper pick, graded at the close
+                pr = "W" if r.final_total > r.close_total else "L" if r.final_total < r.close_total else "P"
+                pu = float(grade.payout(r.close_over)) if pr == "W" else -1.0 if pr == "L" else 0.0
+                outcome += f"<br><span class='muted small'>{tip('paper', TIPS['Paper bet'])} {pr} {pu:+.2f}u</span>"
             pick = f"{gtime}{callpill}<br>{outcome}"
             game = (f"<td class='gcol tot' rowspan='2'><span class='big-total'>{int(r.final_total)}</span>{vs}</td>"
                     f"<td class='num' rowspan='2'>{r.proj:.2f}</td><td class='num' rowspan='2'>{r.p7:.0%}</td>"
@@ -718,9 +722,9 @@ def day_summary(g):
         wl = done[done.bet_total.notna()]
         parts.append(f"<b>{(wl.final_total > wl.bet_total).sum()} of {len(wl)}</b> went over the line")
         parts.append(f"avg <b>{done.final_total.mean():.1f}</b> goals (projected {done.proj.mean():.1f})")
-        fl = done[(done.flag) & done.result.notna()]
+        fl = closing_bets(done, keep_retro=True)  # paper picks, closing information only
         if len(fl):
-            parts.append(f"flags <b>{(fl.result == 'W').sum()}-{(fl.result == 'L').sum()}-{(fl.result == 'P').sum()}</b> ({fl.profit.sum():+.2f}u)")
+            parts.append(f"flags <b>{(fl.res == 'W').sum()}-{(fl.res == 'L').sum()}-{(fl.res == 'P').sum()}</b> ({fl.units.sum():+.2f}u at close)")
         parts.append(call_record(current(done)))
     return " · ".join(parts)
 
@@ -767,27 +771,44 @@ def yesterday(d):
 
 
 def accuracy(d):
-    s = d[d.final_total.notna()].copy()
+    """How the projections did: summary tiles, then by projected total and by call (last pre-game projection)."""
+    s = current(d[d.final_total.notna()])
     if s.empty:
         return "<p class='muted'>No finished games yet.</p>"
+    s["call"] = [call(r, bool(r.flag)) for r in s.itertuples()]
     s["band"] = pd.cut(s.proj, [0, 5.5, 6.0, 6.5, 99], labels=["under 5.5", "5.5 – 6.0", "6.0 – 6.5", "6.5+"], right=False)
-    rows = []
-    for band, x in s.groupby("band", observed=True):
-        rows.append(f"<tr><td>{band}</td><td class='num'>{len(x)}</td><td class='num'>{x.proj.mean():.2f}</td>"
-                    f"<td class='num'>{x.final_total.mean():.2f}</td><td class='num'>{x.p7.mean():.0%}</td>"
-                    f"<td class='num'>{(x.final_total >= 7).mean():.0%}</td></tr>")
+
+    def rows(groups):
+        out = []
+        for name, x in groups:
+            if not len(x):
+                continue
+            diff = x.final_total.mean() - x.proj.mean()
+            out.append(f"<tr><td>{name}</td><td class='num'>{len(x)}</td><td class='num'>{x.proj.mean():.2f}</td>"
+                       f"<td class='num'>{x.final_total.mean():.2f}</td><td class='num {'pos' if diff > 0 else 'neg'}'>{diff:+.2f}</td>"
+                       f"<td class='num'>{x.p7.mean():.0%}</td><td class='num'>{(x.final_total >= 7).mean():.0%}</td></tr>")
+        return "".join(out)
+    head = ("<thead><tr><th>{}</th><th class='num'>Games</th><th class='num'>Proj</th><th class='num'>Actual</th>"
+            f"<th class='num'>{tip('Diff', 'Actual minus projected total goals. Projections run a little low by design (P(7+) corrects for it).', 'tr')}</th>"
+            f"<th class='num'>{tip('Model 7+', 'Average model chance of 7+ goals.', 'tr')}</th>"
+            f"<th class='num'>{tip('Actual 7+', 'How often those games actually had 7+ goals. Calibrated = close to Model 7+.', 'tr')}</th></tr></thead>")
+    by_band = rows((str(b), x) for b, x in s.groupby("band", observed=True))
+    by_call = rows((('🔨 ' if c == 'SLAM' else '') + c, s[s.call == c]) for c in ("SLAM", "1U", "PASS", "AVOID"))
     team_err = pd.concat([(s.away_score - s.proj_away).abs(), (s.home_score - s.proj_home).abs()]).mean()
     n_retro = int(retro(s).sum())
     return f"""<div class='tiles'>
       <div class='tile'><div class='label'>{tip('Games settled', 'Finished games in the log (live + retroactive).', 'tl')}</div><div class='num-big'>{len(s)}</div><div class='muted'>{n_retro} retroactive</div></div>
-      <div class='tile'><div class='label'>{tip('Avg projected total', 'Average projected total vs average actual goals. Projections run a little low by design; P(7+) corrects for it.', 'tl')}</div><div class='num-big'>{s.proj.mean():.2f}</div><div class='muted'>actual {s.final_total.mean():.2f}</div></div>
+      <div class='tile'><div class='label'>{tip('Avg projected total', 'Average projected total (last run before puck drop) vs average actual goals.', 'tl')}</div><div class='num-big'>{s.proj.mean():.2f}</div><div class='muted'>actual {s.final_total.mean():.2f}</div></div>
       <div class='tile'><div class='label'>{tip('Model P(7+)', 'Average predicted chance of 7+ goals vs how often it actually happened. If the model is calibrated they match.', 'tl')}</div><div class='num-big'>{s.p7.mean():.0%}</div><div class='muted'>actual 7+ rate {(s.final_total >= 7).mean():.0%}</div></div>
       <div class='tile'><div class='label'>{tip('Team goals error', 'Average miss between a team’s projected and actual goals. Hockey is random; ~1.3–1.9 is normal.', 'tl')}</div><div class='num-big'>{team_err:.2f}</div><div class='muted'>avg miss per team</div></div></div>
-      <div class='scroll'><table><thead><tr><th>Projected total</th><th>Games</th><th>Avg proj</th><th>Avg goals</th>
-      <th>Model P(7+)</th><th>Actual 7+</th></tr></thead><tbody>{''.join(rows)}</tbody></table></div>
-      <ul class='notes'><li>The test that matters is <b>Model P(7+) vs Actual 7+</b>: if the model is calibrated they match, and
-      higher projection bands should score more. Projected totals run a little low by design; P(7+) converts them using history.</li>
-      <li>Single-game misses are big in hockey, so judge this after a few hundred games, not a few nights.</li></ul>"""
+      <div class='acc-grid'>
+        <div><h3>By projected total</h3><div class='scroll'><table class='acc-t'>{head.format('Projected')}<tbody>{by_band}</tbody></table></div></div>
+        <div><h3>By call</h3><div class='scroll'><table class='acc-t'>{head.format('Call')}<tbody>{by_call}</tbody></table></div></div>
+      </div>
+      <ul class='notes'><li>The test that matters is <b>Model 7+ vs Actual 7+</b>: if the model is calibrated they match, higher
+      projection bands should score more, and SLAM should score more than 1U, PASS and AVOID.</li>
+      <li>Uses each game's last projection and call before puck drop. Single-game misses are big in hockey, so judge this after
+      a few hundred games, not a few nights.</li></ul>"""
 
 
 def archive(d):
@@ -813,40 +834,52 @@ def day_page(d, day, days):
     return shell(f"NHL Total Model · {day}", body, root="../")
 
 
+def closing_bets(d, keep_retro=False):
+    """The paper record, closing information only: games still flagged at the last run before puck drop,
+    graded at the closing consensus total and over price. Retroactive days never count toward the record
+    (keep_retro=True for a day's own summary)."""
+    g = current(d if keep_retro else d[~retro(d)])
+    g = g[g.flag & g.final_total.notna() & g.close_total.notna() & g.close_over.notna()].copy()
+    g["res"] = np.where(g.final_total > g.close_total, "W", np.where(g.final_total < g.close_total, "L", "P"))
+    g["units"] = np.where(g.res == "W", grade.payout(g.close_over), np.where(g.res == "L", -1.0, 0.0))
+    return g
+
+
 def record(d):
-    d = d[~retro(d)]  # backfilled days never count toward the live record
-    f = d[d.flag]
-    s = f[f.result.notna()]
-    dec = s[s.result != "P"]
-    w, l, p = (s.result == "W").sum(), (s.result == "L").sum(), (s.result == "P").sum()
-    sb = s[s.profit_best.notna()]
-    c = s.clv.dropna()
+    cur = current(d[~retro(d)])
+    f = cur[cur.flag]
+    s = closing_bets(d)
+    dec = s[s.res != "P"]
+    w, l, p = (s.res == "W").sum(), (s.res == "L").sum(), (s.res == "P").sum()
+    calls = [call(r, True) for r in s.itertuples()]
+    s["call"] = calls
+    by = {c: s[s.call == c] for c in ("SLAM", "1U", "PASS")}
     tiles = [
         ("Flagged picks", f"{len(f)}", f"{len(s)} settled"),
-        ("Record", f"{w}-{l}-{p}" if len(s) else "–", f"{(dec.result == 'W').mean():.1%} wins" if len(dec) else "no results yet"),
-        ("ROI · consensus", pct(s.profit.mean() * 100) if len(s) else "–", f"{s.profit.sum():+.2f}u" if len(s) else "&nbsp;"),
-        ("ROI · best book", pct(sb.profit_best.mean() * 100) if len(sb) else "–", f"{sb.profit_best.sum():+.2f}u" if len(sb) else "&nbsp;"),
-        ("Line moved our way", f"{(c > 0).mean():.0%}" if len(c) else "–", f"of {len(c)} · target 70%+" if len(c) else "target 70%+"),
-    ]
-    rec_tips = {"Flagged picks": "Live OVER FLAG picks logged so far (retroactive days excluded).",
-                "Record": "Wins-losses-pushes of flagged overs at the logged consensus line.",
-                "ROI · consensus": "Profit per unit risked at the logged consensus price. Break-even at −110 needs 52.4% wins.",
-                "ROI · best book": "Same picks at the best sportsbook price: what line shopping adds.",
-                "Line moved our way": "Share of picks where the closing line moved toward the over after we logged it. The best early sign of a real edge (target 70%+)."}
+        ("Record", f"{w}-{l}-{p}" if len(s) else "–", f"{(dec.res == 'W').mean():.1%} wins" if len(dec) else "no results yet"),
+        ("ROI · closing line", pct(s.units.mean() * 100) if len(s) else "–", f"{s.units.sum():+.2f}u" if len(s) else "&nbsp;"),
+    ] + [(f"{'🔨 ' if c == 'SLAM' else ''}{c}", f"{(x.res == 'W').sum()}-{(x.res == 'L').sum()}-{(x.res == 'P').sum()}" if len(x) else "–",
+          f"{x.units.sum():+.2f}u" if len(x) else "&nbsp;") for c, x in by.items()]
+    rec_tips = {"Flagged picks": "Live OVER FLAG picks: games still flagged at the last model run before puck drop (retroactive days excluded).",
+                "Record": "Wins-losses-pushes of those flagged overs at the closing consensus total.",
+                "ROI · closing line": "Profit per unit risked at the closing consensus over price. Break-even at −110 needs 52.4% wins.",
+                "🔨 SLAM": "Flagged picks the last pre-game call made a SLAM, at the closing line.",
+                "1U": "Flagged picks the last pre-game call made a 1U, at the closing line.",
+                "PASS": "Flagged picks the last pre-game call made a PASS (no bet): how they would have done at the closing line."}
     tiles_html = "".join(f"<div class='tile'><div class='label'>{tip(a, rec_tips.get(a), 'tl')}</div><div class='num-big'>{b}</div>"
                          f"<div class='muted'>{c_}</div></div>" for a, b, c_ in tiles)
     if len(s):
         rows = "".join(f"""<tr><td>{e(r.date)}</td><td class='matchup'>{logo(r.away, 22)}{logo(r.home, 22)} {e(r.away)} @ {e(r.home)}</td>
-            <td class='num'>o{line(r.bet_total)} {price(r.bet_over)}</td><td>{e(r.best_book)} o{line(r.best_total)} {price(r.best_over)}</td>
-            <td class='num'>{line(r.close_total)}</td><td class='num'>{int(r.final_total)}</td>
-            <td class='res {e(r.result)}'>{e(r.result)}</td><td class='num'>{r.profit:+.2f}</td>
-            <td class='num'>{'' if pd.isna(r.profit_best) else f'{r.profit_best:+.2f}'}</td></tr>"""
+            <td>{'🔨 ' if r.call == 'SLAM' else ''}{e(r.call)}</td><td class='num'>o{line(r.close_total)} {price(r.close_over)}</td>
+            <td class='num'>{int(r.final_total)}</td><td class='res {e(r.res)}'>{e(r.res)}</td><td class='num'>{r.units:+.2f}</td></tr>"""
                        for r in s.sort_values("date", ascending=False).itertuples())
-        table = f"""<div class='scroll'><table><thead><tr><th>Date</th><th>Game</th><th>Bet</th><th>Best book</th>
-          <th>Close</th><th>Goals</th><th>Result</th><th>Units</th><th>Best</th></tr></thead><tbody>{rows}</tbody></table></div>"""
+        table = f"""<div class='scroll'><table><thead><tr><th>Date</th><th>Game</th><th>Call</th><th>Closing line</th>
+          <th>Goals</th><th>Result</th><th>Units</th></tr></thead><tbody>{rows}</tbody></table></div>"""
     else:
         table = "<p class='muted'>No live flagged picks have settled yet. Judge the rule after 50–75 flagged picks, not before.</p>"
-    return f"<div class='tiles'>{tiles_html}</div>{table}"
+    return (f"<div class='tiles'>{tiles_html}</div>{table}"
+            "<p class='muted small legend'>Closing information only: a pick counts if the game was still flagged at the last model run "
+            "before puck drop, and it is graded at the closing consensus total and over price (1 unit per pick).</p>")
 
 
 def rule_check():
@@ -1076,6 +1109,7 @@ body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 -apple-system
 .mcards{display:none}
 .rk-tag{margin-left:6px;font-size:10px;font-weight:700;color:var(--muted);white-space:nowrap}
 .b2b-sq{display:inline-block;width:9px;height:9px;background:#dc2626;border-radius:2px;margin-right:5px;vertical-align:middle}
+.acc-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:18px;margin-top:16px}.acc-grid h3{margin:0 0 6px;font-size:15px}table.acc-t{width:100%}table.acc-t td,table.acc-t th{padding:6px 8px}
 .rk-switch{display:inline-flex;gap:4px;padding:4px;margin:0 0 14px;background:var(--ice);border:1px solid var(--line);border-radius:999px}
 .rk-switch button{font:inherit;font-size:14px;font-weight:800;padding:7px 22px;border:0;border-radius:999px;background:transparent;color:var(--muted);cursor:pointer}
 .rk-switch button.on{background:var(--card);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.25)}

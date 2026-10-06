@@ -35,8 +35,8 @@ def rule_call(rule, r, flagged):
 
 
 def settled_picks(d):
-    d = d[~dashboard.retro(d)]
-    return int((d.flag & d.result.notna()).sum())
+    """Settled picks as the paper record counts them (closing information only)."""
+    return len(dashboard.closing_bets(d))
 
 
 def summary(res, prof):
