@@ -28,6 +28,8 @@ body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 -apple-system
 .rk-switch button{font:inherit;font-size:14px;font-weight:800;padding:7px 22px;border:0;border-radius:999px;background:transparent;color:var(--muted);cursor:pointer}
 .rk-switch button.on{background:var(--card);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.25)}
 .rk[hidden]{display:none!important}
+table.rk-t th.sortable{cursor:pointer;user-select:none}table.rk-t th.sorted{color:var(--ink)}
+table.rk-t th.sorted::after{content:" ▲";font-size:9px}table.rk-t th.sorted.rev::after{content:" ▼"}
 .rk-wrap{display:flex;flex-wrap:wrap;gap:16px}.rk-stack{flex-direction:column}.rk-stack .rk{flex:0 0 auto;width:100%;max-width:100%}.rk{flex:1 1 360px;min-width:0;overflow-x:auto}.rk h3{margin:0 0 8px;font-size:15px}
 table.gt.rk-t{table-layout:auto;font-size:13px}table.gt.rk-t td.tm b{font-size:16px;letter-spacing:.01em}table.gt.rk-t td.tm img{margin-right:8px;vertical-align:middle}table.gt.rk-t td,table.gt.rk-t th{padding:4px 8px;white-space:nowrap;overflow:visible;text-overflow:clip}
 @media (max-width:760px){table.gt.rk-t{font-size:11.5px}table.gt.rk-t td,table.gt.rk-t th{padding:4px 3px}table.gt.rk-t td.tm b{font-size:14px}table.gt.rk-t td.tm picture,table.gt.rk-t td.tm img{width:24px!important;height:24px!important}table.gt.rk-t .small{font-size:9.5px}}
@@ -688,6 +690,27 @@ Mid: -0.5% to +0.5%
 Bad: -2.0% to -0.5%
 Trash: below -2.0%'>Inj</span></th></tr></thead><tbody><tr><td>NJD</td><td class='num bcol t-mid' title='mid'>2.01</td><td class='num t-mid' title='mid'>0.55</td><td class='num t-trash' title='trash'>-7.3%</td><td class='num'>0.40</td><td class='num'>–</td><td class='num t-trash' title='trash'>-3.1%</td><td class='num t-great' title='great'>+1.6%</td></tr><tr><td>NYI</td><td class='num bcol t-bad' title='bad'>1.87</td><td class='num t-trash' title='trash'>0.41</td><td class='num t-good' title='good'>-0.2%</td><td class='num'>0.40</td><td class='num'>–</td><td class='num t-great' title='great'>+3.3%</td><td class='num t-bad' title='bad'>-1.4%</td></tr></tbody></table><details class='mc-why'><summary>Why this call</summary><div class='why-text'><b>AVOID:</b> NJD and NYI project under the 2.98-goal high-scoring cutoff (NJD 2.69, NYI 2.71); the line is 5.5, and only 6 and 6.5 qualify. At 5-on-5, NJD is mid (2.01) and NYI is bad (1.87); on the power play, NJD is mid (0.55) and NYI is trash (0.41). NJD faces Ilya Sorokin, a top goalie (-7.3%); NYI faces Nico Daws, a beatable goalie (-0.2%). Other factors: NJD's team speed costs 3.1%; injuries help NJD 1.6%; NYI's team speed adds 3.3%. The model projects 5.40 total goals against a 5.5 line, with a 40% chance of 7 or more (a typical game is about 45%). Games like this went over only 45-49% of the time in 2021-26. Final: 6 goals (NJD 0, NYI 6), so it went over 5.5 and the call was wrong.</div></details></article></div><p class='muted small legend tbl-only'>Two rows per game (away, then home). <span style='color:var(--accent)'>●</span> = team projected high-scoring. Proj = (5v5 + PP + Oth) × goalie (Gl) × back-to-back (B2B) × team speed (Spd) × injuries (Inj). Hover or tap any underlined label for an explanation.</p></section>
 <script>
+(function(){  // Team rankings: click a column header to sort by it (best first), click again to reverse
+  document.querySelectorAll('table.rk-t').forEach(function(t){
+    var ths = t.tHead.rows[0].cells;
+    function sort(i, rev){
+      var body = t.tBodies[0], rows = Array.prototype.slice.call(body.rows);
+      rows.sort(function(a, b){
+        var x = a.cells[i].dataset.k, y = b.cells[i].dataset.k, nx = parseFloat(x), ny = parseFloat(y);
+        var c = (isNaN(nx) || isNaN(ny)) ? x.localeCompare(y) : nx - ny;
+        return rev ? -c : c;
+      });
+      rows.forEach(function(r){ body.appendChild(r); });
+      Array.prototype.forEach.call(ths, function(h, j){ h.classList.toggle('sorted', j === i); h.classList.toggle('rev', j === i && rev); });
+      t.dataset.sort = i; t.dataset.rev = rev ? '1' : '';
+    }
+    Array.prototype.forEach.call(ths, function(h, i){
+      h.classList.add('sortable');
+      h.addEventListener('click', function(){ sort(i, String(t.dataset.sort) === String(i) && !t.dataset.rev); });
+    });
+    sort(2, false);  // default: Total
+  });
+})();
 (function(){  // Team rankings: Offense / Defense switch (remembers the choice in the address, e.g. #defense)
   var sw = document.querySelector('.rk-switch'); if (!sw) return;
   function show(k){

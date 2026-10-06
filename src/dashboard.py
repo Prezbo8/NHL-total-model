@@ -937,28 +937,28 @@ def rankings():
         k = "Rank OFF" if kind == "off" else "Rank DEF"
         w = split_model.WEIGHTS[side]
 
-        def sched(x):
+        def adj_sched(x):  # Adj # then Sched (last column)
             if not x["games"]:
-                return "<td class='num muted'>–</td><td class='num muted'>–</td>"
+                return "<td class='num muted' data-k='99'>–</td><td class='num muted' data-k='99'>–</td>"
             mv = x[f"r_{score}"] - x[f"r_{score}_adj"]
             arrow = "" if mv == 0 else f" <span class='{'pos' if mv > 0 else 'neg'} small'>{'↑' if mv > 0 else '↓'}{abs(mv)}</span>"
-            return (f"<td class='num'>#{x[f'r_{opp}']} <span class='muted small'>{x[opp] * 100:+.1f}%</span></td>"
-                    f"<td class='num'><b>#{x[f'r_{score}_adj']}</b>{arrow}</td>")
+            return (f"<td class='num' data-k='{x[f'r_{score}_adj']}'><b>#{x[f'r_{score}_adj']}</b>{arrow}</td>"
+                    f"<td class='num' data-k='{x[f'r_{opp}']}'>#{x[f'r_{opp}']} <span class='muted small'>{x[opp] * 100:+.1f}%</span></td>")
         rows = "".join(
-            f"<tr><td class='num'>{x[f'r_{score}']}</td><td class='tm'>{logo(x['team'], 30)}<b title='{e(TEAMS.get(x['team'], x['team']))}'>{e(x['team'])}</b></td>"
-            f"<td class='num {tcls(x[f'r_{score}'])}'><b>{x[score] * (1 if kind == 'off' else -1):+.2f}</b></td>"
-            + "".join(f"<td class='num {tcls(x[f'r_{c}{side}'])}'>{x[f'{c}{side}']:.{dec}f} <span class='muted small'>#{x[f'r_{c}{side}']}</span></td>"
+            f"<tr><td class='num' data-k='{x[f'r_{score}']}'>{x[f'r_{score}']}</td><td class='tm' data-k='{e(x['team'])}'>{logo(x['team'], 30)}<b title='{e(TEAMS.get(x['team'], x['team']))}'>{e(x['team'])}</b></td>"
+            f"<td class='num {tcls(x[f'r_{score}'])}' data-k='{x[f'r_{score}']}'><b>{x[score] * (1 if kind == 'off' else -1):+.2f}</b></td>"
+            + "".join(f"<td class='num {tcls(x[f'r_{c}{side}'])}' data-k='{x[f'r_{c}{side}']}'>{x[f'{c}{side}']:.{dec}f} <span class='muted small'>#{x[f'r_{c}{side}']}</span></td>"
                       for c, _, dec, _ in RANK_STATS)
-            + f"<td class='num'>{x[model]:.2f} <span class='muted small'>#{x[f'r_{model}']}</span></td>" + sched(x) + "</tr>"
+            + f"<td class='num' data-k='{x[f'r_{model}']}'>{x[model]:.2f} <span class='muted small'>#{x[f'r_{model}']}</span></td>" + adj_sched(x) + "</tr>"
             for _, x in r.sort_values(f"r_{score}").iterrows())
         verb = "allowed" if kind == "def" else ""
         heads = "".join(f"<th class='num'>{tip(h, f'{expl}{(' ' + verb) if verb else ''}. Weight in the total: {w[c] * 100:.0f}%. ' + ('Rank 1 = most.' if kind == 'off' else 'Rank 1 = fewest.'), 'tr' if i > 4 else '')}</th>"
                         for i, (c, h, _, expl) in enumerate(RANK_STATS))
         title = "Total Offense" if kind == "off" else "Total Defense (stats allowed)"
-        return (f"<div class='rk' data-kind='{'offense' if kind == 'off' else 'defense'}'><h3>{title}</h3><table class='gt rk-t'><thead><tr><th class='num'>#</th><th>Team</th>"
+        return (f"<div class='rk' data-kind='{'offense' if kind == 'off' else 'defense'}'><h3>{title}</h3><table class='gt rk-t' data-sort='2'><thead><tr><th class='num'>#</th><th>Team</th>"
                 f"<th class='num'>{tip('Total', TIPS[k + ' composite'])}</th>{heads}"
                 f"<th class='num'>{tip('Model', TIPS[k + ' total'], 'tr')}</th>"
-                f"<th class='num'>{tip('Sched', TIPS[k + ' sched'], 'tr')}</th><th class='num'>{tip('Adj #', TIPS['Rank adj'], 'tr')}</th>"
+                f"<th class='num'>{tip('Adj #', TIPS['Rank adj'], 'tr')}</th><th class='num'>{tip('Sched', TIPS[k + ' sched'], 'tr')}</th>"
                 f"</tr></thead><tbody>{rows}</tbody></table></div>")
     wf = split_model.WEIGHTS
     fmt = lambda side: ", ".join(f"{h} {wf[side][c] * 100:.0f}%" for c, h, *_ in sorted(RANK_STATS, key=lambda t: -wf[side][t[0]]))
@@ -998,6 +998,27 @@ def backtest():
 
 
 SCRIPT = """<script>
+(function(){  // Team rankings: click a column header to sort by it (best first), click again to reverse
+  document.querySelectorAll('table.rk-t').forEach(function(t){
+    var ths = t.tHead.rows[0].cells;
+    function sort(i, rev){
+      var body = t.tBodies[0], rows = Array.prototype.slice.call(body.rows);
+      rows.sort(function(a, b){
+        var x = a.cells[i].dataset.k, y = b.cells[i].dataset.k, nx = parseFloat(x), ny = parseFloat(y);
+        var c = (isNaN(nx) || isNaN(ny)) ? x.localeCompare(y) : nx - ny;
+        return rev ? -c : c;
+      });
+      rows.forEach(function(r){ body.appendChild(r); });
+      Array.prototype.forEach.call(ths, function(h, j){ h.classList.toggle('sorted', j === i); h.classList.toggle('rev', j === i && rev); });
+      t.dataset.sort = i; t.dataset.rev = rev ? '1' : '';
+    }
+    Array.prototype.forEach.call(ths, function(h, i){
+      h.classList.add('sortable');
+      h.addEventListener('click', function(){ sort(i, String(t.dataset.sort) === String(i) && !t.dataset.rev); });
+    });
+    sort(2, false);  // default: Total
+  });
+})();
 (function(){  // Team rankings: Offense / Defense switch (remembers the choice in the address, e.g. #defense)
   var sw = document.querySelector('.rk-switch'); if (!sw) return;
   function show(k){
@@ -1052,6 +1073,8 @@ body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 -apple-system
 .rk-switch button{font:inherit;font-size:14px;font-weight:800;padding:7px 22px;border:0;border-radius:999px;background:transparent;color:var(--muted);cursor:pointer}
 .rk-switch button.on{background:var(--card);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.25)}
 .rk[hidden]{display:none!important}
+table.rk-t th.sortable{cursor:pointer;user-select:none}table.rk-t th.sorted{color:var(--ink)}
+table.rk-t th.sorted::after{content:" ▲";font-size:9px}table.rk-t th.sorted.rev::after{content:" ▼"}
 .rk-wrap{display:flex;flex-wrap:wrap;gap:16px}.rk-stack{flex-direction:column}.rk-stack .rk{flex:0 0 auto;width:100%;max-width:100%}.rk{flex:1 1 360px;min-width:0;overflow-x:auto}.rk h3{margin:0 0 8px;font-size:15px}
 table.gt.rk-t{table-layout:auto;font-size:13px}table.gt.rk-t td.tm b{font-size:16px;letter-spacing:.01em}table.gt.rk-t td.tm img{margin-right:8px;vertical-align:middle}table.gt.rk-t td,table.gt.rk-t th{padding:4px 8px;white-space:nowrap;overflow:visible;text-overflow:clip}
 @media (max-width:760px){table.gt.rk-t{font-size:11.5px}table.gt.rk-t td,table.gt.rk-t th{padding:4px 3px}table.gt.rk-t td.tm b{font-size:14px}table.gt.rk-t td.tm picture,table.gt.rk-t td.tm img{width:24px!important;height:24px!important}table.gt.rk-t .small{font-size:9.5px}}

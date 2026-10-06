@@ -28,6 +28,8 @@ body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 -apple-system
 .rk-switch button{font:inherit;font-size:14px;font-weight:800;padding:7px 22px;border:0;border-radius:999px;background:transparent;color:var(--muted);cursor:pointer}
 .rk-switch button.on{background:var(--card);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.25)}
 .rk[hidden]{display:none!important}
+table.rk-t th.sortable{cursor:pointer;user-select:none}table.rk-t th.sorted{color:var(--ink)}
+table.rk-t th.sorted::after{content:" ▲";font-size:9px}table.rk-t th.sorted.rev::after{content:" ▼"}
 .rk-wrap{display:flex;flex-wrap:wrap;gap:16px}.rk-stack{flex-direction:column}.rk-stack .rk{flex:0 0 auto;width:100%;max-width:100%}.rk{flex:1 1 360px;min-width:0;overflow-x:auto}.rk h3{margin:0 0 8px;font-size:15px}
 table.gt.rk-t{table-layout:auto;font-size:13px}table.gt.rk-t td.tm b{font-size:16px;letter-spacing:.01em}table.gt.rk-t td.tm img{margin-right:8px;vertical-align:middle}table.gt.rk-t td,table.gt.rk-t th{padding:4px 8px;white-space:nowrap;overflow:visible;text-overflow:clip}
 @media (max-width:760px){table.gt.rk-t{font-size:11.5px}table.gt.rk-t td,table.gt.rk-t th{padding:4px 3px}table.gt.rk-t td.tm b{font-size:14px}table.gt.rk-t td.tm picture,table.gt.rk-t td.tm img{width:24px!important;height:24px!important}table.gt.rk-t .small{font-size:9.5px}}
@@ -800,6 +802,27 @@ Data from the 2020-21 season onward only (MoneyPuck, NHL API, DailyFaceoff, Acti
 <div><dt>Team speed (Spd)</dt><dd>How often a team's skaters hit 20+ mph (NHL EDGE), last season vs the league. Fast teams score a little more and allow a little less, so it shifts team projections but barely changes totals.</dd></div>
 </dl></div></section>
 <script>
+(function(){  // Team rankings: click a column header to sort by it (best first), click again to reverse
+  document.querySelectorAll('table.rk-t').forEach(function(t){
+    var ths = t.tHead.rows[0].cells;
+    function sort(i, rev){
+      var body = t.tBodies[0], rows = Array.prototype.slice.call(body.rows);
+      rows.sort(function(a, b){
+        var x = a.cells[i].dataset.k, y = b.cells[i].dataset.k, nx = parseFloat(x), ny = parseFloat(y);
+        var c = (isNaN(nx) || isNaN(ny)) ? x.localeCompare(y) : nx - ny;
+        return rev ? -c : c;
+      });
+      rows.forEach(function(r){ body.appendChild(r); });
+      Array.prototype.forEach.call(ths, function(h, j){ h.classList.toggle('sorted', j === i); h.classList.toggle('rev', j === i && rev); });
+      t.dataset.sort = i; t.dataset.rev = rev ? '1' : '';
+    }
+    Array.prototype.forEach.call(ths, function(h, i){
+      h.classList.add('sortable');
+      h.addEventListener('click', function(){ sort(i, String(t.dataset.sort) === String(i) && !t.dataset.rev); });
+    });
+    sort(2, false);  // default: Total
+  });
+})();
 (function(){  // Team rankings: Offense / Defense switch (remembers the choice in the address, e.g. #defense)
   var sw = document.querySelector('.rk-switch'); if (!sw) return;
   function show(k){
