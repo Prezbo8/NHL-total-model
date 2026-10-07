@@ -161,6 +161,67 @@ CALL_HISTORY = {"SLAM": "Games like this went over 54% of the time at the openin
                 "AVOID": "Games like this went over only 45-49% of the time in 2021-26."}
 
 
+_RANKS = {}
+
+
+def rank_lookup(day):
+    """{team: rankings row} as of that game day (cached); {} when there are none."""
+    if day not in _RANKS:
+        rk = load_rankings(day)
+        if rk is None and day == date.today().isoformat():
+            rk = load_rankings()
+        _RANKS[day] = {} if rk is None else {"_lg": rk[["gf", "gf_ev", "gf_pp"]].mean().to_dict(),
+                                              **{x["team"]: x for _, x in rk.iterrows()}}
+    return _RANKS[day]
+
+
+def team_story(r, s_, x, o_, opp, rk, v):
+    """Plain-English reasons behind one team's projected goals: how far from an average team, then what
+    pushes it up and what holds it back (matchups and adjustments, in goals), biggest first."""
+    proj = r.proj_away if s_ == "away" else r.proj_home
+    ev, pp, oth = v(s_, "ev"), v(s_, "pp"), v(s_, "oth")
+    have = x in rk and opp in rk and "r_gf_ev" in rk[x]
+    reasons = []  # (goals effect, label, why)
+    if have:
+        t, o, lg = rk[x], rk[opp], rk["_lg"]
+        reasons.append((ev - lg["gf_ev"], "5-on-5 matchup", f"its attack ranks #{t['r_gf_ev']} of 32, {opp}'s defense #{o['r_ga_ev']}"))
+        reasons.append((pp - lg["gf_pp"], "power play", f"its power play ranks #{t['r_gf_pp']}, {opp}'s penalty kill and penalty habits #{o['r_ga_pp']}"))
+    run = ev + pp + oth
+    opp_goalie = e(goalie_parts(getattr(r, f"{o_}_goalie", ""))[0])
+    for k in ("gadj", "b2badj", "spd", "inj"):
+        pct = v(s_, k)
+        if pd.isna(pct) or abs(pct) < 0.0005:
+            continue
+        eff, run = run * pct, run * (1 + pct)
+        if k == "gadj":
+            label, why = f"{opp_goalie} in goal", GL_WORDS.get(tier("gadj", pct), "a goalie")
+        elif k == "b2badj":
+            label = "back-to-back"
+            why = "it played yesterday" if pct < -0.05 else f"{opp} played yesterday" if pct > 0.01 else "both teams played yesterday"
+        elif k == "spd":
+            label, why = "team speed", f"it skates {'faster' if pct > 0 else 'slower'} than {opp}"
+        else:
+            label, why = "injuries", "missing players on both teams, net"
+        reasons.append((eff, label, f"{why}, {pct * 100:+.1f}%"))
+    fmt = lambda z: f"{z[1]} <b>{z[0]:+.2f}</b> ({z[2]})"
+    up = sorted([z for z in reasons if z[0] >= 0.01], key=lambda z: -z[0])
+    down = sorted([z for z in reasons if z[0] <= -0.01], key=lambda z: z[0])
+    if have:
+        diff = proj - rk["_lg"]["gf"]
+        head = (f"<b>{x} {proj:.2f}</b>: {abs(diff):.2f} goals {'above' if diff >= 0 else 'below'} what an average team "
+                f"would score ({rk['_lg']['gf']:.2f}).")
+    else:
+        head = f"<b>{x} {proj:.2f}</b>."
+    parts = [head]
+    if up:
+        parts.append("Pushing it up: " + "; ".join(fmt(z) for z in up) + ".")
+    if down:
+        parts.append("Holding it back: " + "; ".join(fmt(z) for z in down) + ".")
+    if not up and not down:
+        parts.append("Nothing moves it more than a few hundredths of a goal: an average matchup.")
+    return " ".join(parts)
+
+
 def reasoning(r, flagged):
     """6-9 plain-English sentences behind the game's call, built from its logged numbers."""
     c = call(r, flagged)
@@ -256,13 +317,10 @@ def reasoning(r, flagged):
             extra.append(f"injuries {'help' if v(s_, 'inj') > 0 else 'cost'} {x} {abs(v(s_, 'inj')) * 100:.1f}%")
     if extra:
         out.append("Other factors: " + "; ".join(extra) + ".")
-    # 5. how each team's projected total is built: base goals, then each adjustment in order
-    names = (("gadj", "opposing goalie"), ("b2badj", "back-to-back"), ("spd", "team speed"), ("inj", "injuries"))
-    for s_, x in S:
-        base = v(s_, "ev") + v(s_, "pp") + v(s_, "oth")
-        steps = [f"{lbl} {v(s_, k) * 100:+.1f}%" for k, lbl in names if not pd.isna(v(s_, k)) and abs(v(s_, k)) >= 0.0005]
-        out.append(f"<span class='tt'><b>{x} {proj[s_]:.2f}</b> = 5-on-5 {v(s_, 'ev'):.2f} + power play {v(s_, 'pp'):.2f} + other {v(s_, 'oth'):.2f}"
-                   f" = {base:.2f} base" + (f", then {', '.join(steps)}" if steps else ", no adjustments") + ".</span>")
+    # 5. why each team projects where it does (vs an average team), biggest reasons first
+    rk = rank_lookup(r.date)
+    for (s_, x), (o_, opp) in ((S[0], S[1]), (S[1], S[0])):
+        out.append(f"<span class='tt'>{team_story(r, s_, x, o_, opp, rk, v)}</span>")
     # 6. projection and line
     mv = ""
     if not pd.isna(t) and not pd.isna(r.open_total) and r.open_total != t:
@@ -941,7 +999,8 @@ def load_rankings(day=None):
         r = r[r.date == day]
         if r.empty:
             return None
-    best_high = {"gf": True, "ga": False, "gf_adj": True, "ga_adj": False, "opp_d": False, "opp_o": True,
+    best_high = {"gf": True, "ga": False, "gf_ev": True, "gf_pp": True, "ga_ev": False, "ga_pp": False,
+                 "gf_adj": True, "ga_adj": False, "opp_d": False, "opp_o": True,
                  "score_off": True, "score_def": False, "score_off_adj": True, "score_def_adj": False}
     best_high |= {f"{k}F": True for k, *_ in RANK_STATS} | {f"{k}A": False for k, *_ in RANK_STATS}
     for c, hi in best_high.items():
