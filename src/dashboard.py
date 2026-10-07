@@ -256,7 +256,14 @@ def reasoning(r, flagged):
             extra.append(f"injuries {'help' if v(s_, 'inj') > 0 else 'cost'} {x} {abs(v(s_, 'inj')) * 100:.1f}%")
     if extra:
         out.append("Other factors: " + "; ".join(extra) + ".")
-    # 5. projection and line
+    # 5. how each team's projected total is built: base goals, then each adjustment in order
+    names = (("gadj", "opposing goalie"), ("b2badj", "back-to-back"), ("spd", "team speed"), ("inj", "injuries"))
+    for s_, x in S:
+        base = v(s_, "ev") + v(s_, "pp") + v(s_, "oth")
+        steps = [f"{lbl} {v(s_, k) * 100:+.1f}%" for k, lbl in names if not pd.isna(v(s_, k)) and abs(v(s_, k)) >= 0.0005]
+        out.append(f"<span class='tt'><b>{x} {proj[s_]:.2f}</b> = 5-on-5 {v(s_, 'ev'):.2f} + power play {v(s_, 'pp'):.2f} + other {v(s_, 'oth'):.2f}"
+                   f" = {base:.2f} base" + (f", then {', '.join(steps)}" if steps else ", no adjustments") + ".</span>")
+    # 6. projection and line
     mv = ""
     if not pd.isna(t) and not pd.isna(r.open_total) and r.open_total != t:
         mv = f" The line moved from {line(r.open_total)} to {line(t)}" + (", toward the over." if t > r.open_total else ", toward the under.")
@@ -268,7 +275,7 @@ def reasoning(r, flagged):
         return (z("ev") + z("pp") + z("oth")) * (1 + z("gadj")) * (1 + z("b2badj")) * (1 + z("spd")) * (1 + z("inj"))
     if any(abs(parts(s_) - proj[s_]) > 0.02 for s_, _ in S):
         out.append("Note: this game's breakdown was recorded on a later run than its projection, so the parts don't add up exactly.")
-    # 6. track record and result
+    # 7. track record and result
     out.append(CALL_HISTORY[c])
     if final and not pd.isna(t):
         went = "went over" if r.final_total > t else "stayed under" if r.final_total < t else "pushed"
@@ -626,7 +633,7 @@ def day_table(g):
                 return "<td class='num muted bcol' colspan='7'>n/a</td>"
             def td(stat, text, extra=""):
                 t = tier(stat, g_(stat))
-                if stat == "b2badj" and t == "mid":  # no back-to-back: the usual case, left uncolored
+                if text == "–":  # ~0% (no adjustment): left uncolored
                     t = ""
                 return f"<td class='num{extra}{' t-' + t if t else ''}'{f' title={chr(39)}{t}{chr(39)}' if t else ''}>{text}</td>"
             return (td("ev", f"{g_('ev'):.2f}", " bcol") + td("pp", f"{g_('pp'):.2f}") + td("gadj", adj(g_("gadj")))
@@ -1106,6 +1113,7 @@ body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 -apple-system
 .lastrun{position:absolute;top:14px;right:18px;text-align:right;font-size:11px;line-height:1.35;color:#c9d6e6;z-index:2}
 .lastrun b{display:block;font-size:13px;color:#fff;font-weight:700}.lastrun .tip{border-bottom-color:rgba(255,255,255,.45)}
 @media (max-width:600px){.lastrun{position:static;text-align:left;margin-top:8px}}
+.why-text .tt{display:block;margin:3px 0;padding-left:10px;border-left:3px solid var(--line)}
 .mcards{display:none}
 .rk-tag{margin-left:6px;font-size:10px;font-weight:700;color:var(--muted);white-space:nowrap}
 .b2b-sq{display:inline-block;width:9px;height:9px;background:#dc2626;border-radius:2px;margin-right:5px;vertical-align:middle}
