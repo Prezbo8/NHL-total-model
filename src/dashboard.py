@@ -71,6 +71,7 @@ TIPS = {
     "PASS": "Flagged over, but neither team is great at 5-on-5 and they aren't both good. No bet: these went over only 45% in 2021-26.",
     "AVOID": "Not flagged, or flagged but both teams face strong goalies. These went over only 45-49% in 2021-26.",
     "Paper bet": "The paper-trading record's pick: flagged at the last model run before puck drop, graded at the closing consensus total and over price.",
+    "Near miss": "{team} missed the {cutoff:.2f}-goal high-scoring cutoff by only {gap:.3f}. Not a bet: the over rule needs both teams over the cutoff (and a 6 or 6.5 line). Shown so close calls are easy to spot.",
     "B2B tag": "Played yesterday: the model cuts this team's scoring ~8% and raises its opponent's ~6.5%.",
 }
 
@@ -139,6 +140,20 @@ def current(g):
     for c in [c for c in paper.NOW_BASE if c != "flag"]:
         g[c] = pd.to_numeric(g[c], errors="coerce")
     return g
+
+
+NEAR_MISS = 0.05
+
+
+def near_miss(r):
+    """(team, gap) when an unflagged game missed the high-scoring cutoff by NEAR_MISS goals or less
+    (every team within NEAR_MISS of it, at least one under); else None. Information only: not a call or a bet."""
+    if _is(r.flag) or pd.isna(r.cutoff):
+        return None
+    low = [(x, r.cutoff - p) for x, p in ((r.away, r.proj_away), (r.home, r.proj_home)) if p < r.cutoff]
+    if not low or max(gap for _, gap in low) > NEAR_MISS:
+        return None
+    return " and ".join(x for x, _ in low), max(gap for _, gap in low)
 
 
 def call_result(r, flagged):
@@ -702,6 +717,9 @@ def day_table(g):
         st = start_time(getattr(r, "start_utc", None))
         gtime = f"<span class='gtime'>{st} ET</span><br>" if st else ""
         callpill = f"<span class='callpill c-{c.lower()}'>{tip(('🔨 ' if c == 'SLAM' else '') + c, TIPS[c])}</span>"
+        near = near_miss(r)
+        if near:
+            callpill += f" <span class='near'>{tip(f'near miss −{near[1]:.2f}', TIPS['Near miss'].format(team=near[0], gap=near[1], cutoff=r.cutoff))}</span>"
         if c != r.first_call:
             callpill += f" <span class='was'>{tip('was ' + r.first_call, f'First call when this game was logged: {r.first_call}. Updated with the latest goalies, lines and injuries.')}</span>"
         if final_day:
@@ -1329,6 +1347,7 @@ table.gt{font-size:12.5px;border-collapse:separate;border-spacing:0;width:100%;t
 .callpill{display:inline-block;font-size:10px;font-weight:800;padding:1px 8px;border-radius:999px;margin-bottom:2px;letter-spacing:.04em}
 .callpill.c-slam{background:var(--gold);color:#1a1200}.callpill.c-1u{border:1.5px solid var(--gold);color:var(--ink)}
 .callpill.c-pass{border:1px dashed var(--gold);color:var(--muted);font-weight:700}
+.near{font-size:9.5px;font-weight:700;color:var(--gold);white-space:nowrap}.near .tip{border-bottom-style:dotted}
 .callpill.c-avoid{border:1px solid var(--line);color:var(--muted);font-weight:700}.callpill .tip{border-bottom:none}
 .flagpill{display:inline-block;background:var(--gold);color:#1a1200;font-size:10px;font-weight:800;padding:1px 7px;border-radius:999px;margin-bottom:2px}
 .gt tr.srcrow td{padding:0 8px 6px 38px;white-space:nowrap}
