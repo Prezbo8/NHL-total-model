@@ -3,6 +3,7 @@
 home goals = 5v5 (home 5v5 offense x away 5v5 defense x 5v5 minutes)
            + PP  (home PP x away PK x [home penalties drawn x away penalties taken])
            + other (4v4, 3v3 OT, empty nets...: league average)
+           + extra (shorthanded goals + the shootout winner's goal: league average, not scaled by goalie etc.)
 then scaled by the opposing starter's goalie skill and back-to-backs, as in model.py.
 """
 import numpy as np
@@ -15,6 +16,9 @@ import speed
 
 SITS = {"5on5": "ev", "5on4": "pp", "4on5": "pk", "other": "o"}
 FIRST_SEASON = 2020  # use nothing (games, goalie history) from before the 2020-21 season
+# goals in the betting total that no part counts: shorthanded goals (~0.15) + the shootout winner's goal (~0.07),
+# 2021-26 league average. Fixed, not updated game by game, so flags and calls are exactly what they were without it.
+EXTRA = 0.22
 
 
 def load_split(xg="xGoals", first_season=FIRST_SEASON):
@@ -219,8 +223,8 @@ def walk_split(games, k=m.K, w=m.W_GOALS, regress=m.REGRESS, known_starters=True
         for side, att, dfn, goalie, f, spd in (("home", home, away, away_goalie, fh, sh), ("away", away, home, home_goalie, fa, sa)):
             ev, pp, oth = parts(att, dfn)
             gadj = -gs.skill(goalie)
-            out.append((ev + pp + oth) * (1 + gadj) * f * spd)
-            det[side] = {"ev": ev, "pp": pp, "oth": oth, "gadj": gadj, "b2badj": f - 1, "spd": spd - 1}
+            out.append((ev + pp + oth) * (1 + gadj) * f * spd + EXTRA / 2)
+            det[side] = {"ev": ev, "pp": pp, "oth": oth + EXTRA / 2 / ((1 + gadj) * f * spd), "gadj": gadj, "b2badj": f - 1, "spd": spd - 1}
         return (out[0], out[1], det) if detail else (out[0], out[1])
 
     last = max(games.season.max(), live_season or 0)

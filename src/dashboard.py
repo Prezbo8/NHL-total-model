@@ -39,7 +39,7 @@ TIPS = {
     "Team": "Team, away first then home.",
     "5v5": "Goals this team should score at full strength (5 skaters vs 5). Most of a team's goals come from here.",
     "PP": "Goals this team should score on the power play: how good its power play is, how bad the other team's penalty kill is, and how many penalties are expected.",
-    "Oth": "Goals from everything else (4-on-4, overtime, empty nets). Same league-average number for every team, so it has no colors.",
+    "Oth": "Goals from everything else (4-on-4, overtime, empty nets, shorthanded goals, the shootout winner's goal). Same league-average number for every team, so it has no colors.",
     "Gl": "How the other team's goalie changes this team's scoring. + = weak goalie, more goals. − = strong goalie, fewer goals.",
     "B2B": "Tired legs: a team that played yesterday scores 8% less. A team whose opponent played yesterday scores 6.5% more.",
     "Spd": "How fast this team skates compared with the opponent (20+ mph bursts last season). Fast teams score a bit more and allow a bit less.",
@@ -57,7 +57,7 @@ TIPS = {
     "Rank adj": "Total rank after correcting every stat for the schedule behind it (last season's opponents count as ~10 games, this season's games 1 each). ↑/↓ = places gained/lost vs the raw rank. Display only: projections use the raw ratings.",
     "Rank DEF PK": "Power-play goals it allows: penalty-kill quality × how many penalties it takes. Rank 1 = fewest.",
     "Proj": "Projected goals = (5v5 + PP + Oth) × goalie × back-to-back × team speed × injury adjustments.",
-    "HIGH": "Projected 2.95+ goals (top 40% of last season's team projections). An OVER FLAG needs both teams HIGH.",
+    "HIGH": "Projected 3.09+ goals (top 40% of last season's team projections). An OVER FLAG needs both teams HIGH.",
     "Confirmed": "Starter confirmed (DailyFaceoff). Refreshed every run.",
     "Likely": "Starter expected but not confirmed yet (DailyFaceoff).",
     "Projected": "Starter not announced yet: DailyFaceoff's guess, or this team's usual recent starter.",
@@ -821,7 +821,7 @@ def slate(d):
     if g.empty:
         return f"<p class='muted'>{pd.Timestamp(day):%A, %B %-d}: no games logged for today (off day, or the morning run hasn't happened yet).</p>"
     return f"""<p class='sub'>{pd.Timestamp(day):%A, %B %-d} · {day_summary(g)} · bar tick = high-scoring cutoff
-      ({g.cutoff.iloc[0]:.2f} goals){f" · starters as of {e(g.updated_at.dropna().max())}" if g.updated_at.notna().any() else ""}</p>
+      ({current(g).cutoff.iloc[0]:.2f} goals){f" · starters as of {e(g.updated_at.dropna().max())}" if g.updated_at.notna().any() else ""}</p>
       {day_view(g)}"""
 
 
