@@ -1038,13 +1038,59 @@ def rank_tags(day=None):
     return {x["team"]: f"#{x[o]} OFF / #{x[d_]} DEF" for _, x in r.iterrows()}
 
 
-def rankings():
+TEAM_GAMES = 10
+
+
+def team_panels(d):
+    """{team: HTML panel of its last TEAM_GAMES finished games this season}: projected vs actual goals, the game total
+    vs the line, and the last pre-game call and how it did (the same call and line the dashboard grades)."""
+    g = current(d[d.final_total.notna()])
+    out = {}
+    for t in sorted(set(g.away) | set(g.home)):
+        x = g[(g.away == t) | (g.home == t)].sort_values(["date", "start_utc"], ascending=False).head(TEAM_GAMES)
+        rows, pg, ag = [], [], []
+        for r in x.itertuples():
+            home = r.home == t
+            opp = r.away if home else r.home
+            proj, goals = (r.proj_home, r.home_score) if home else (r.proj_away, r.away_score)
+            pg.append(proj); ag.append(goals)
+            c, res = call_result(r, bool(r.flag))
+            if res is None:
+                outcome = "<span class='muted'>no line</span>"
+            elif c in ("PASS", "AVOID"):
+                outcome = {"W": "<span class='res W'>✓ under</span>", "L": "<span class='res L'>✗ over</span>"}.get(res, "<span class='res P'>push</span>")
+            else:
+                outcome = f"<span class='res {res}'>{res}</span>"
+            back = " <span class='muted' title='Backfilled Oct 2 from pre-game data (opening line); not in the paper record'>†</span>" if "retroactively" in str(r.logged_at) else ""
+            rows.append(f"<tr><td>{pd.Timestamp(r.date):%b %-d}{back}</td><td class='tm'>{'vs' if home else '@'} {logo(opp, 18)}<b>{e(opp)}</b></td>"
+                        f"<td class='num'>{proj:.2f}</td><td class='num'><b>{int(goals)}</b></td>"
+                        f"<td class='num'>{r.proj:.2f}</td><td class='num'><b>{int(r.final_total)}</b></td>"
+                        f"<td class='num'>{'–' if pd.isna(r.bet_total) else line(r.bet_total)}</td>"
+                        f"<td><span class='callpill c-{c.lower()}'>{c}</span></td><td>{outcome}</td></tr>")
+        n = len(x)
+        seven = int((x.final_total >= 7).sum())
+        summ = (f"Last {n} game{'s' if n != 1 else ''} this season: scored <b>{np.mean(ag):.2f}</b> a game vs <b>{np.mean(pg):.2f}</b> projected; "
+                f"{seven} of {n} went 7+ goals.")
+        out[t] = (f"<div class='tg'><p class='tg-sum'>{summ}</p><div class='scroll'><table class='tg-t'><thead><tr><th>Date</th><th>Opponent</th>"
+                  f"<th class='num'>{tip('Proj', f'{TEAMS.get(t, t)} projected goals (last run before the game).')}</th><th class='num'>Goals</th>"
+                  f"<th class='num'>{tip('Proj tot', 'Projected game total (last run before the game).')}</th><th class='num'>Total</th>"
+                  f"<th class='num'>{tip('Line', 'Last pre-game line, the one the dashboard grades.')}</th><th>Call</th><th>Result</th></tr></thead>"
+                  f"<tbody>{''.join(rows)}</tbody></table></div></div>")
+    return out
+
+
+def rankings(d=None):
     """Total Offense / Total Defense: nine stats per game, combined by how well each predicts future goals
     (split_model.WEIGHTS), plus the model's own goals vs an average team and strength of schedule."""
     r = load_rankings()
     if r is None or "r_score_off" not in r:
         return ""
     n = len(r)
+    panels = team_panels(d) if d is not None else {}
+
+    def detail(team):  # hidden panel row under the team's row (opened by clicking the row)
+        body = panels.get(team, "<p class='muted tg-sum'>No finished games logged yet this season.</p>")
+        return f"<tr class='rk-detail' data-team='{e(team)}' hidden><td colspan='99'>{body}</td></tr>"
 
     def tcls(rank):  # rank fifths: 1st fifth = great ... last fifth = trash (green = strong unit)
         return "t-" + TIER_NAMES[4 - min(4, (rank - 1) * 5 // n)]
@@ -1066,12 +1112,12 @@ def rankings():
                 return "<td class='num muted' data-k='99'>–</td>"
             return f"<td class='num' data-k='{x[f'r_{opp}']}'>#{x[f'r_{opp}']} <span class='muted small'>{x[opp] * 100:+.1f}%</span></td>"
         rows = "".join(
-            f"<tr><td class='num' data-k='{x[f'r_{score}']}'>{x[f'r_{score}']}</td><td class='tm' data-k='{e(x['team'])}'>{logo(x['team'], 30)}<b title='{e(TEAMS.get(x['team'], x['team']))}'>{e(x['team'])}</b></td>"
+            f"<tr class='rk-row' data-team='{e(x['team'])}' title='Click for {e(x['team'])} game-by-game'><td class='num' data-k='{x[f'r_{score}']}'>{x[f'r_{score}']}</td><td class='tm' data-k='{e(x['team'])}'><span class='rk-caret'>▸</span>{logo(x['team'], 30)}<b title='{e(TEAMS.get(x['team'], x['team']))}'>{e(x['team'])}</b></td>"
             f"<td class='num {tcls(x[f'r_{score}'])}' data-k='{x[f'r_{score}']}'><b>{x[score] * (1 if kind == 'off' else -1):+.2f}</b></td>"
             f"<td class='num {tcls(x[f'r_{model}'])}' data-k='{x[f'r_{model}']}'>{x[model]:.2f} <span class='muted small'>#{x[f'r_{model}']}</span></td>" + adj(x)
             + "".join(f"<td class='num {tcls(x[f'r_{c}{side}'])}' data-k='{x[f'r_{c}{side}']}'>{x[f'{c}{side}']:.{dec}f} <span class='muted small'>#{x[f'r_{c}{side}']}</span></td>"
                       for c, _, dec, _ in RANK_STATS)
-            + sched(x) + "</tr>"
+            + sched(x) + "</tr>" + detail(x["team"])
             for _, x in r.sort_values(f"r_{score}").iterrows())
         verb = "allowed" if kind == "def" else ""
         heads = "".join(f"<th class='num'>{tip(h, f'{expl}{(' ' + verb) if verb else ''}. Weight in the total: {w[c] * 100:.0f}%. ' + ('Rank 1 = most.' if kind == 'off' else 'Rank 1 = fewest.'), 'tr' if i > 4 else '')}</th>"
@@ -1094,7 +1140,9 @@ def rankings():
             "<li><b>Model</b> = the goals the model projects against a league-average opponent (what the picks use). "
             "<b>Sched</b> = how tough the opponents faced have been, judged by their Total Defense (for offense) or Total Offense "
             "(for defense) scores. <b>Adj #</b> = the Total rank after correcting every stat for that schedule.</li>"
-            "<li>Colors = rank fifths, green = strong, red = weak. The #OFF / #DEF tags on the dashboard use these Total ranks.</li></ul>")
+            "<li>Colors = rank fifths, green = strong, red = weak. The #OFF / #DEF tags on the dashboard use these Total ranks.</li>"
+            f"<li>Click a team to see its last {TEAM_GAMES} games this season: projected vs actual goals, the total vs the line, "
+            "and the model's last pre-game call. † = backfilled day (opening line), not in the paper record.</li></ul>")
 
 
 def backtest():
@@ -1124,13 +1172,16 @@ SCRIPT = """<script>
   document.querySelectorAll('table.rk-t').forEach(function(t){
     var ths = t.tHead.rows[0].cells;
     function sort(i, rev){
-      var body = t.tBodies[0], rows = Array.prototype.slice.call(body.rows);
+      var body = t.tBodies[0], rows = Array.prototype.slice.call(body.querySelectorAll('tr.rk-row'));
       rows.sort(function(a, b){
         var x = a.cells[i].dataset.k, y = b.cells[i].dataset.k, nx = parseFloat(x), ny = parseFloat(y);
         var c = (isNaN(nx) || isNaN(ny)) ? x.localeCompare(y) : nx - ny;
         return rev ? -c : c;
       });
-      rows.forEach(function(r){ body.appendChild(r); });
+      rows.forEach(function(r, k){
+        var p = body.querySelector('tr.rk-detail[data-team="' + r.dataset.team + '"]');
+        r.classList.toggle('alt', k % 2 === 1); body.appendChild(r); if (p) body.appendChild(p);
+      });
       Array.prototype.forEach.call(ths, function(h, j){ h.classList.toggle('sorted', j === i); h.classList.toggle('rev', j === i && rev); });
       t.dataset.sort = i; t.dataset.rev = rev ? '1' : '';
     }
@@ -1138,6 +1189,11 @@ SCRIPT = """<script>
       if (i === 1) return;  // Team name: not sortable
       h.classList.add('sortable');
       h.addEventListener('click', function(){ sort(i, String(t.dataset.sort) === String(i) && !t.dataset.rev); });
+    });
+    t.tBodies[0].addEventListener('click', function(e){  // click a team's row: open / close its game-by-game panel
+      var r = e.target.closest('tr.rk-row'); if (!r) return;
+      var p = t.tBodies[0].querySelector('tr.rk-detail[data-team="' + r.dataset.team + '"]'); if (!p) return;
+      p.hidden = !p.hidden; r.classList.toggle('open', !p.hidden);
     });
     sort(2, false);  // always start sorted by Total
     window.addEventListener('pageshow', function(e){ if (e.persisted) sort(2, false); });  // also when restored from the back/forward cache
@@ -1204,7 +1260,15 @@ table.rk-t th.sorted::after{content:" ▲";font-size:9px}table.rk-t th.sorted.re
 .rk-wrap{display:flex;flex-wrap:wrap;gap:16px}.rk-stack{flex-direction:column}.rk-stack .rk{flex:0 0 auto;width:100%;max-width:100%}.rk{flex:1 1 360px;min-width:0;overflow-x:auto}.rk h3{margin:0 0 8px;font-size:15px}
 table.gt.rk-t{table-layout:auto;font-size:13px}table.gt.rk-t td.tm b{font-size:16px;letter-spacing:.01em}table.gt.rk-t td.tm img{margin-right:8px;vertical-align:middle}table.gt.rk-t td,table.gt.rk-t th{padding:4px 8px;white-space:nowrap;overflow:visible;text-overflow:clip}
 @media (max-width:760px){table.gt.rk-t{font-size:11.5px}table.gt.rk-t td,table.gt.rk-t th{padding:4px 3px}table.gt.rk-t td.tm b{font-size:14px}table.gt.rk-t td.tm picture,table.gt.rk-t td.tm img{width:24px!important;height:24px!important}table.gt.rk-t .small{font-size:9.5px}}
-table.rk-t tbody tr:nth-child(even) td:not([class*=t-]){background:color-mix(in srgb,var(--ice) 50%,transparent)}
+table.rk-t tbody tr.rk-row.alt td:not([class*=t-]){background:color-mix(in srgb,var(--ice) 50%,transparent)}
+table.rk-t tr.rk-row{cursor:pointer}table.rk-t tr.rk-row:hover td.tm b{text-decoration:underline}
+.rk-caret{display:inline-block;width:14px;margin-right:2px;color:var(--muted);font-size:15px;line-height:1;text-align:center;transition:transform .15s}tr.rk-row.open .rk-caret{transform:rotate(90deg)}
+table.rk-t tr.rk-detail>td{padding:6px 10px 12px;background:var(--ice);white-space:normal}
+.tg-sum{margin:2px 0 6px;font-size:13px}.tg .scroll{overflow-x:auto}
+table.tg-t{border-collapse:collapse;font-size:12.5px;width:auto}table.tg-t th,table.tg-t td{padding:3px 10px;white-space:nowrap;border-bottom:1px solid var(--line)}
+table.tg-t th{font-size:11px;color:var(--muted);font-weight:700;text-align:left}table.tg-t th.num,table.tg-t td.num{text-align:right}
+table.tg-t td.tm img,table.tg-t td.tm picture{vertical-align:middle;margin:0 4px}
+@media (max-width:760px){table.tg-t{font-size:11px}table.tg-t th,table.tg-t td{padding:3px 5px}}
 @media (max-width:760px){.gtable,.legend.tbl-only{display:none}.mcards{display:grid;gap:12px}}
 .mc{background:var(--card);border:2px solid color-mix(in srgb,var(--muted) 45%,transparent);border-radius:12px;padding:12px 12px 8px}
 .mc.flagged{border-color:var(--gold)}
@@ -1410,7 +1474,7 @@ def build():
     lr = last_run()
     stamp = (f"<div class='lastrun'>{tip('Last model run', 'When the model last ran: re-checked goalies, lineups, injuries and lines, and re-projected every game that had not started. It runs every hour from 11:17 AM to 10:17 PM Eastern and 15 minutes before each game.', 'tr down')}"
              f"<b>{e(lr)}</b></div>") if lr else ""
-    rk = rankings()
+    rk = rankings(d)
     body = f"""
 <header class="hero"><h1>NHL Total Model</h1>{stamp}</header>
 {tabs("dash", bool(rk))}

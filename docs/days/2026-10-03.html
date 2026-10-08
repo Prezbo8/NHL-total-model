@@ -35,7 +35,15 @@ table.rk-t th.sorted::after{content:" ▲";font-size:9px}table.rk-t th.sorted.re
 .rk-wrap{display:flex;flex-wrap:wrap;gap:16px}.rk-stack{flex-direction:column}.rk-stack .rk{flex:0 0 auto;width:100%;max-width:100%}.rk{flex:1 1 360px;min-width:0;overflow-x:auto}.rk h3{margin:0 0 8px;font-size:15px}
 table.gt.rk-t{table-layout:auto;font-size:13px}table.gt.rk-t td.tm b{font-size:16px;letter-spacing:.01em}table.gt.rk-t td.tm img{margin-right:8px;vertical-align:middle}table.gt.rk-t td,table.gt.rk-t th{padding:4px 8px;white-space:nowrap;overflow:visible;text-overflow:clip}
 @media (max-width:760px){table.gt.rk-t{font-size:11.5px}table.gt.rk-t td,table.gt.rk-t th{padding:4px 3px}table.gt.rk-t td.tm b{font-size:14px}table.gt.rk-t td.tm picture,table.gt.rk-t td.tm img{width:24px!important;height:24px!important}table.gt.rk-t .small{font-size:9.5px}}
-table.rk-t tbody tr:nth-child(even) td:not([class*=t-]){background:color-mix(in srgb,var(--ice) 50%,transparent)}
+table.rk-t tbody tr.rk-row.alt td:not([class*=t-]){background:color-mix(in srgb,var(--ice) 50%,transparent)}
+table.rk-t tr.rk-row{cursor:pointer}table.rk-t tr.rk-row:hover td.tm b{text-decoration:underline}
+.rk-caret{display:inline-block;width:14px;margin-right:2px;color:var(--muted);font-size:15px;line-height:1;text-align:center;transition:transform .15s}tr.rk-row.open .rk-caret{transform:rotate(90deg)}
+table.rk-t tr.rk-detail>td{padding:6px 10px 12px;background:var(--ice);white-space:normal}
+.tg-sum{margin:2px 0 6px;font-size:13px}.tg .scroll{overflow-x:auto}
+table.tg-t{border-collapse:collapse;font-size:12.5px;width:auto}table.tg-t th,table.tg-t td{padding:3px 10px;white-space:nowrap;border-bottom:1px solid var(--line)}
+table.tg-t th{font-size:11px;color:var(--muted);font-weight:700;text-align:left}table.tg-t th.num,table.tg-t td.num{text-align:right}
+table.tg-t td.tm img,table.tg-t td.tm picture{vertical-align:middle;margin:0 4px}
+@media (max-width:760px){table.tg-t{font-size:11px}table.tg-t th,table.tg-t td{padding:3px 5px}}
 @media (max-width:760px){.gtable,.legend.tbl-only{display:none}.mcards{display:grid;gap:12px}}
 .mc{background:var(--card);border:2px solid color-mix(in srgb,var(--muted) 45%,transparent);border-radius:12px;padding:12px 12px 8px}
 .mc.flagged{border-color:var(--gold)}
@@ -697,13 +705,16 @@ Trash: below -2.0%'>Inj</span></th></tr></thead><tbody><tr><td>NJD</td><td class
   document.querySelectorAll('table.rk-t').forEach(function(t){
     var ths = t.tHead.rows[0].cells;
     function sort(i, rev){
-      var body = t.tBodies[0], rows = Array.prototype.slice.call(body.rows);
+      var body = t.tBodies[0], rows = Array.prototype.slice.call(body.querySelectorAll('tr.rk-row'));
       rows.sort(function(a, b){
         var x = a.cells[i].dataset.k, y = b.cells[i].dataset.k, nx = parseFloat(x), ny = parseFloat(y);
         var c = (isNaN(nx) || isNaN(ny)) ? x.localeCompare(y) : nx - ny;
         return rev ? -c : c;
       });
-      rows.forEach(function(r){ body.appendChild(r); });
+      rows.forEach(function(r, k){
+        var p = body.querySelector('tr.rk-detail[data-team="' + r.dataset.team + '"]');
+        r.classList.toggle('alt', k % 2 === 1); body.appendChild(r); if (p) body.appendChild(p);
+      });
       Array.prototype.forEach.call(ths, function(h, j){ h.classList.toggle('sorted', j === i); h.classList.toggle('rev', j === i && rev); });
       t.dataset.sort = i; t.dataset.rev = rev ? '1' : '';
     }
@@ -711,6 +722,11 @@ Trash: below -2.0%'>Inj</span></th></tr></thead><tbody><tr><td>NJD</td><td class
       if (i === 1) return;  // Team name: not sortable
       h.classList.add('sortable');
       h.addEventListener('click', function(){ sort(i, String(t.dataset.sort) === String(i) && !t.dataset.rev); });
+    });
+    t.tBodies[0].addEventListener('click', function(e){  // click a team's row: open / close its game-by-game panel
+      var r = e.target.closest('tr.rk-row'); if (!r) return;
+      var p = t.tBodies[0].querySelector('tr.rk-detail[data-team="' + r.dataset.team + '"]'); if (!p) return;
+      p.hidden = !p.hidden; r.classList.toggle('open', !p.hidden);
     });
     sort(2, false);  // always start sorted by Total
     window.addEventListener('pageshow', function(e){ if (e.persisted) sort(2, false); });  // also when restored from the back/forward cache

@@ -182,9 +182,11 @@ def season_of(day):
 
 
 def walk_split(games, k=m.K, w=m.W_GOALS, regress=m.REGRESS, known_starters=True, with_projector=False, roster_w=0.0,
-               live_season=None, use_speed=True, record_detail=False):
+               live_season=None, use_speed=True, record_detail=False, guess="mode"):
     """live_season: the season being projected. If it's newer than the data (e.g. opening day, before any
-    of its games exist), last season's ratings are rolled over into this season's starting ratings."""
+    of its games exist), last season's ratings are rolled over into this season's starting ratings.
+    guess (known_starters=False): "mode" = the team's most common starter in its last 10 games;
+    "blend" = each of those last-10 starters, weighted by how many of them he started."""
     starter, by_game, gg = m.load_goalies()
     # goalie history only from seasons that are part of this run (nothing before games' first season)
     gs = m.GoalieSkill(gg.iloc[0:0])
@@ -205,6 +207,12 @@ def walk_split(games, k=m.K, w=m.W_GOALS, regress=m.REGRESS, known_starters=True
     rows, details = [], []
     zspeed = speed.z_prev(games) if use_speed else {}
 
+    def goalie_skill(goalie):
+        """One goalie's skill, or a mix [(goalie, weight), ...] when the starter isn't known."""
+        if isinstance(goalie, list):
+            return sum(w_ * gs.skill(p) for p, w_ in goalie)
+        return gs.skill(goalie)
+
     def project(home, away, home_goalie, away_goalie, h_b2b=False, a_b2b=False, detail=False, season=None):
         """Projected (home goals, away goals) from the ratings as they stand right now.
         detail=True also returns each side's parts: 5v5, power play, other situations,
@@ -222,7 +230,7 @@ def walk_split(games, k=m.K, w=m.W_GOALS, regress=m.REGRESS, known_starters=True
         out, det = [], {}
         for side, att, dfn, goalie, f, spd in (("home", home, away, away_goalie, fh, sh), ("away", away, home, home_goalie, fa, sa)):
             ev, pp, oth = parts(att, dfn)
-            gadj = -gs.skill(goalie)
+            gadj = -goalie_skill(goalie)
             out.append((ev + pp + oth) * (1 + gadj) * f * spd + EXTRA / 2)
             det[side] = {"ev": ev, "pp": pp, "oth": oth + EXTRA / 2 / ((1 + gadj) * f * spd), "gadj": gadj, "b2badj": f - 1, "spd": spd - 1}
         return (out[0], out[1], det) if detail else (out[0], out[1])
@@ -241,7 +249,11 @@ def walk_split(games, k=m.K, w=m.W_GOALS, regress=m.REGRESS, known_starters=True
                 if known_starters:
                     return starter.get((r.gameId, team))
                 rr = recent.get(team)
-                return max(set(rr), key=rr.count) if rr else None
+                if not rr:
+                    return None
+                if guess == "blend":
+                    return [(p, rr.count(p) / len(rr)) for p in set(rr)]
+                return max(set(rr), key=rr.count)
             lam_h, lam_a, det = project(r.home, r.away, pick(r.home), pick(r.away), r.h_b2b, r.a_b2b, detail=True, season=season)
             rows.append((r.gameId, season, r.gameDate, r.home, r.away, lam_h + lam_a, r.total, lam_h, lam_a))
             if record_detail:  # per-team breakdown, for analysis (e.g. tier cutoffs)
