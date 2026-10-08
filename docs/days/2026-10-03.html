@@ -5,9 +5,9 @@
 <link rel="icon" type="image/png" sizes="32x32" href="../favicon-32.png">
 <link rel="apple-touch-icon" href="../apple-touch-icon.png"><style>
 :root{--bg:#f3f5f8;--card:#fff;--ink:#0f1a2a;--muted:#5f6b7a;--line:#dfe4ea;--ice:#e8eef5;
-  --accent:#1f6feb;--accent-soft:#c9dbf7;--gold:#c99700;--gold-soft:#fff4cc;--red:#c8102e;--pos:#1a7f37;--neg:#c62828}
+  --accent:#1f6feb;--accent-soft:#c9dbf7;--gold:#c99700;--gold-soft:#fff4cc;--red:#c8102e;--pos:#1a7f37;--neg:#c62828;--cal-a:#1f6feb;--cal-b:#c99700}
 @media (prefers-color-scheme:dark){:root{--bg:#0b1119;--card:#131c27;--ink:#e8edf3;--muted:#93a1b2;--line:#233040;--ice:#18222f;
-  --accent:#58a6ff;--accent-soft:#1d3554;--gold:#e3b341;--gold-soft:#2b2410;--red:#ff5a6e;--pos:#3fb950;--neg:#f85149;color-scheme:dark}}
+  --accent:#58a6ff;--accent-soft:#1d3554;--gold:#e3b341;--gold-soft:#2b2410;--red:#ff5a6e;--pos:#3fb950;--neg:#f85149;--cal-a:#4493f8;--cal-b:#bb8009;color-scheme:dark}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
 .wrap{max-width:1360px;margin:0 auto;padding:0 16px 64px}
@@ -186,6 +186,9 @@ table.gt{font-size:12.5px;border-collapse:separate;border-spacing:0;width:100%;t
 .callpill{display:inline-block;font-size:10px;font-weight:800;padding:1px 8px;border-radius:999px;margin-bottom:2px;letter-spacing:.04em}
 .callpill.c-slam{background:var(--gold);color:#1a1200}.callpill.c-1u{border:1.5px solid var(--gold);color:var(--ink)}
 .callpill.c-pass{border:1px dashed var(--gold);color:var(--muted);font-weight:700}
+.cal-sec{margin-top:18px}.cal-sec h3{margin:0 0 6px}.cal-legend{display:flex;gap:16px;font-size:12.5px;color:var(--muted);margin-bottom:4px}.cal-key{display:inline-flex;align-items:center;gap:6px}.cal-wrap{max-width:560px}svg.cal{width:100%;height:auto;display:block}
+svg.cal .cal-grid{stroke:var(--line);stroke-width:1}svg.cal .cal-diag{stroke:var(--muted);stroke-width:1;stroke-dasharray:4 4}svg.cal .cal-ax{fill:var(--muted);font-size:11px}svg.cal .cal-lbl{fill:var(--ink);font-size:11.5px;font-weight:700}
+svg.cal .cal-line{fill:none;stroke-width:2;opacity:.55}.cal-line.cal-a{stroke:var(--cal-a)}.cal-line.cal-b{stroke:var(--cal-b)}circle.cal-a,rect.cal-a{fill:var(--cal-a);stroke:var(--card);stroke-width:2}circle.cal-b,rect.cal-b{fill:var(--cal-b);stroke:var(--card);stroke-width:2}.cal-key svg circle,.cal-key svg rect{stroke:none}svg.cal .cal-hit{fill:transparent;stroke:none}svg.cal .cal-pt{cursor:default;outline:none}svg.cal .cal-pt:hover circle:not(.cal-hit),svg.cal .cal-pt:hover rect,svg.cal .cal-pt:focus circle:not(.cal-hit){stroke:var(--ink)}
 .near{font-size:9.5px;font-weight:700;color:var(--gold);white-space:nowrap}.near .tip{border-bottom-style:dotted}
 .callpill.c-avoid{border:1px solid var(--line);color:var(--muted);font-weight:700}.callpill .tip{border-bottom:none}
 .flagpill{display:inline-block;background:var(--gold);color:#1a1200;font-size:10px;font-weight:800;padding:1px 7px;border-radius:999px;margin-bottom:2px}

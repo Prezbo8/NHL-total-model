@@ -872,7 +872,7 @@ def accuracy(d):
                        f"<td class='num'>{x.p7.mean():.0%}</td><td class='num'>{(x.final_total >= 7).mean():.0%}</td></tr>")
         return "".join(out)
     head = ("<thead><tr><th>{}</th><th class='num'>Games</th><th class='num'>Proj</th><th class='num'>Actual</th>"
-            f"<th class='num'>{tip('Diff', 'Actual minus projected total goals. Projections run a little low by design (P(7+) corrects for it).', 'tr')}</th>"
+            f"<th class='num'>{tip('Diff', 'Actual minus projected total goals. Games before Oct 8 were projected ~0.2 low (shorthanded and shootout goals were added then); P(7+) corrects for it either way.', 'tr')}</th>"
             f"<th class='num'>{tip('Model 7+', 'Average model chance of 7+ goals.', 'tr')}</th>"
             f"<th class='num'>{tip('Actual 7+', 'How often those games actually had 7+ goals. Calibrated = close to Model 7+.', 'tr')}</th></tr></thead>")
     by_band = rows((str(b), x) for b, x in s.groupby("band", observed=True))
@@ -888,6 +888,7 @@ def accuracy(d):
         <div><h3>By projected total</h3><div class='scroll'><table class='acc-t'>{head.format('Projected')}<tbody>{by_band}</tbody></table></div></div>
         <div><h3>By call</h3><div class='scroll'><table class='acc-t'>{head.format('Call')}<tbody>{by_call}</tbody></table></div></div>
       </div>
+      <div class='cal-sec'>{calibration(s)}</div>
       <ul class='notes'><li>The test that matters is <b>Model 7+ vs Actual 7+</b>: if the model is calibrated they match, higher
       projection bands should score more, and SLAM should score more than 1U, PASS and AVOID.</li>
       <li>Uses each game's last projection and call before puck drop. Single-game misses are big in hockey, so judge this after
@@ -1079,6 +1080,82 @@ def team_panels(d):
     return out
 
 
+CAL_EDGES = (0.40, 0.45, 0.50)  # P(7+) bins: under 40%, 40-45%, 45-50%, 50%+ (tails beyond are ~10 games a season)
+
+
+def calibration_bins(p7, hit):
+    """[(label, games, mean predicted, share that went 7+)] per P(7+) bin, skipping empty bins."""
+    p7, hit = np.asarray(p7, float), np.asarray(hit, float)
+    edges = (0.0,) + CAL_EDGES + (1.01,)
+    out = []
+    for lo, hi in zip(edges, edges[1:]):
+        m_ = (p7 >= lo) & (p7 < hi)
+        if m_.any():
+            label = f"under {CAL_EDGES[0]:.0%}" if lo == 0 else f"{lo:.0%}+" if hi > 1 else f"{lo:.0%}–{hi:.0%}"
+            out.append((label, int(m_.sum()), float(p7[m_].mean()), float(hit[m_].mean())))
+    return out
+
+
+
+CAL_MIN_GAMES = 10
+CALIBRATION_BACKTEST = [  # (bin label, games, mean predicted P(7+), share that went 7+): research/p7_calibration.py
+    ("under 40%", 601, 0.3836, 0.3860),
+    ("40%–45%", 1818, 0.4261, 0.4472),
+    ("45%–50%", 1267, 0.4701, 0.4657),
+    ("50%+", 250, 0.5175, 0.5360),
+]
+
+
+def calibration(s):
+    """Calibration chart + table: predicted P(7+) vs how often games went 7+, per P(7+) bin, for the 2023-26 backtest
+    and this season (last pre-game P(7+) of finished games). Dots on the diagonal = the percentages can be trusted."""
+    live = calibration_bins(s.p7, s.final_total >= 7)
+    shown = [b for b in live if b[1] >= CAL_MIN_GAMES]  # tiny bins (a few games) stay in the table only
+    series = [("Backtest 2023-26", "cal-a", "circle", CALIBRATION_BACKTEST), ("This season", "cal-b", "square", shown)]
+    xlo, xhi = 0.35, 0.55
+    ys = [b[3] for *_, pts in series for b in pts]
+    ylo, yhi = min([0.30] + [np.floor(v * 20) / 20 for v in ys]), max([0.60] + [np.ceil(v * 20) / 20 for v in ys])
+    W, H, L, R, T, B = 520, 300, 46, 120, 14, 40
+    X = lambda v: L + (v - xlo) / (xhi - xlo) * (W - L - R)
+    Y = lambda v: T + (yhi - v) / (yhi - ylo) * (H - T - B)
+    g = "".join(f"<line class='cal-grid' x1='{L}' x2='{W - R}' y1='{Y(t):.1f}' y2='{Y(t):.1f}'/>"
+                f"<text class='cal-ax' x='{L - 6}' y='{Y(t) + 4:.1f}' text-anchor='end'>{t:.0%}</text>"
+                for t in np.arange(ylo, yhi + 1e-9, 0.05))
+    g += "".join(f"<text class='cal-ax' x='{X(t):.1f}' y='{H - B + 16}' text-anchor='middle'>{t:.0%}</text>"
+                 for t in np.arange(xlo, xhi + 1e-9, 0.05))
+    d0, d1 = max(xlo, ylo), min(xhi, yhi)  # the diagonal where both axes overlap
+    g += (f"<line class='cal-diag' x1='{X(d0):.1f}' y1='{Y(d0):.1f}' x2='{X(d1):.1f}' y2='{Y(d1):.1f}'/>"
+          f"<text class='cal-ax' x='{X(d1) - 4:.1f}' y='{Y(d1) - 6:.1f}' text-anchor='end'>perfect</text>"
+          f"<text class='cal-ax' x='{(L + W - R) / 2:.0f}' y='{H - 6}' text-anchor='middle'>Model P(7+)</text>"
+          f"<text class='cal-ax' transform='rotate(-90)' x='{-(T + H - B) / 2:.0f}' y='12' text-anchor='middle'>Went 7+</text>")
+    for name, cls, shape, pts in series:
+        if not pts:
+            continue
+        xy = [(X(b[2]), Y(b[3])) for b in pts]
+        if len(xy) > 1:
+            g += f"<polyline class='cal-line {cls}' points='{' '.join(f'{x:.1f},{y:.1f}' for x, y in xy)}'/>"
+        for (x, y), b in zip(xy, pts):
+            t = f"{name}, P(7+) {b[0]}: {b[1]} games. Model said {b[2]:.0%}, {b[3]:.0%} went 7+."
+            mark = (f"<circle class='{cls}' cx='{x:.1f}' cy='{y:.1f}' r='5'/>" if shape == "circle" else
+                    f"<rect class='{cls}' x='{x - 4.5:.1f}' y='{y - 4.5:.1f}' width='9' height='9' rx='1.5'/>")
+            g += f"<g class='tip cal-pt' tabindex='0' data-tip='{e(t)}'><circle class='cal-hit' cx='{x:.1f}' cy='{y:.1f}' r='12'/>{mark}</g>"
+        lx, ly = xy[-1]
+        g += f"<text class='cal-lbl' x='{lx + 10:.1f}' y='{ly + 4:.1f}'>{e(name)}</text>"
+    legend = "".join(f"<span class='cal-key'><svg width='12' height='12'>{'<circle cx=6 cy=6 r=5' if sh == 'circle' else '<rect x=1.5 y=1.5 width=9 height=9 rx=1.5'} class='{c}'/></svg>{e(n)}"
+                     f"{'' if pts else f' <span class=muted>(no group with {CAL_MIN_GAMES}+ games yet)</span>'}</span>" for n, c, sh, pts in series)
+    lv = {b[0]: b for b in live}
+    rows = "".join(f"<tr><td>{b[0]}</td><td class='num'>{b[1]:,}</td><td class='num'>{b[2]:.0%}</td><td class='num'>{b[3]:.0%}</td>"
+                   + (f"<td class='num'>{lv[b[0]][1]}</td><td class='num'>{lv[b[0]][2]:.0%}</td><td class='num'>{lv[b[0]][3]:.0%}</td>"
+                      if b[0] in lv else "<td class='num muted'>0</td><td class='num muted'>–</td><td class='num muted'>–</td>") + "</tr>"
+                   for b in CALIBRATION_BACKTEST)
+    return (f"<h3>{tip('P(7+) calibration', 'Games grouped by the model’s chance of 7+ goals. Each dot = how often those games actually went 7+. On the diagonal = the percentages can be trusted.', 'tl')}</h3>"
+            f"<div class='cal-legend'>{legend}</div>"
+            f"<div class='cal-wrap'><svg class='cal' viewBox='0 0 {W} {H}' role='img' aria-label='P(7+) calibration: model chance vs how often games went 7+'>{g}</svg></div>"
+            f"<div class='scroll'><table class='acc-t'><thead><tr><th>Model P(7+)</th><th class='num'>Backtest games</th><th class='num'>Model</th><th class='num'>Went 7+</th>"
+            f"<th class='num'>This season</th><th class='num'>Model</th><th class='num'>Went 7+</th></tr></thead><tbody>{rows}</tbody></table></div>"
+            f"<p class='muted small'>This season's groups appear on the chart once they have {CAL_MIN_GAMES}+ games; smaller ones are in the table only.</p>")
+
+
 def rankings(d=None):
     """Total Offense / Total Defense: nine stats per game, combined by how well each predicts future goals
     (split_model.WEIGHTS), plus the model's own goals vs an average team and strength of schedule."""
@@ -1230,9 +1307,9 @@ function hide(ev) {
 
 CSS = """
 :root{--bg:#f3f5f8;--card:#fff;--ink:#0f1a2a;--muted:#5f6b7a;--line:#dfe4ea;--ice:#e8eef5;
-  --accent:#1f6feb;--accent-soft:#c9dbf7;--gold:#c99700;--gold-soft:#fff4cc;--red:#c8102e;--pos:#1a7f37;--neg:#c62828}
+  --accent:#1f6feb;--accent-soft:#c9dbf7;--gold:#c99700;--gold-soft:#fff4cc;--red:#c8102e;--pos:#1a7f37;--neg:#c62828;--cal-a:#1f6feb;--cal-b:#c99700}
 @media (prefers-color-scheme:dark){:root{--bg:#0b1119;--card:#131c27;--ink:#e8edf3;--muted:#93a1b2;--line:#233040;--ice:#18222f;
-  --accent:#58a6ff;--accent-soft:#1d3554;--gold:#e3b341;--gold-soft:#2b2410;--red:#ff5a6e;--pos:#3fb950;--neg:#f85149;color-scheme:dark}}
+  --accent:#58a6ff;--accent-soft:#1d3554;--gold:#e3b341;--gold-soft:#2b2410;--red:#ff5a6e;--pos:#3fb950;--neg:#f85149;--cal-a:#4493f8;--cal-b:#bb8009;color-scheme:dark}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
 .wrap{max-width:1360px;margin:0 auto;padding:0 16px 64px}
@@ -1411,6 +1488,9 @@ table.gt{font-size:12.5px;border-collapse:separate;border-spacing:0;width:100%;t
 .callpill{display:inline-block;font-size:10px;font-weight:800;padding:1px 8px;border-radius:999px;margin-bottom:2px;letter-spacing:.04em}
 .callpill.c-slam{background:var(--gold);color:#1a1200}.callpill.c-1u{border:1.5px solid var(--gold);color:var(--ink)}
 .callpill.c-pass{border:1px dashed var(--gold);color:var(--muted);font-weight:700}
+.cal-sec{margin-top:18px}.cal-sec h3{margin:0 0 6px}.cal-legend{display:flex;gap:16px;font-size:12.5px;color:var(--muted);margin-bottom:4px}.cal-key{display:inline-flex;align-items:center;gap:6px}.cal-wrap{max-width:560px}svg.cal{width:100%;height:auto;display:block}
+svg.cal .cal-grid{stroke:var(--line);stroke-width:1}svg.cal .cal-diag{stroke:var(--muted);stroke-width:1;stroke-dasharray:4 4}svg.cal .cal-ax{fill:var(--muted);font-size:11px}svg.cal .cal-lbl{fill:var(--ink);font-size:11.5px;font-weight:700}
+svg.cal .cal-line{fill:none;stroke-width:2;opacity:.55}.cal-line.cal-a{stroke:var(--cal-a)}.cal-line.cal-b{stroke:var(--cal-b)}circle.cal-a,rect.cal-a{fill:var(--cal-a);stroke:var(--card);stroke-width:2}circle.cal-b,rect.cal-b{fill:var(--cal-b);stroke:var(--card);stroke-width:2}.cal-key svg circle,.cal-key svg rect{stroke:none}svg.cal .cal-hit{fill:transparent;stroke:none}svg.cal .cal-pt{cursor:default;outline:none}svg.cal .cal-pt:hover circle:not(.cal-hit),svg.cal .cal-pt:hover rect,svg.cal .cal-pt:focus circle:not(.cal-hit){stroke:var(--ink)}
 .near{font-size:9.5px;font-weight:700;color:var(--gold);white-space:nowrap}.near .tip{border-bottom-style:dotted}
 .callpill.c-avoid{border:1px solid var(--line);color:var(--muted);font-weight:700}.callpill .tip{border-bottom:none}
 .flagpill{display:inline-block;background:var(--gold);color:#1a1200;font-size:10px;font-weight:800;padding:1px 7px;border-radius:999px;margin-bottom:2px}
