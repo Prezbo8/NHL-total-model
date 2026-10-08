@@ -221,18 +221,21 @@ def logit_fit(X, y):
 
 
 def fit_calibration(proj):
-    """Logistic fit: P(total >= k) as a function of projected total, for each k.
+    """Logistic fit: P(total >= k) as a function of projected total and closeness, for each k.
     Real NHL totals bunch together more than a Poisson curve assumes, so we fit
-    the probabilities directly from history instead."""
-    x = proj.proj.values
-    out = {k: tuple(logit_fit(x[:, None], (proj.total >= k).values.astype(float))) for k in range(4, 10)}
+    the probabilities directly from history instead. Closeness = |home - away projection|: evenly matched
+    games go 7+ a bit more often at the same total (overtime, shootout goal, late empty-netters;
+    research/close_p7_seasons.py)."""
+    X = np.column_stack([proj.proj.values, (proj.lam_h - proj.lam_a).abs().values])
+    out = {k: tuple(logit_fit(X, (proj.total >= k).values.astype(float))) for k in range(4, 10)}
     out["over"], out["under"] = out[7], tuple(-v for v in out[6])  # over 6 = 7+, under 6 = 5 or less
     return out
 
 
-def p_from(cal, name, x):
-    a, b = cal[name]
-    return 1 / (1 + np.exp(-(a + b * x)))
+def p_from(cal, name, x, gap):
+    """P(total >= name) for projected total x and closeness gap = |home - away projection|."""
+    a, b, c = cal[name]
+    return 1 / (1 + np.exp(-(a + b * x + c * gap)))
 
 
 def backtest():
@@ -243,7 +246,8 @@ def backtest():
     cal = fit_calibration(train)
 
     y = (test.total >= 7).astype(float).values
-    p = p_from(cal, "over", test.proj.values)
+    gap = (test.lam_h - test.lam_a).abs().values
+    p = p_from(cal, "over", test.proj.values, gap)
     base = (train.total >= 7).mean()
     brier, brier0 = np.mean((p - y) ** 2), np.mean((base - y) ** 2)
     print(f"Fit on 2022-23 + 2023-24, tested on 2024-25 + 2025-26 ({len(test)} games)")
@@ -260,7 +264,7 @@ def backtest():
     print(t.to_string(float_format=lambda v: f"{v:.3f}"))
 
     print("\n  If you only bet games where the model is confident (decisions exclude pushes):")
-    pu = p_from(cal, "under", test.proj.values)
+    pu = p_from(cal, "under", test.proj.values, gap)
     for edge in (0.05, 0.08, 0.10):
         over = test[test.p - pu >= edge]
         under = test[pu - test.p >= edge]
@@ -415,15 +419,15 @@ def today(day=None):
         p = r.playerId.mode()[0]
         return r[r.playerId == p].name.iloc[0], p, "guess: usual starter"
 
-    def over_ev(total, over, x):
+    def over_ev(total, over, x, gap):
         """Model expected profit per 1 unit on the OVER (a 6 can push; a 6.5 can't)."""
-        p_win = p_from(cal, int(np.floor(total)) + 1, x)
-        p_push = p_from(cal, 6, x) - p_from(cal, 7, x) if total == 6 else 0.0
+        p_win = p_from(cal, int(np.floor(total)) + 1, x, gap)
+        p_push = p_from(cal, 6, x, gap) - p_from(cal, 7, x, gap) if total == 6 else 0.0
         return p_win * float(grade.payout(over)) - (1 - p_win - p_push)
 
-    def best_over(key, x):
+    def best_over(key, x, gap):
         """Best OVER at 6 or 6.5 across sportsbooks, by model expected value."""
-        opts = [(over_ev(t, o, x), b, t, o, u) for b, t, o, u in shop.get(key, []) if t in (6.0, 6.5)]
+        opts = [(over_ev(t, o, x, gap), b, t, o, u) for b, t, o, u in shop.get(key, []) if t in (6.0, 6.5)]
         return max(opts) if opts else None
 
     def fmt(ln):
@@ -442,8 +446,8 @@ def today(day=None):
         fh_inj, fa_inj = ih["off"] * ia["def"], ia["off"] * ih["def"]  # own injuries + opponent's injured defenders
         lh, la = lh * fh_inj, la * fa_inj
         det["home"]["inj"], det["away"]["inj"] = fh_inj - 1, fa_inj - 1
-        x = lh + la
-        p7 = p_from(cal, 7, x)
+        x, gap = lh + la, abs(lh - la)
+        p7 = p_from(cal, 7, x, gap)
         ln = lines.get((h, a), {})
         cur = ln.get("now") or ln.get("open")
         high_h, high_a = lh >= cutoff, la >= cutoff
@@ -454,9 +458,9 @@ def today(day=None):
         line_txt = f"open {fmt(ln.get('open'))}   now {fmt(ln.get('now'))}"
         if cur:
             k = int(np.floor(cur["total"])) + 1  # smallest total that wins the over
-            line_txt += f"   model P(over {cur['total']:g}) {p_from(cal, k, x):.1%}"
+            line_txt += f"   model P(over {cur['total']:g}) {p_from(cal, k, x, gap):.1%}"
         print(f"     {line_txt}")
-        best = best_over((h, a), x)
+        best = best_over((h, a), x, gap)
         if best:
             ev, bk, bt, bo, bu = best
             others = ", ".join(f"{b} {t:g} {o:+d}" for b, t, o, u in sorted(shop[(h, a)]) if b != bk)

@@ -59,19 +59,19 @@ def backfill(day):
         hg, hp = starter(g["homeTeam"])
         ag, ap = starter(g["awayTeam"])
         lh, la, det = project(h, a, hp, ap, h in tired, a in tired, detail=True, season=season)
-        x = lh + la
+        x, gap = lh + la, abs(lh - la)
         o = opens.get((h, a))
         flag = bool(lh >= cutoff and la >= cutoff and o is not None and o["total"] in (6.0, 6.5))
         best = None
         for bk, t, ov, un in shop.get((h, a), []):  # NOTE: per-book lines here are closing lines
             if t in (6.0, 6.5):
-                p_win = m.p_from(cal, int(np.floor(t)) + 1, x)
-                p_push = m.p_from(cal, 6, x) - m.p_from(cal, 7, x) if t == 6 else 0.0
+                p_win = m.p_from(cal, int(np.floor(t)) + 1, x, gap)
+                p_push = m.p_from(cal, 6, x, gap) - m.p_from(cal, 7, x, gap) if t == 6 else 0.0
                 ev = p_win * float(grade.payout(ov)) - (1 - p_win - p_push)
                 if best is None or ev > best[0]:
                     best = (ev, bk, t, ov, un)
         rows.append({"date": day, "away": a, "home": h, "proj": round(x, 3), "proj_away": round(la, 3),
-                     "proj_home": round(lh, 3), "cutoff": round(cutoff, 3), "flag": flag, "p7": round(m.p_from(cal, 7, x), 4),
+                     "proj_home": round(lh, 3), "cutoff": round(cutoff, 3), "flag": flag, "p7": round(m.p_from(cal, 7, x, gap), 4),
                      "away_goalie": ag, "home_goalie": hg,
                      "open_total": o["total"] if o else None, "open_over": o["over"] if o else None,
                      "bet_total": o["total"] if o else None, "bet_over": o["over"] if o else None,

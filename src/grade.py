@@ -32,13 +32,14 @@ def with_lines(proj, cal, path=odds.ODDS):
     o = o.drop_duplicates(["gameDate", "home", "away"])
     d = proj.merge(o[["gameDate", "home", "away", "total", "over", "under"]].rename(columns={"total": "line"}),
                    on=["gameDate", "home", "away"])
-    def p_ge(k, x):
-        return m.p_from(cal, k, x)
+    def p_ge(k, x, gap):
+        return m.p_from(cal, k, x, gap)
     # model: P(over) = P(total > line), P(under) = P(total < line)
     up = np.floor(d.line).astype(int) + 1            # smallest total that goes over
     dn = np.ceil(d.line).astype(int) - 1             # largest total that goes under
-    d["m_over"] = [p_ge(k, x) for k, x in zip(up, d.proj)]
-    d["m_under"] = [1 - p_ge(k + 1, x) for k, x in zip(dn, d.proj)]
+    gap = (d.lam_h - d.lam_a).abs()
+    d["m_over"] = [p_ge(k, x, g) for k, x, g in zip(up, d.proj, gap)]
+    d["m_under"] = [1 - p_ge(k + 1, x, g) for k, x, g in zip(dn, d.proj, gap)]
     io, iu = implied(d.over.values), implied(d.under.values)
     d["mkt_over"] = io / (io + iu)                   # market's fair P(over | no push), vig removed
     d["m_over_np"] = d.m_over / (d.m_over + d.m_under)

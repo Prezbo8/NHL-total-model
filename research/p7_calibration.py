@@ -20,7 +20,7 @@ def main():
     for s in range(2023, 2026):
         cal = m.fit_calibration(p[p.season.between(2022, s - 1)])
         x = p[p.season == s].copy()
-        x["p7"] = m.p_from(cal, 7, x.proj.values)
+        x["p7"] = m.p_from(cal, 7, x.proj.values, (x.lam_h - x.lam_a).abs().values)
         rows.append(x)
     d = pd.concat(rows)
     out = dashboard.calibration_bins(d.p7, d.total >= 7)

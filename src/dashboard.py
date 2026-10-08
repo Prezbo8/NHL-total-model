@@ -28,7 +28,7 @@ SCALE = 4.5  # projected-goal bars run 0 -> 4.5 goals
 
 TIPS = {
     "Proj total": "Projected total goals for the game (away + home), from the model.",
-    "P(7+)": "Model's chance of 7 or more total goals. 7+ wins an over 6.5 and an over 6 (exactly 6 pushes an over 6). NHL average ≈ 45%.",
+    "P(7+)": "Model's chance of 7 or more total goals, from the projected total and how evenly matched the teams are. 7+ wins an over 6.5 and an over 6 (exactly 6 pushes an over 6). NHL average ≈ 45%.",
     "Line": "Consensus total: opening line → line when logged (on results: logged line → closing line). ↑/↓ = which way it moved.",
     "Over price": "Consensus price for the over at the logged line (American odds: −120 = risk 120 to win 100; +110 = risk 100 to win 110).",
     "Best over": "Best-value over at 6 or 6.5 across DraftKings, FanDuel, BetRivers, BetMGM and Caesars, chosen with the model's probabilities (an over 6 can push).",
@@ -1099,10 +1099,10 @@ def calibration_bins(p7, hit):
 
 CAL_MIN_GAMES = 10
 CALIBRATION_BACKTEST = [  # (bin label, games, mean predicted P(7+), share that went 7+): research/p7_calibration.py
-    ("under 40%", 601, 0.3836, 0.3860),
-    ("40%–45%", 1818, 0.4261, 0.4472),
-    ("45%–50%", 1267, 0.4701, 0.4657),
-    ("50%+", 250, 0.5175, 0.5360),
+    ("under 40%", 617, 0.3830, 0.3938),
+    ("40%–45%", 1757, 0.4258, 0.4405),
+    ("45%–50%", 1276, 0.4706, 0.4647),
+    ("50%+", 286, 0.5179, 0.5559),
 ]
 
 
@@ -1581,7 +1581,7 @@ goals saved above expected scales goals allowed, <b>back-to-backs</b> cut the ti
 Data from the 2020-21 season onward only (MoneyPuck, NHL API, DailyFaceoff, Action Network). Runs on GitHub Actions every 2 hours from 11 AM to 9 PM ET.</p>
 <dl>
 <div><dt>Projected goals bar</dt><dd>Each team's projected goals on a 0–4.5 scale. The tick marks the high-scoring cutoff; a solid bar means past it.</dd></div>
-<div><dt>P(7+)</dt><dd>Model's chance of 7+ total goals: wins an over 6.5 and an over 6 (exactly 6 pushes an over 6). NHL average ≈ 45%.</dd></div>
+<div><dt>P(7+)</dt><dd>Model's chance of 7+ total goals, from the projected total and how evenly matched the teams are (close games get more overtime, shootout and empty-net goals): wins an over 6.5 and an over 6 (exactly 6 pushes an over 6). NHL average ≈ 45%.</dd></div>
 <div><dt>OVER FLAG</dt><dd>Both teams past the cutoff and the line is 6 or 6.5. These are the picks that count in the record.</dd></div>
 <div><dt>Goalie badges</dt><dd>✓ Confirmed / Likely / Projected starter, from DailyFaceoff, refreshed every run (every 2 hours). "Changed" = different from the starter the projection used.</dd></div>
 <div><dt>B2B</dt><dd>Team played yesterday: its projected scoring is cut ~8% and its opponent's raised ~6.5%.</dd></div>

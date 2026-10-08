@@ -78,7 +78,7 @@ recon = all(abs((x["ev"] + x["pp"] + x["oth"]) * (1 + x["gadj"]) * (1 + x["b2bad
 check("breakdown adds up to the projection", recon)
 check("projected totals in a sane range", p1.proj.between(4, 8.5).all(), f"{p1.proj.min():.2f}-{p1.proj.max():.2f}")
 cal = m.fit_calibration(p1[p1.season.between(2022, 2025)])
-ps = [m.p_from(cal, 7, x) for x in (5.0, 6.0, 7.0)]
+ps = [m.p_from(cal, 7, x, 0.3) for x in (5.0, 6.0, 7.0)]
 check("P(7+) rises with projection", ps[0] < ps[1] < ps[2], ", ".join(f"{p:.0%}" for p in ps))
 
 print("injuries")
