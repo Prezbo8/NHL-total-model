@@ -1,11 +1,12 @@
 """Grade model variants against real lines on the unseen test seasons (2024-25, 2025-26).
 
-  python3 research/compare.py           # vs closing lines
-  python3 research/compare.py open      # vs opening lines
+  python3 research/studies/compare.py           # vs closing lines
+  python3 research/studies/compare.py open      # vs opening lines
 """
 import os as _os
 import sys as _sys
-_sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..", "src"))  # model code lives in src/
+_sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..", "..", "src"))  # model code lives in src/
+_sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..", "lib"))  # shared research helpers
 import os
 import sys
 

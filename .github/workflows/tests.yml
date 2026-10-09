@@ -21,7 +21,7 @@ jobs:
       - name: Download MoneyPuck game data (not stored in the repo)
         run: python -c "import sys; sys.path.insert(0, 'src'); import model; assert model.refresh_data()"
       - name: Static check
-        run: python -m pyflakes src/*.py research/*.py tests/*.py
+        run: python -m pyflakes src/*.py research/lib/*.py research/studies/*.py tests/*.py
       - name: Component checks (29)
         run: python tests/check_model.py
       - name: Projection run for tomorrow (never logged)
@@ -31,7 +31,7 @@ jobs:
       - name: Backtest unchanged
         run: |
           python - <<'PY'
-          import sys; sys.path[:0] = ["src", "research"]
+          import sys; sys.path[:0] = ["src", "research/lib"]
           import split_model as sm, history
           p = sm.walk_split(sm.load_split(), known_starters=False)
           d = history.flagged(p).merge(history.lines()[lambda x: x.gameDate >= 20200801], on=["gameDate", "home", "away"])

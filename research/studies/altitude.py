@@ -4,11 +4,12 @@ differently than projected? Calgary (~1,050 m) shown separately. Every other rin
 (1) home goals, visitor goals and the total vs projection, by venue group and season.
 (2) SLAM + 1U record in high-altitude games.
 
-  python3 research/altitude.py
+  python3 research/studies/altitude.py
 """
 import os as _os
 import sys as _sys
-_sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..", "src"))
+_sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..", "..", "src"))
+_sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..", "lib"))  # shared research helpers
 import numpy as np
 
 import dashboard

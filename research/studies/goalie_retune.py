@@ -5,11 +5,12 @@ Accuracy: Poisson log loss of each team's goals 2023-26 with the real starter (t
 Bets: flag rule + SLAM/1U 2021-26, as the daily backtest runs them (usual-starter guess). When re-centering,
 the Gl tier cutoffs move by the same amount so the AVOID rule sees the same goalies as strong.
 
-  python3 research/goalie_retune.py
+  python3 research/studies/goalie_retune.py
 """
 import os as _os
 import sys as _sys
-_sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..", "src"))
+_sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..", "..", "src"))
+_sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..", "lib"))  # shared research helpers
 from math import lgamma
 
 import numpy as np

@@ -1,11 +1,12 @@
 """Stake sizes: should SLAM and 1U be bet at different sizes? Flat 1 unit (current) vs a few fixed splits, plus
 per-season ROI, a bootstrap range, and the worst losing run (drawdown) for each. 2021-26, open and close.
 
-  python3 research/stakes.py
+  python3 research/studies/stakes.py
 """
 import os as _os
 import sys as _sys
-_sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..", "src"))
+_sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..", "..", "src"))
+_sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..", "lib"))  # shared research helpers
 import numpy as np
 import pandas as pd
 

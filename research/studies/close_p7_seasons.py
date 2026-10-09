@@ -4,11 +4,12 @@ Each season is scored with formulas fit WITHOUT that season (leave-one-season-ou
 so no season grades itself. Accuracy: log loss and Brier score of 7+ (lower = better), calibration by closeness.
 Results: over record at the closing line (6/6.5 lines) for games each version puts above 50%.
 
-  python3 research/close_p7_seasons.py
+  python3 research/studies/close_p7_seasons.py
 """
 import os as _os
 import sys as _sys
-_sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..", "src"))
+_sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..", "..", "src"))
+_sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..", "lib"))  # shared research helpers
 import numpy as np
 import pandas as pd
 

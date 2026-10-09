@@ -3,11 +3,12 @@
 Stand-in for the morning, before goalies are confirmed. Compared with the real starter (known) as the ceiling.
 Accuracy: Poisson log loss of each team's goals, 2023-26. Bets: flag rule + SLAM/1U, 2021-26.
 
-  python3 research/goalie_blend.py
+  python3 research/studies/goalie_blend.py
 """
 import os as _os
 import sys as _sys
-_sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..", "src"))
+_sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..", "..", "src"))
+_sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..", "lib"))  # shared research helpers
 from math import lgamma
 
 import numpy as np

@@ -6,11 +6,12 @@ its starter ALSO played yesterday (tired goalie) or is a rested backup?
 (3) If there's an effect: extra opponent scoring when the starter played yesterday, learned from earlier
     seasons only, judged on accuracy and SLAM/1U (real starters, as the last pre-game run knows them).
 
-  python3 research/goalie_b2b.py
+  python3 research/studies/goalie_b2b.py
 """
 import os as _os
 import sys as _sys
-_sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..", "src"))
+_sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..", "..", "src"))
+_sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..", "lib"))  # shared research helpers
 from math import lgamma
 
 import numpy as np

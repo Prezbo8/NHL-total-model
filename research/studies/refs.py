@@ -1,10 +1,11 @@
 """Referee assignments for every regular-season game since 2020-21 (NHL gamecenter right-rail).
 
-  python3 research/refs.py download     # -> data/referees.csv (resumable)
+  python3 research/studies/refs.py download     # -> data/referees.csv (resumable)
 """
 import os as _os
 import sys as _sys
-_sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..", "src"))
+_sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..", "..", "src"))
+_sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..", "lib"))  # shared research helpers
 import json
 import os
 import sys

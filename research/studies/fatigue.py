@@ -4,11 +4,12 @@ For every team-game 2021-26 (regular season): residual = actual goals - model pr
 no hindsight; the projection already includes the back-to-back adjustment). Each factor's effect is the
 average residual in that group vs everyone else.
 
-  python3 research/fatigue.py
+  python3 research/studies/fatigue.py
 """
 import os as _os
 import sys as _sys
-_sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..", "src"))
+_sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..", "..", "src"))
+_sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..", "lib"))  # shared research helpers
 import math
 
 import numpy as np

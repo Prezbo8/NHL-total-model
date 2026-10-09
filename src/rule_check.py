@@ -13,7 +13,7 @@ from datetime import date
 
 import numpy as np
 
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "research"))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "research", "lib"))
 import dashboard
 import grade
 import paper

@@ -1098,7 +1098,7 @@ def calibration_bins(p7, hit):
 
 
 CAL_MIN_GAMES = 10
-CALIBRATION_BACKTEST = [  # (bin label, games, mean predicted P(7+), share that went 7+): research/p7_calibration.py
+CALIBRATION_BACKTEST = [  # (bin label, games, mean predicted P(7+), share that went 7+): research/studies/p7_calibration.py
     ("under 40%", 617, 0.3830, 0.3938),
     ("40%–45%", 1757, 0.4258, 0.4405),
     ("45%–50%", 1276, 0.4706, 0.4647),

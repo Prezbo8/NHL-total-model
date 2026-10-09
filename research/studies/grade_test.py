@@ -4,11 +4,12 @@ For each season 2021-22 to 2025-26 and checkpoint (10 / 20 / 41 team games playe
 games before that date only (as the live site would have them), then compared with each team's goals for /
 against per game over the REST of that season. Correlations use z-scores within each season-checkpoint.
 
-  python3 research/grade_test.py
+  python3 research/studies/grade_test.py
 """
 import os as _os
 import sys as _sys
-_sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..", "src"))
+_sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..", "..", "src"))
+_sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..", "lib"))  # shared research helpers
 import numpy as np
 import pandas as pd
 

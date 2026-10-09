@@ -2,11 +2,12 @@
 don't depend on it, so this is exact), then: (1) actual vs projected goals for the tired team, its opponent,
 and both-tired games, by half; (2) a grid of factors judged on accuracy (2023-26) and the SLAM/1U backtest.
 
-  python3 research/b2b_retune.py
+  python3 research/studies/b2b_retune.py
 """
 import os as _os
 import sys as _sys
-_sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..", "src"))
+_sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..", "..", "src"))
+_sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..", "lib"))  # shared research helpers
 from math import lgamma
 
 import numpy as np

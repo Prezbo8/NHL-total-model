@@ -136,7 +136,7 @@ KEYS = list(STATS) + ["ppg"]
 
 
 # weight = how well the stat predicts a team's future goals for (F) / against (A), r squared normalised
-# (research/offense_weights.py: 320 half-seasons, 2021-22 to 2025-26)
+# (research/studies/offense_weights.py: 320 half-seasons, 2021-22 to 2025-26)
 WEIGHTS = {"F": {"goals": .208, "xg": .207, "sog": .133, "ppg": .120, "att": .116, "hdxg": .097, "hd": .077, "rebg": .032, "reb": .009},
            "A": {"goals": .259, "xg": .187, "sog": .144, "att": .119, "hdxg": .086, "hd": .073, "ppg": .070, "rebg": .038, "reb": .023}}
 

@@ -5,11 +5,12 @@
     (actual / projected goals in that month, shrunk halfway to 1), applied to both teams' projections.
     Judged on team-goal accuracy and the flag / SLAM / 1U backtest, open and close, both halves.
 
-  python3 research/month_effect.py
+  python3 research/studies/month_effect.py
 """
 import os as _os
 import sys as _sys
-_sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..", "src"))
+_sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..", "..", "src"))
+_sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..", "lib"))  # shared research helpers
 from math import lgamma
 
 import numpy as np

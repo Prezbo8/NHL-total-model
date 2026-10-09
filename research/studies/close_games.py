@@ -6,11 +6,12 @@ closeness = |home projection - away projection| (goals); small = evenly matched.
 (2) P(7+) from projected total alone (live) vs + closeness: log loss 2023-26, walk-forward (fit 2022..season-1).
 (3) Within SLAM + 1U, results by closeness third (both halves, open and close).
 
-  python3 research/close_games.py
+  python3 research/studies/close_games.py
 """
 import os as _os
 import sys as _sys
-_sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..", "src"))
+_sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..", "..", "src"))
+_sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..", "lib"))  # shared research helpers
 import numpy as np
 import pandas as pd
 

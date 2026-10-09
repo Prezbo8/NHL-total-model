@@ -1,11 +1,12 @@
 """Injury strength: the live adjustment at 1.0x (what runs) vs 1.15x / 1.3x / none, on who actually dressed 2021-26.
 Re-checks the earlier finding (slope ~1.3) by half, then judges each size on team-goal accuracy and SLAM/1U bets.
 
-  python3 research/injury_scale.py      # needs data/dressed.csv (research/lineups_hist.py download)
+  python3 research/studies/injury_scale.py      # needs data/dressed.csv (research/lib/lineups_hist.py download)
 """
 import os as _os
 import sys as _sys
-_sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..", "src"))
+_sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..", "..", "src"))
+_sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..", "lib"))  # shared research helpers
 _sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))
 import numpy as np
 import pandas as pd

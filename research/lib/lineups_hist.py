@@ -1,11 +1,11 @@
 """Who dressed in every regular-season game since 2020-21 (NHL box scores), for backtesting the injury /
 lineup adjustment.
 
-  python3 research/lineups_hist.py download    # -> data/dressed.csv (resumable; gitignored, ~10 MB)
+  python3 research/lib/lineups_hist.py download    # -> data/dressed.csv (resumable; gitignored, ~10 MB)
 """
 import os as _os
 import sys as _sys
-_sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..", "src"))
+_sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..", "..", "src"))
 import json
 import os
 import sys

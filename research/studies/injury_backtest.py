@@ -7,11 +7,12 @@ formula: share of ice time x (player - replacement) x in_rating.
 
 Uses actual lineups, so this is the best case: live, the model only knows the projected lineup.
 
-  python3 research/injury_backtest.py      # needs data/dressed.csv (research/lineups_hist.py download)
+  python3 research/studies/injury_backtest.py      # needs data/dressed.csv (research/lib/lineups_hist.py download)
 """
 import os as _os
 import sys as _sys
-_sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..", "src"))
+_sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..", "..", "src"))
+_sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..", "lib"))  # shared research helpers
 _sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))
 from collections import defaultdict, deque
 

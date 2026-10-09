@@ -5,11 +5,12 @@ the stat over one half of the season vs goals per game in the other half (both d
 Weight = r squared (share of future scoring it explains on its own), normalised to sum to 1.
 Defense mirrors it with the same stats allowed and future goals allowed.
 
-  python3 research/offense_weights.py
+  python3 research/studies/offense_weights.py
 """
 import os as _os
 import sys as _sys
-_sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..", "src"))
+_sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..", "..", "src"))
+_sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..", "lib"))  # shared research helpers
 import pandas as pd
 
 from split_model import KEYS, team_games

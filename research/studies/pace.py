@@ -7,11 +7,12 @@ Game pace = both teams' pace vs league, in SDs.
     (fit on 2022..season-1, like the live calibration).
 (2) Within SLAM + 1U, results by game-pace third (both halves, open and close).
 
-  python3 research/pace.py
+  python3 research/studies/pace.py
 """
 import os as _os
 import sys as _sys
-_sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..", "src"))
+_sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..", "..", "src"))
+_sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..", "lib"))  # shared research helpers
 import numpy as np
 import pandas as pd
 

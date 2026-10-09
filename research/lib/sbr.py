@@ -5,7 +5,7 @@ the visitor row's price is the OVER, the home row's is the UNDER.
 """
 import os as _os
 import sys as _sys
-_sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..", "src"))  # model code lives in src/
+_sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..", "..", "src"))  # model code lives in src/
 import re
 import time
 import urllib.request

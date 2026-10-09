@@ -5,11 +5,12 @@ Start times come from the NHL schedule API (club-schedule-season), cached in dat
 (2) SLAM + 1U record in afternoon vs evening games.
 (3) If there's an effect: an afternoon factor learned from earlier seasons only, judged on accuracy and bets.
 
-  python3 research/afternoon.py
+  python3 research/studies/afternoon.py
 """
 import os as _os
 import sys as _sys
-_sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..", "src"))
+_sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..", "..", "src"))
+_sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..", "lib"))  # shared research helpers
 import json
 import os
 import time

@@ -4,11 +4,12 @@ Ratings mix home and road games, so a team's projection is its 'neutral rink' nu
 (1 + h) and lam_a by (1 - a), fitted on 2021-23 only, then judged on 2024-26 (and on the flag/SLAM/1U backtest).
 The factor is applied like b2b/speed: on the team projection (so it moves the flag), not on the 5v5 tier.
 
-  python3 research/home_ice.py
+  python3 research/studies/home_ice.py
 """
 import os as _os
 import sys as _sys
-_sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..", "src"))
+_sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..", "..", "src"))
+_sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..", "lib"))  # shared research helpers
 from math import lgamma
 
 import numpy as np

@@ -225,7 +225,7 @@ def fit_calibration(proj):
     Real NHL totals bunch together more than a Poisson curve assumes, so we fit
     the probabilities directly from history instead. Closeness = |home - away projection|: evenly matched
     games go 7+ a bit more often at the same total (overtime, shootout goal, late empty-netters;
-    research/close_p7_seasons.py)."""
+    research/studies/close_p7_seasons.py)."""
     X = np.column_stack([proj.proj.values, (proj.lam_h - proj.lam_a).abs().values])
     out = {k: tuple(logit_fit(X, (proj.total >= k).values.astype(float))) for k in range(4, 10)}
     out["over"], out["under"] = out[7], tuple(-v for v in out[6])  # over 6 = 7+, under 6 = 5 or less

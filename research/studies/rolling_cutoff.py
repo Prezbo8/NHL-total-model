@@ -7,11 +7,12 @@
 
 Judged on the flag rule and the SLAM / 1U calls, 2021-26, open and close, and in both halves.
 
-  python3 research/rolling_cutoff.py
+  python3 research/studies/rolling_cutoff.py
 """
 import os as _os
 import sys as _sys
-_sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..", "src"))
+_sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..", "..", "src"))
+_sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..", "lib"))  # shared research helpers
 import numpy as np
 import pandas as pd
 

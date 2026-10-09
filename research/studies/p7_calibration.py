@@ -2,11 +2,12 @@
 P(7+) is walk-forward (fit only on earlier seasons, 2022..s-1), as the daily run does. Prints the bins pasted
 into dashboard.CALIBRATION_BACKTEST.
 
-  python3 research/p7_calibration.py
+  python3 research/studies/p7_calibration.py
 """
 import os as _os
 import sys as _sys
-_sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..", "src"))
+_sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..", "..", "src"))
+_sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..", "lib"))  # shared research helpers
 import pandas as pd
 
 import dashboard
@@ -25,7 +26,7 @@ def main():
     d = pd.concat(rows)
     out = dashboard.calibration_bins(d.p7, d.total >= 7)
     print(f"{len(d)} games")
-    print("CALIBRATION_BACKTEST = [  # (bin label, games, mean predicted P(7+), share that went 7+): research/p7_calibration.py")
+    print("CALIBRATION_BACKTEST = [  # (bin label, games, mean predicted P(7+), share that went 7+): research/studies/p7_calibration.py")
     for b in out:
         print(f"    ({b[0]!r}, {b[1]}, {b[2]:.4f}, {b[3]:.4f}),")
     print("]")
