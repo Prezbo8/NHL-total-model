@@ -652,7 +652,7 @@ def day_table(g):
     """One table for the day, two rows per game (away, home), sized to fit without scrolling on a
     desktop screen: decision columns first, then goalie, injuries and the projection breakdown."""
     g = current(g).sort_values(["p7", "proj"], ascending=[False, False])  # most likely to go 7+ first
-    final_day = bool(len(g)) and g.final_total.notna().all()
+    final_day = bool(len(g)) and g.final_total.notna().any()  # result layout once any game is final; the rest show as pending
     ranks = rank_tags(g.date.iloc[0]) if len(g) else {}  # the ranks teams had on game day
     head = f"<th>{tip('Team', cls='tl')}</th>"
     if final_day:
@@ -685,7 +685,7 @@ def day_table(g):
             rk = f"<span class='rk-tag' title='{e(TIPS['Rank tag'])}'>{e(ranks[abbr])}</span>" if abbr in ranks else ""
             cells = (f"<td class='tm'>{logo(abbr, 22)}<b title='{e(TEAMS.get(abbr, abbr))}'>{e(abbr)}</b>{rk}</td>")
             if final_day:
-                cells += f"<td class='num score-cell'>{int(score)}</td>"
+                cells += f"<td class='num score-cell'>{'–' if score is None or pd.isna(score) else int(score)}</td>"
             sq = f"<span class='b2b-sq' title='{e(TIPS['B2B tag'])}'></span>" if _is(getattr(r, f"{side}_b2b")) else ""
             cells += (f"<td class='num proj{' hot' if hot else ''}'>{sq}{tip(f'{proj:.2f}', f'{TEAMS.get(abbr, abbr)} projected goals (high-scoring cutoff {r.cutoff:.2f}).' + (' HIGH: above the cutoff.' if hot else ''))}"
                       f"<span class='hot-dot{'' if hot else ' off'}'>●</span></td>")
@@ -722,7 +722,13 @@ def day_table(g):
             callpill += f" <span class='near'>{tip(f'near miss −{near[1]:.2f}', TIPS['Near miss'].format(team=near[0], gap=near[1], cutoff=r.cutoff))}</span>"
         if c != r.first_call:
             callpill += f" <span class='was'>{tip('was ' + r.first_call, f'First call when this game was logged: {r.first_call}. Updated with the latest goalies, lines and injuries.')}</span>"
-        if final_day:
+        if final_day and not final:  # this game isn't settled yet (still on, or finished after the last run)
+            ln = ("–" if pd.isna(r.bet_total) else f"{line(r.open_total)} → {line(r.bet_total)} <span class='muted'>o{price(r.bet_over)}</span>")
+            vs, outcome = "<span class='pill muted-pill'>pending</span>", "<span class='muted small'>not final yet</span>"
+            game = (f"<td class='gcol tot' rowspan='2'><span class='big-total muted'>–</span>{vs}</td>"
+                    f"<td class='num' rowspan='2'>{r.proj:.2f}</td><td class='num' rowspan='2'>{r.p7:.0%}</td>"
+                    f"<td rowspan='2' class='linecell'>{ln}</td><td rowspan='2' class='pickcell'>{gtime}{callpill}<br>{outcome}</td>")
+        elif final_day:
             t = r.bet_total
             vs = ("<span class='pill muted-pill'>no line</span>" if pd.isna(t) else
                   f"<span class='pill over'>O {line(t)}</span>" if r.final_total > t else
