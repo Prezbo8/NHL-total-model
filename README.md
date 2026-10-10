@@ -40,7 +40,7 @@ then adjusted for:
 - **Starting goalie**: goals saved above expected, calibrated so ratings match how goalies actually play
 - **Back-to-backs**: tired team −8% scoring, its opponent +6.5%
 - **Team skating speed** (NHL EDGE, last season's 20+ mph bursts): +2% own scoring and −1.7% to the opponent per step above average
-- **Injuries and lineups**: injured, suspended or scratched regulars replaced by a replacement-level player
+- **Injuries and lineups**: injured, suspended or scratched regulars replaced by a replacement-level player (effect sized 1.15×, from the backtest on who dressed)
 
 Only data from the 2020-21 season onward is used.
 

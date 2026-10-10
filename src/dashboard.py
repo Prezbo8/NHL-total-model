@@ -45,6 +45,11 @@ TIPS = {
     "Spd": "How fast this team skates compared with the opponent (20+ mph bursts last season). Fast teams score a bit more and allow a bit less.",
     "Inj": "Injuries and scratches: this team's missing scorers (fewer goals) plus the other team's missing defenders (more goals).",
     "Rank tag": "Team rankings as of this game day, against a league-average opponent: OFF = goals scored (1 = most), DEF = goals its skaters allow (1 = fewest). Goalies and back-to-backs not included. Full tables under Team rankings.",
+    "Unit ranks": "Team ranks as of this game day, against a league-average opponent. 5v5 OFF = 5-on-5 goals scored, 5v5 DEF = 5-on-5 goals its skaters allow, PP OFF = power-play goals, PP DEF = power-play goals allowed (penalty kill × penalties taken). 1 = best of 32. Goalies and back-to-backs not included.",
+    "5v5 OFF": "This team's 5-on-5 attack: goals a game against an average defense, and its rank of 32 (1 = most). Colored for this team's scoring.",
+    "5v5 OPP DEF": "The opponent's 5-on-5 defense: goals a game it allows to an average attack, and its rank (1 = fewest allowed, the toughest). Colored for this team's scoring: green = an easy defense to score on.",
+    "PP OFF": "This team's power play: power-play goals a game against an average penalty kill (PP strength × penalties it draws), and its rank (1 = most). Colored for this team's scoring.",
+    "PP OPP DEF": "The opponent's penalty kill and penalty habits: power-play goals a game it allows, and its rank (1 = fewest allowed). Colored for this team's scoring: green = easy to score on.",
     "Rank OFF composite": "Total Offense score: the nine stats combined (z-scores weighted by how well each predicts future goals). 0 = league average, + = better. Rank 1 = best offense.",
     "Rank DEF composite": "Total Defense score: the nine stats allowed combined (weighted by how well each predicts future goals allowed). 0 = league average, + = better (allows less). Rank 1 = best defense.",
     "Rank OFF total": "Goals this team would score against a league-average opponent: 5v5 + power play + other situations, with team speed. Rank 1 = most.",
@@ -755,7 +760,9 @@ def day_table(g):
                   f"{line(r.open_total)} → {line(r.bet_total)} <span class='muted'>o{price(r.bet_over)}</span>")
             game = (f"<td class='num gcol big-total' rowspan='2'>{r.proj:.2f}</td><td class='num p7' rowspan='2'>{r.p7:.0%}</td>"
                     f"<td rowspan='2'>{gtime}{callpill}<br>{ln}</td>")
-        ctx = f"<div class='why-text'>{reasoning(r, flagged)}</div>"
+        mu = matchup(r)
+        mu = f"<details class='mu-why'><summary>Matchup: 5-on-5 &amp; power play</summary>{mu}</details>" if mu else ""
+        ctx = f"<div class='why-text'>{mu}{reasoning(r, flagged)}</div>"
         mcards.append(mobile_card(r, final, callpill, st, f"{vs} {outcome}" if final_day else ln,
                                   breakdown_cells, cls, ranks))
         away = team("away", r.away, r.proj_away, r.away_score if final else None) + game + detail("away")
@@ -793,7 +800,7 @@ def mobile_card(r, final, callpill, st, status, breakdown_cells, cls, ranks):
             f"{team('away', r.away, r.proj_away, r.away_score if final else None)}"
             f"{team('home', r.home, r.proj_home, r.home_score if final else None)}"
             f"<div class='mc-sum'>{total} · P(7+) <b>{r.p7:.0%}</b></div>{bd}"
-            f"<details class='mc-why'><summary>Why this call</summary><div class='why-text'>{reasoning(r, bool(r.flag))}</div></details></article>")
+            f"<details class='mc-why'><summary>Why this call</summary><div class='why-text'>{matchup(r)}{reasoning(r, bool(r.flag))}</div></details></article>")
 
 
 def day_cards(g):
@@ -1034,6 +1041,46 @@ def load_rankings(day=None):
     return r
 
 
+def matchup(r):
+    """Matchup table for the why section: each team's attack (OFF) vs the opponent's defense (OPP DEF) and the goals
+    the model projects from it, for 5-on-5 and the power play. Ratings are goals a game vs an average opponent with the
+    rank of 32 underneath, as of game day, colored for that team's scoring (top attack / weak opposing defense = green)."""
+    day_rk = rank_lookup(r.date)
+    n_ = len(day_rk) - 1
+    if n_ < 2 or "r_gf_ev" not in day_rk.get(r.home, {}) or "r_gf_ev" not in day_rk.get(r.away, {}):
+        return ""
+
+    def cell(team, col, extra=""):
+        x = day_rk[team]
+        rk = int(x[f"r_{col}"])
+        good = rk if col.startswith("gf") else n_ + 1 - rk  # 1 = best for the scoring team
+        t = TIER_NAMES[4 - min(4, (good - 1) * 5 // n_)]
+        return f"<td class='mu-v t-{t}{extra}' title='{t}'><b>{x[col]:.2f}</b><span class='mu-rk'>#{rk} of {n_}</span></td>"
+
+    def proj(side, kind, extra=""):
+        v = getattr(r, f"{side}_{kind}", float("nan"))
+        if pd.isna(v):
+            return f"<td class='mu-v mu-p muted{extra}'>–</td>"
+        t = tier(kind, v)
+        return f"<td class='mu-v mu-p{extra}{' t-' + t if t else ''}'><b>{v:.2f}</b><span class='mu-rk'>goals</span></td>"
+
+    rows = "".join(
+        f"<tr><td class='mu-tm'>{logo(me, 20)}<b>{e(me)}</b></td>{cell(me, 'gf_ev', ' mu-g')}{cell(op, 'ga_ev')}{proj(side, 'ev')}"
+        f"{cell(me, 'gf_pp', ' mu-g')}{cell(op, 'ga_pp')}{proj(side, 'pp')}</tr>"
+        for side, me, op in (("away", r.away, r.home), ("home", r.home, r.away)))
+    head = (f"<tr class='mu-sec'><th class='mu-tm' rowspan='2'>{tip('Team', TIPS['Unit ranks'], 'tl')}</th>"
+            f"<th class='mu-g' colspan='3'>5-on-5</th><th class='mu-g' colspan='3'>Power play</th></tr><tr>"
+            + "".join(f"<th class='{'mu-g' if k in ('5v5 OFF', 'PP OFF') else ''}'>{tip(lbl, TIPS[k])}</th>"
+                      for lbl, k in (("OFF", "5v5 OFF"), ("OPP DEF", "5v5 OPP DEF"), ("Proj", "5v5"),
+                                     ("OFF", "PP OFF"), ("OPP DEF", "PP OPP DEF"), ("Proj", "PP"))) + "</tr>")
+    return f"<div class='mu'><div class='mu-box'><table class='mu-t'><thead>{head}</thead><tbody>{rows}</tbody></table></div></div>"
+
+
+def unit_ranks(x):
+    """'5v5 #3 OFF · #10 DEF  |  PP #7 OFF · #21 DEF' from a rankings row (r_gf_ev, r_ga_ev, r_gf_pp, r_ga_pp)."""
+    return f"5v5 #{x['r_gf_ev']} OFF · #{x['r_ga_ev']} DEF  |  PP #{x['r_gf_pp']} OFF · #{x['r_ga_pp']} DEF"
+
+
 def rank_tags(day=None):
     """{team: '#3 OFF / #10 DEF'} (current, or as of game day with day=); {} when there are no rankings.
     Total Offense / Total Defense ranks; days saved before those existed use the model's goals ranks."""
@@ -1052,6 +1099,7 @@ def team_panels(d):
     """{team: HTML panel of its last TEAM_GAMES finished games this season}: projected vs actual goals, the game total
     vs the line, and the last pre-game call and how it did (the same call and line the dashboard grades)."""
     g = current(d[d.final_total.notna()])
+    now = rank_lookup(date.today().isoformat())
     out = {}
     for t in sorted(set(g.away) | set(g.home)):
         x = g[(g.away == t) | (g.home == t)].sort_values(["date", "start_utc"], ascending=False).head(TEAM_GAMES)
@@ -1061,6 +1109,9 @@ def team_panels(d):
             opp = r.away if home else r.home
             proj, goals = (r.proj_home, r.home_score) if home else (r.proj_away, r.away_score)
             pg.append(proj); ag.append(goals)
+            o_ = rank_lookup(r.date).get(opp)  # the opponent's ranks on that game day
+            o_ev = "–" if o_ is None or "r_gf_ev" not in o_ else f"#{o_['r_gf_ev']} / #{o_['r_ga_ev']}"
+            o_pp = "–" if o_ is None or "r_gf_pp" not in o_ else f"#{o_['r_gf_pp']} / #{o_['r_ga_pp']}"
             c, res = call_result(r, bool(r.flag))
             if res is None:
                 outcome = "<span class='muted'>no line</span>"
@@ -1070,7 +1121,7 @@ def team_panels(d):
                 outcome = f"<span class='res {res}'>{res}</span>"
             back = " <span class='muted' title='Backfilled Oct 2 from pre-game data (opening line); not in the paper record'>†</span>" if "retroactively" in str(r.logged_at) else ""
             rows.append(f"<tr><td>{pd.Timestamp(r.date):%b %-d}{back}</td><td class='tm'>{'vs' if home else '@'} {logo(opp, 18)}<b>{e(opp)}</b></td>"
-                        f"<td class='num'>{proj:.2f}</td><td class='num'><b>{int(goals)}</b></td>"
+                        f"<td class='num'>{o_ev}</td><td class='num'>{o_pp}</td><td class='num'>{proj:.2f}</td><td class='num'><b>{int(goals)}</b></td>"
                         f"<td class='num'>{r.proj:.2f}</td><td class='num'><b>{int(r.final_total)}</b></td>"
                         f"<td class='num'>{'–' if pd.isna(r.bet_total) else line(r.bet_total)}</td>"
                         f"<td><span class='callpill c-{c.lower()}'>{c}</span></td><td>{outcome}</td></tr>")
@@ -1078,7 +1129,12 @@ def team_panels(d):
         seven = int((x.final_total >= 7).sum())
         summ = (f"Last {n} game{'s' if n != 1 else ''} this season: scored <b>{np.mean(ag):.2f}</b> a game vs <b>{np.mean(pg):.2f}</b> projected; "
                 f"{seven} of {n} went 7+ goals.")
-        out[t] = (f"<div class='tg'><p class='tg-sum'>{summ}</p><div class='scroll'><table class='tg-t'><thead><tr><th>Date</th><th>Opponent</th>"
+        mine = now.get(t)
+        ranks = (f"<p class='tg-ranks'>{tip('Ranks now', TIPS['Unit ranks'], 'tl')}: <b>{e(unit_ranks(mine))}</b></p>"
+                 if mine is not None and "r_gf_ev" in mine else "")
+        out[t] = (f"<div class='tg'>{ranks}<p class='tg-sum'>{summ}</p><div class='scroll'><table class='tg-t'><thead><tr><th>Date</th><th>Opponent</th>"
+                  f"<th class='num'>{tip('Opp 5v5 OFF / DEF', 'The opponent’s 5-on-5 ranks on that game day: goals scored / goals allowed (1 = best of 32).')}</th>"
+                  f"<th class='num'>{tip('Opp PP OFF / DEF', 'The opponent’s power-play ranks on that game day: power-play goals / power-play goals allowed (1 = best of 32).')}</th>"
                   f"<th class='num'>{tip('Proj', f'{TEAMS.get(t, t)} projected goals (last run before the game).')}</th><th class='num'>Goals</th>"
                   f"<th class='num'>{tip('Proj tot', 'Projected game total (last run before the game).')}</th><th class='num'>Total</th>"
                   f"<th class='num'>{tip('Line', 'Last pre-game line, the one the dashboard grades.')}</th><th>Call</th><th>Result</th></tr></thead>"
@@ -1331,7 +1387,7 @@ body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 -apple-system
 @media (max-width:600px){.lastrun{position:static;text-align:left;margin-top:8px}}
 .why-text .tt{display:block;margin:3px 0;padding-left:10px;border-left:3px solid var(--line)}
 .mcards{display:none}
-.rk-tag{margin-left:6px;font-size:10px;font-weight:700;color:var(--muted);white-space:nowrap}
+.rk-tag{margin-left:6px;font-size:10px;font-weight:700;color:var(--muted);white-space:nowrap}.mu{margin:4px 0 10px;overflow-x:auto}.mu-box{display:inline-block;border:3px solid color-mix(in srgb,var(--muted) 60%,transparent);border-radius:10px;overflow:hidden;background:var(--card)}details.mu-why{margin:0 0 8px}details.mu-why>summary{cursor:pointer;font-weight:700;font-size:12.5px;color:var(--accent)}table.mu-t{border-collapse:separate;border-spacing:0;width:auto;font-size:12px;font-variant-numeric:tabular-nums;background:var(--card)}table.mu-t th,table.mu-t td,.gt tr.whyrow table.mu-t th,.gt tr.whyrow table.mu-t td{padding:5px 12px!important;text-align:center!important;white-space:nowrap;border:none!important;border-radius:0!important;height:auto!important;vertical-align:middle!important;line-height:1.25!important;box-shadow:inset -1px 0 0 var(--line),inset 0 -1px 0 var(--line)}table.mu-t tbody tr:last-child td{box-shadow:inset -1px 0 0 var(--line)}table.mu-t tr>*:last-child{box-shadow:inset 0 -1px 0 var(--line)}table.mu-t tbody tr:last-child td:last-child{box-shadow:none}table.mu-t th{font-size:10px;color:var(--muted);font-weight:800;text-transform:uppercase;letter-spacing:.05em;background:var(--ice)}table.mu-t tr.mu-sec th{color:var(--ink);font-size:10.5px}.gt tr.whyrow table.mu-t .mu-g,table.mu-t .mu-g{box-shadow:inset 8px 0 0 var(--muted),inset -1px 0 0 var(--line),inset 0 -1px 0 var(--line);padding-left:20px!important}.gt table.mu-t tbody tr:last-child td.mu-g,table.mu-t tbody tr:last-child td.mu-g{box-shadow:inset 8px 0 0 var(--muted),inset -1px 0 0 var(--line)}table.mu-t .mu-tm,.gt tr.whyrow table.mu-t .mu-tm{text-align:left!important;min-width:64px}table.mu-t td.mu-tm b{font-size:13.5px;vertical-align:middle}table.mu-t td.mu-tm img,table.mu-t td.mu-tm picture{vertical-align:middle;margin-right:6px}table.mu-t td.mu-v{min-width:62px;line-height:1.15}table.mu-t td.mu-v b{display:block;font-size:13.5px}.mu-rk{display:block;font-size:9.5px;font-weight:600;opacity:.75}table.mu-t td.mu-p b{font-size:14px}.rk-sm{display:block;font-size:9.5px;font-weight:600;opacity:.75;line-height:1.05}.tg-ranks{font-size:12.5px;margin:0 0 4px}
 .b2b-sq{display:inline-block;width:9px;height:9px;background:#dc2626;border-radius:2px;margin-right:5px;vertical-align:middle}
 .acc-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:18px;margin-top:16px}.acc-grid h3{margin:0 0 6px;font-size:15px}table.acc-t{width:100%}table.acc-t td,table.acc-t th{padding:6px 8px}
 .rk-switch{display:inline-flex;gap:4px;padding:4px;margin:0 0 14px;background:var(--ice);border:1px solid var(--line);border-radius:999px}
@@ -1460,11 +1516,11 @@ table.gt{font-size:12.5px;border-collapse:separate;border-spacing:0;width:100%;t
 .gt tbody.flagged td{background:var(--gold-soft)}
 .gt tbody.flagged tr.away td:first-child,.gt tbody.flagged tr.home td:first-child{box-shadow:inset 4px 0 0 var(--gold)}
 .gt td.tm,.gt thead tr:not(.sec) th:first-child{padding-left:10px}.gt td.tm img,.gt td.tm picture{vertical-align:middle;margin-right:6px}
-.gt tbody td.t-great,.tier-key .t-great{background:rgba(22,163,74,.50)}.gt tbody td.t-good,.tier-key .t-good{background:rgba(22,163,74,.22)}
-.gt tbody td.t-bad,.tier-key .t-bad{background:rgba(220,38,38,.22)}.gt tbody td.t-trash,.tier-key .t-trash{background:rgba(220,38,38,.50)}
+.gt tbody td.t-great,table.mu-t td.t-great,.tier-key .t-great{background:rgba(22,163,74,.50)}.gt tbody td.t-good,table.mu-t td.t-good,.tier-key .t-good{background:rgba(22,163,74,.22)}
+.gt tbody td.t-bad,table.mu-t td.t-bad,.tier-key .t-bad{background:rgba(220,38,38,.22)}.gt tbody td.t-trash,table.mu-t td.t-trash,.tier-key .t-trash{background:rgba(220,38,38,.50)}
 .tier-key{display:flex;gap:6px;flex-wrap:wrap;align-items:center;font-size:12px;color:var(--muted);margin:6px 0}
 .tier-key span{padding:1px 8px;border-radius:4px;color:var(--ink)}
-.gt tbody td.t-mid,.tier-key .t-mid{background:rgba(234,179,8,.28)}
+.gt tbody td.t-mid,table.mu-t td.t-mid,.tier-key .t-mid{background:rgba(234,179,8,.28)}
 .gt td.proj{font-weight:800;font-size:13px}.gt td.proj.hot{color:var(--accent)}
 .hot-dot{display:inline-block;width:10px;text-align:right;color:var(--accent);font-size:9px;vertical-align:2px}.hot-dot.off{visibility:hidden}
 /* every column gets its own border; sections get a stronger one */

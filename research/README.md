@@ -31,7 +31,8 @@ Every study uses 2020-21+ data only and judges changes on **both** opening and c
 | `close_games.py` | Do evenly matched games go 7+ more often? | Yes, slightly: even games +0.09 vs projection, lopsided −0.06; led to the study above. No pattern in SLAM/1U. |
 | `p7_calibration.py` | Is P(7+) calibrated? | Produces the backtest bins on the dashboard's calibration chart (`dashboard.CALIBRATION_BACKTEST`). Re-run after any P(7+) change. |
 | `injury_backtest.py` | Is the injury/lineup adjustment the right size? | **Kept** (on who actually dressed, 2021-26). |
-| `injury_scale.py` | 1.0× vs 1.15× vs 1.3× injury strength | **Kept 1.0×.** Effect measures ~1.2× every season, but the range includes 1.0 and bets barely move. 1.15× is on the end-of-season retune list. |
+| `injury_scale.py` | 1.0× vs 1.15× vs 1.3× injury strength | Effect measures ~1.2× every season; the range includes 1.0 and bets barely move. |
+| `injury_115.py` | 1.0× vs 1.15×, projection accuracy first | **Adopted Oct 10 2026 (`injuries.SCALE = 1.15`).** Better team-goal accuracy in all 5 seasons and in 4 of 5 for big-injury games; P(7+) slightly better; SLAM+1U +1.2u at close. |
 | `goalie_retune.py` | Goalie shrink / carry-over / re-centering | **Kept** shrink 200, decay 0.7, no re-centering. Shrink 150 slightly better on bets: recheck after the season. |
 | `b2b_retune.py` | Back-to-back factors with 2025-26 | **Kept** −8% tired / +6.5% opponent (measured −8.7% / +6.9%). |
 | `stakes.py` | Should SLAM and 1U be staked differently? | **Kept** 1 unit each. 1U has done better than SLAM, but not reliably (ahead in only ~70% of resamples). Don't size SLAMs up. |
@@ -58,4 +59,4 @@ save % instead of GSAx, betting the day's top P(7+) or unflagged high-P(7+) game
 
 - **75 settled picks:** `src/rule_check.py` runs the SLAM rule check by itself (current rule vs combined 5v5 > 4.20).
 - **100 settled picks:** live SLAM/1U by pace third (`pace.py`).
-- **End of season:** one retune of team-rating settings (K, W_GOALS, REGRESS), goalie shrink 150 and injury 1.15×.
+- **End of season:** one retune of team-rating settings (K, W_GOALS, REGRESS) and goalie shrink 150.

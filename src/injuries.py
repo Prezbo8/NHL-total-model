@@ -13,7 +13,8 @@ in_rating = how much of him is actually in the team's current rating: a player w
 
 Backtested Oct 2026 (research/studies/injury_backtest.py) on who actually dressed in 14,898 team-games: goals vs
 the model track the adjustment with a slope of ~1.3 in both 2021-24 and 2024-26 (1.0 = exactly right size),
-and it improves accuracy vs closing and opening lines. Kept at 1.0x: live, the lineup is only projected.
+and it improves accuracy vs closing and opening lines. Was 1.0x until Oct 10 2026, now 1.15x (SCALE): a step toward
+the measured size, kept below it because live the lineup is only projected.
 """
 import json
 import urllib.request
@@ -28,6 +29,7 @@ ESPN = "https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/injuries"
 OUT_STATUSES = {"Out", "Injured Reserve", "Suspension"}  # Day-To-Day players usually play: shown, not adjusted
 SKATER_SECONDS = 5 * 3600
 K = m.K  # games of prior weight in the team ratings (same as the model)
+SCALE = 1.15  # size of the adjustment: the backtest measures ~1.2x; 1.15x improved accuracy in every season (Oct 10 2026, research/studies/injury_115.py)
 
 
 def fetch():
@@ -82,6 +84,7 @@ def adjustments(injured, season, team_games):
             d_off, d_def = max(d_off, 0.0), max(d_def, 0.0)
         if abs(d_off) + abs(d_def) < 0.002:  # depth player / long gone: not worth listing
             continue
+        d_off, d_def = SCALE * d_off, SCALE * d_def
         o["off"] *= 1 - d_off
         o["def"] *= 1 + d_def
         o["out"].append((r["name"] + (f" ({r['tag']})" if r.get("tag") else ""), d_off, d_def))
