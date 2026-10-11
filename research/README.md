@@ -33,6 +33,7 @@ Every study uses 2020-21+ data only and judges changes on **both** opening and c
 | `injury_backtest.py` | Is the injury/lineup adjustment the right size? | **Kept** (on who actually dressed, 2021-26). |
 | `injury_scale.py` | 1.0× vs 1.15× vs 1.3× injury strength | Effect measures ~1.2× every season; the range includes 1.0 and bets barely move. |
 | `injury_115.py` | 1.0× vs 1.15×, projection accuracy first | **Adopted Oct 10 2026 (`injuries.SCALE = 1.15`).** Better team-goal accuracy in all 5 seasons and in 4 of 5 for big-injury games; P(7+) slightly better; SLAM+1U +1.2u at close. |
+| `player_weights.py` | Player ratings behind injuries: season weights (1.0/0.7/0.4), stat mix (50/50), shrink (400 min) | **Kept.** Every variant within 0.0002 on accuracy; with the current ratings the 1.15× injury adjustment measures 1.04 (right size). |
 | `goalie_retune.py` | Goalie shrink / carry-over / re-centering | **Kept** shrink 200, decay 0.7, no re-centering. Shrink 150 slightly better on bets: recheck after the season. |
 | `b2b_retune.py` | Back-to-back factors with 2025-26 | **Kept** −8% tired / +6.5% opponent (measured −8.7% / +6.9%). |
 | `stakes.py` | Should SLAM and 1U be staked differently? | **Kept** 1 unit each. 1U has done better than SLAM, but not reliably (ahead in only ~70% of resamples). Don't size SLAMs up. |
