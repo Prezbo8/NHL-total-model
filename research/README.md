@@ -49,6 +49,9 @@ Every study uses 2020-21+ data only and judges changes on **both** opening and c
 | `afternoon.py` | Do matinee games score less? | **Rejected.** Afternoon games +0.15 vs evening (noise, flips by season). Start times cached in `data/game_starts.csv`. |
 | `goalie_b2b.py` | Starter playing both nights of a back-to-back | **Rejected.** Only 281 times in 2021-26; opponent +1% vs projection. |
 | `altitude.py` | Denver / Salt Lake | **Rejected.** Totals there come in exactly as projected. |
+| `combo_search.py` | Which 1-3 signal combos find the most 7+ games (searched 2020-23, checked 2023-26)? | Best: flagged + a great 5v5 team + P(7+) 50%+ (55% / 63% went 7+). Current SLAM+1U is close (53% / 62%). Back-to-back and weak-goalie combos don't hold up. |
+| `rating_shrink.py` | Pull team ratings toward average (K, REGRESS) to fix weak-vs-weak / strong-vs-strong misses | **Kept** K=15, REGRESS=0.33: accuracy unchanged at every setting and the extreme misses don't shrink. |
+| `matchup_damp.py` | Dampen the attack × defense matchup math (exponent < 1) | **Rejected.** Team-goal and P(7+) accuracy get worse the more it's dampened; fewer bets, fewer units. The extreme-group misses are mostly regression to the mean from picking games by their projection. |
 | `zone_time.py` | Offensive / defensive zone time (NHL EDGE, last season) | **Rejected.** No gain in team-goal or P(7+) accuracy; xG already covers it. Data cached in `data/team_zone_time.csv`. |
 
 Also tested before these scripts existed, all rejected: player-based starting ratings, recent trends and
@@ -59,4 +62,4 @@ save % instead of GSAx, betting the day's top P(7+) or unflagged high-P(7+) game
 
 - **75 settled picks:** `src/rule_check.py` runs the SLAM rule check by itself (current rule vs combined 5v5 > 4.20).
 - **100 settled picks:** live SLAM/1U by pace third (`pace.py`).
-- **End of season:** one retune of team-rating settings (K, W_GOALS, REGRESS) and goalie shrink 150.
+- **End of season:** recheck goalie shrink 150 (K / REGRESS tested Oct 10 2026: keep).

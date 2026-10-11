@@ -182,11 +182,13 @@ def season_of(day):
 
 
 def walk_split(games, k=m.K, w=m.W_GOALS, regress=m.REGRESS, known_starters=True, with_projector=False, roster_w=0.0,
-               live_season=None, use_speed=True, record_detail=False, guess="mode"):
+               live_season=None, use_speed=True, record_detail=False, guess="mode", damp=1.0):
     """live_season: the season being projected. If it's newer than the data (e.g. opening day, before any
     of its games exist), last season's ratings are rolled over into this season's starting ratings.
     guess (known_starters=False): "mode" = the team's most common starter in its last 10 games;
-    "blend" = each of those last-10 starters, weighted by how many of them he started."""
+    "blend" = each of those last-10 starters, weighted by how many of them he started.
+    damp (research, research/studies/matchup_damp.py): each side's distance from league average enters the
+    matchup as (rating / average) ** damp; 1.0 = the live model (full multiplication)."""
     starter, by_game, gg = m.load_goalies()
     # goalie history only from seasons that are part of this run (nothing before games' first season)
     gs = m.GoalieSkill(gg.iloc[0:0])
@@ -219,6 +221,12 @@ def walk_split(games, k=m.K, w=m.W_GOALS, regress=m.REGRESS, known_starters=True
         and the opposing goalie / back-to-back adjustments (as fractions, e.g. -0.05)."""
         g = {key: {t: R[key].get(t) for t in (home, away)} for key in R}
         def parts(att, dfn):
+            if damp != 1.0:
+                rel = lambda key, t: (g[key][t] / R[key].lg) ** damp
+                ev = R["off5"].lg * rel("off5", att) * rel("def5", dfn) * T5
+                pp_time = R["taken"].lg * rel("drawn", att) * rel("taken", dfn)
+                pp = R["pp"].lg * rel("pp", att) * rel("pk", dfn) * pp_time
+                return ev, pp, other / 2
             ev = g["off5"][att] * g["def5"][dfn] / R["def5"].lg * T5
             pp_time = g["drawn"][att] * g["taken"][dfn] / R["taken"].lg
             pp = g["pp"][att] * g["pk"][dfn] / R["pk"].lg * pp_time
