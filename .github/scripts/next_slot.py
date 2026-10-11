@@ -1,5 +1,5 @@
 """Seconds until the next run slot (DST-aware), printed as "<seconds> <label>":
-every hour at :17 from 11:17 AM to 10:17 PM Eastern, plus 15 minutes before each game's start
+12:01 AM Eastern, every hour at :17 from 11:17 AM to 10:17 PM, plus 15 minutes before each game's start
 (from the NHL schedule; if it can't be read, the hourly slots alone are used)."""
 import json
 import urllib.request
@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 ET = ZoneInfo("America/New_York")
-SLOTS = [(h, 17) for h in range(11, 23)]  # 11:17 AM ... 10:17 PM
+SLOTS = [(0, 1)] + [(h, 17) for h in range(11, 23)]  # 12:01 AM, then 11:17 AM ... 10:17 PM
 PREGAME = timedelta(minutes=15)
 MERGE = timedelta(minutes=5)  # a pre-game slot this close to another slot is dropped (no back-to-back runs)
 

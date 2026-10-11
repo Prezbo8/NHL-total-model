@@ -1,6 +1,6 @@
 name: Daily NHL run
 
-# Every hour from 11 AM to 10 PM Eastern, all year (runs at :17), started by keeper.yml; this schedule is the backup.
+# 12:01 AM and every hour from 11 AM to 10 PM Eastern, all year (hourly runs at :17), started by keeper.yml; this schedule is the backup.
 # - GitHub schedules in UTC only, so summer (EDT) and winter (EST) sets are both listed; the "gate"
 #   step runs whichever matches today's Eastern offset and skips the other.
 # - Not on the hour: GitHub drops/delays scheduled runs at the top of the hour under load (none of the
@@ -10,6 +10,8 @@ on:
   schedule:
     - cron: "17 15-23,0-2 * * *"   # EDT 11:17a ... 10:17p
     - cron: "17 16-23,0-3 * * *"   # EST 11:17a ... 10:17p
+    - cron: "1 4 * * *"            # EDT 12:01a
+    - cron: "1 5 * * *"            # EST 12:01a
   workflow_dispatch:
     inputs:
       trigger:
@@ -40,8 +42,8 @@ jobs:
         id: gate
         run: |
           if [ "${{ github.event_name }}" != "schedule" ]; then echo "run=true" >> "$GITHUB_OUTPUT"; exit 0; fi
-          if [ "$(date +%Z)" = "EDT" ]; then hours="15-23,0-2"; else hours="16-23,0-3"; fi
-          if [ "${{ github.event.schedule }}" = "17 $hours * * *" ]; then
+          if [ "$(date +%Z)" = "EDT" ]; then hours="15-23,0-2"; midnight="1 4 * * *"; else hours="16-23,0-3"; midnight="1 5 * * *"; fi
+          if [ "${{ github.event.schedule }}" = "17 $hours * * *" ] || [ "${{ github.event.schedule }}" = "$midnight" ]; then
             echo "run=true" >> "$GITHUB_OUTPUT"
           else echo "run=false" >> "$GITHUB_OUTPUT"; echo "other daylight-saving slot: skipping"; fi
 
