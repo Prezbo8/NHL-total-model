@@ -656,7 +656,7 @@ def trends_html(r):
 def day_table(g):
     """One table for the day, two rows per game (away, home), sized to fit without scrolling on a
     desktop screen: decision columns first, then goalie, injuries and the projection breakdown."""
-    g = current(g).sort_values(["p7", "proj"], ascending=[False, False])  # most likely to go 7+ first
+    g = current(g).sort_values(["proj", "p7"], ascending=[False, False])  # highest projected total first
     final_day = bool(len(g)) and g.final_total.notna().any()  # result layout once any game is final; the rest show as pending
     ranks = rank_tags(g.date.iloc[0]) if len(g) else {}  # the ranks teams had on game day
     head = f"<th>{tip('Team', cls='tl')}</th>"
