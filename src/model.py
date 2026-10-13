@@ -10,6 +10,7 @@ based on goals saved above expected (MoneyPuck).
   python3 src/model.py today [DATE]    # 5v5/PP split model projections + OVER flags (default today)
 """
 import json
+import os
 import re
 import sys
 import urllib.request
@@ -399,8 +400,9 @@ def today(day=None):
     playing = [t["abbrev"] for g in todays for t in (g["homeTeam"], g["awayTeam"])]
     lineup_info = health.attempt("DailyFaceoff lineups", lambda: lineups.outs(day, playing), {}, must=True)
     injured = injuries.merge_lineups(injured, lineup_info)
+    team_gp = health.attempt("NHL team skater games", lambda: injuries.team_gp(playing, season), {}, must=True)
     try:  # remove missing regulars, replace with replacement-level players
-        inj = injuries.adjustments(injured, season, injuries.team_games_this_season(games, season))
+        inj = injuries.adjustments(injured, season, injuries.team_games_this_season(games, season), team_gp)
     except Exception as e:
         print(f"(couldn't compute injury adjustments: {e}; projecting without them)")
         inj = {}
@@ -521,9 +523,16 @@ def today(day=None):
             print(f"(team rankings not saved: {e})")
         try:  # each team's top 5 attackers / defenders and whether they play (dashboard 'Key players')
             rosters = {t: (lineup_info.get(t) or {}).get("roster") or [p for p, _, _ in lineups.nhl_roster(t)] for t in playing}
-            kp = injuries.key_players(rosters, injured, lineup_info, season, injuries.team_games_this_season(games, season))
-            with open(paths.data("key_players.json"), "w") as f:
-                json.dump({"date": day, "teams": kp}, f, indent=1)
+            kp = injuries.key_players(rosters, injured, lineup_info, season, injuries.team_games_this_season(games, season),
+                                      team_gp=team_gp)
+            path = paths.data(f"key_players/{day}.json")  # one file per day, kept for the results pages
+            old = json.load(open(path)) if os.path.exists(path) else {}
+            now_utc = pd.Timestamp.now(tz="UTC")
+            started = {t["abbrev"] for g in todays if pd.Timestamp(g["startTimeUTC"]) <= now_utc for t in (g["homeTeam"], g["awayTeam"])}
+            kp = {t: old["teams"][t] if t in started and t in old.get("teams", {}) else v for t, v in kp.items()}  # frozen at puck drop
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, "w") as f:
+                json.dump({"date": day, "teams": kp}, f, separators=(",", ":"))
         except Exception as e:
             print(f"(key players not saved: {e})")
         try:  # games already under way: record who actually started (NHL box score)

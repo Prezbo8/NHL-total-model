@@ -52,9 +52,11 @@ def fetch():
     return rows
 
 
-def adjustments(injured, season, team_games):
+def adjustments(injured, season, team_games, team_gp=None):
     """{team: {"off": mult on its goals, "def": mult on its opponents' goals, "out": [(name, goals)], "dtd": [names]}}
-    team_games: {team: games played this season} (for how much of each player is in the rating)."""
+    team_games: {team: games played this season} (for how much of each player is in the rating);
+    team_gp: {(team, NHL id): his games for that team} (team_gp()), optional."""
+    team_gp = team_gp or {}
     pt = players.player_table(season)
     pt["key"] = pt.name.map(m.norm_name)
     out = {}
@@ -70,7 +72,8 @@ def adjustments(injured, season, team_games):
             cand = same if len(same) else cand
         if cand.empty:
             continue  # no NHL history since 2020 (prospect/depth player): nothing to remove
-        d_off, d_def = _effect(cand.iloc[0], r["team"], team_games.get(r["team"], 0))
+        p = cand.iloc[0]
+        d_off, d_def = _effect(p, r["team"], team_games.get(r["team"], 0), team_gp.get((r["team"], p.playerId)))
         if r.get("tag") == "scratch":
             # a healthy scratch is replaced by a normal roster player, not a better one: only count
             # the effect when a GOOD player sits (team scores less / allows more), never a boost
@@ -84,17 +87,21 @@ def adjustments(injured, season, team_games):
     return out
 
 
-def _effect(p, team, n):
+def _effect(p, team, n, gp=None):
     """(offense, defense) effect of one player sitting, before SCALE: ice-time share x distance from a replacement
-    player x in_rating. n = the team's games played this season."""
-    w_cur = p.gp_cur / n if n and p.team_cur == team else 0.0
+    player x in_rating. n = the team's games played this season; gp = his games for THIS team (NHL club stats) when
+    known: MoneyPuck adds a traded player's games for both teams under his new team."""
+    if gp is not None:
+        w_cur = min(gp, n) / n if n else 0.0
+    else:
+        w_cur = p.gp_cur / n if n and p.team_cur == team else 0.0
     w_last = min(p.gp_last / 82, 1.0) if p.team_last == team else 0.0
     in_rating = (K * w_last + n * w_cur) / (K + n)
     share = p.toi_pg / SKATER_SECONDS
     return share * (p.f - players.REPLACEMENT[0]) * in_rating, share * (players.REPLACEMENT[1] - p.a) * in_rating
 
 
-def key_players(rosters, injured, lineup_info, season, team_games, top=5):
+def key_players(rosters, injured, lineup_info, season, team_games, top=5, team_gp=None):
     """Each team's top `top` attackers and defenders, ranked by the model's effect if he sits (as adjustments() would
     remove it: offense = his team's goals, defense = the opponent's goals), with tonight's status.
     rosters: {team: [NHL ids]}; players on the injury list count even when off the roster (IR).
@@ -118,13 +125,24 @@ def key_players(rosters, injured, lineup_info, season, team_games, top=5):
                 status = "out"
             else:
                 status = "gtd" if r.get("note") == "game-time decision" else "dtd"
-            eff = _effect(p, team, n)[k]
+            eff = _effect(p, team, n, (team_gp or {}).get((team, p.playerId)))[k]
             if r is not None and r.get("tag") == "scratch":
                 eff = max(eff, 0.0)  # same rule as adjustments(): a scratch is never a boost
             tag = (r or {}).get("tag") or ("IR" if r is not None and r["status"] == "Injured Reserve" else "")
             return {"name": p["name"], "pos": p.position, "impact": round(SCALE * eff, 4), "status": status, "tag": tag}
         out[team] = {side: sorted((row(p, k) for _, p in d.iterrows()), key=lambda x: -x["impact"])[:top]
                      for k, side in ((0, "off"), (1, "def"))}
+    return out
+
+
+def team_gp(teams, season):
+    """{(team, NHL id): games played for that team this season} from NHL club stats (a traded player has a row per team)."""
+    out = {}
+    for t in teams:
+        url = f"https://api-web.nhle.com/v1/club-stats/{t}/{season}{season + 1}/2"
+        with urllib.request.urlopen(m.fetch(url), timeout=30) as f:
+            for p in json.load(f).get("skaters", []):
+                out[(t, p["playerId"])] = p["gamesPlayed"]
     return out
 
 

@@ -662,7 +662,7 @@ def day_table(g):
     g = current(g).sort_values(["proj", "p7"], ascending=[False, False])  # highest projected total first
     final_day = bool(len(g)) and g.final_total.notna().any()  # result layout once any game is final; the rest show as pending
     ranks = rank_tags(g.date.iloc[0]) if len(g) else {}  # the ranks teams had on game day
-    kp = load_key_players()
+    kp = load_key_players(g.date.iloc[0]) if len(g) else {}
     head = f"<th>{tip('Team', cls='tl')}</th>"
     if final_day:
         head += f"<th class='num'>{tip('G', 'Final goals for this team (shootout winner gets +1, as sportsbooks settle).')}</th>"
@@ -974,7 +974,7 @@ def record(d):
     tiles_html = "".join(f"<div class='tile'><div class='label'>{tip(a, rec_tips.get(a), 'tl')}</div><div class='num-big'>{b}</div>"
                          f"<div class='muted'>{c_}</div></div>" for a, b, c_ in tiles)
     if len(s):
-        rows = "".join(f"""<tr><td>{e(r.date)}</td><td class='matchup'>{logo(r.away, 22)}{logo(r.home, 22)} {e(r.away)} @ {e(r.home)}</td>
+        rows = "".join(f"""<tr><td><span class='d-long'>{e(r.date)}</span><span class='d-short'>{e(r.date[5:].replace('-', '/'))}</span></td><td class='matchup'>{logo(r.away, 22)}{logo(r.home, 22)} {e(r.away)} @ {e(r.home)}</td>
             <td>{'🔨 ' if r.call == 'SLAM' else ''}{e(r.call)}</td><td class='num'>o{line(r.close_total)} {price(r.close_over)}</td>
             <td class='num'>{int(r.final_total)}</td><td class='res {e(r.res)}'>{e(r.res)}</td><td class='num'>{r.units:+.2f}</td></tr>"""
                        for r in s.sort_values("date", ascending=False).itertuples())
@@ -1102,13 +1102,16 @@ KP_STATUS = {"in": ("Plays", "kp-in"), "out": ("OUT", "kp-out"), "dtd": ("Day-to
 KP_SIMILAR = 110  # RGB distance under which two team colors count as the same look
 
 
+KP_REBUILT_NOTE = ("Rebuilt after the fact (no pre-game snapshot was saved that day): Played = dressed for the game "
+                   "(NHL box score), effects as of that game day.")
 KP_DEFENSE_NOTE = ("Defender numbers are a rough guide: tested on 2021-26 lineups, the defensive side of the injury adjustment "
                    "is too small and noisy to prove on its own (it swings season to season). Attacker numbers hold up every season.")
 
 
-def load_key_players():
-    """data/key_players.json (written by each model run for that day's slate) or {}."""
-    path = paths.data("key_players.json")
+def load_key_players(day):
+    """data/key_players/<day>.json (written by each model run, each team frozen at puck drop; 'rebuilt' days were
+    filled in afterwards from who dressed) or {}."""
+    path = paths.data(f"key_players/{day}.json")
     if not os.path.exists(path):
         return {}
     with open(path) as f:
@@ -1117,10 +1120,14 @@ def load_key_players():
 
 def key_players(r, kp, phone=False):
     """Key players table for the why section: each team's top 5 attackers and top 5 defenders, what the model
-    takes off if he sits and whether he plays tonight. Only for the slate the last model run saved."""
+    takes off if he sits and whether he plays tonight (finished games: as of puck drop; rebuilt days: who dressed)."""
     teams = kp.get("teams", {}) if kp.get("date") == r.date else {}
     if r.away not in teams or r.home not in teams:
         return ""
+    rebuilt = bool(kp.get("rebuilt"))
+    when = "Played?" if rebuilt else "Pre-game" if not pd.isna(r.final_total) else "Tonight"
+    status = dict(KP_STATUS, **{"in": ("Played", "kp-in"), "out": ("Didn't play", "kp-out")}) if rebuilt else KP_STATUS
+    note = KP_DEFENSE_NOTE + (" " + KP_REBUILT_NOTE if rebuilt else "")
 
     rgb = lambda c: [int(c[i:i + 2], 16) for i in (1, 3, 5)]
 
@@ -1140,7 +1147,7 @@ def key_players(r, kp, phone=False):
     def cells(p, side, fill):
         if p is None:
             return f"<td class='kp-n mu-g'{fill}></td><td{fill}></td><td{fill}></td>"
-        label, cls = KP_STATUS.get(p["status"], KP_STATUS[""])
+        label, cls = status.get(p["status"], status[""])
         if p["status"] == "out" and p.get("tag") in ("IR", "scratch"):
             label += f" · {p['tag']}"
         eff = f"{(-1 if side == 'off' else 1) * p['impact'] * 100:+.1f}%" if abs(p["impact"]) >= 0.0005 else "–"
@@ -1154,9 +1161,9 @@ def key_players(r, kp, phone=False):
                            + "".join(f"<tr>{cells(p, side, fills[me])}</tr>" for p in teams[me][side])
                            for me in (r.away, r.home))
             hd = (f"<tr class='mu-sec'><th colspan='3'>{title}</th></tr><tr><th class='mu-g'>Player</th>"
-                  f"<th>{tip('If out', TIPS[key])}</th><th>Tonight</th></tr>")
+                  f"<th>{tip('If out', TIPS[key])}</th><th>{when}</th></tr>")
             out.append(f"<div class='mu-box'><table class='mu-t kp-t'><thead>{hd}</thead><tbody>{body}</tbody></table></div>")
-        return f"<div class='mu mu-phone'>{''.join(out)}</div><p class='muted small kp-note'>{KP_DEFENSE_NOTE}</p>"
+        return f"<div class='mu mu-phone'>{''.join(out)}</div><p class='muted small kp-note'>{note}</p>"
     rows = []
     for me in (r.away, r.home):
         t, fill = teams[me], fills[me]
@@ -1167,10 +1174,10 @@ def key_players(r, kp, phone=False):
             rows.append(f"<tr{' class=kp-first' if i == 0 and me == r.home else ''}>{tm}{cells(o, 'off', fill)}{cells(d, 'def', fill)}</tr>")
     head = (f"<tr class='mu-sec'><th class='mu-tm' rowspan='2'>Team</th><th class='mu-g' colspan='3'>Top 5 attackers</th>"
             f"<th class='mu-g' colspan='3'>Top 5 defenders</th></tr><tr>"
-            f"<th class='mu-g'>Player</th><th>{tip('If out', TIPS['KP attack'])}</th><th>Tonight</th>"
-            f"<th class='mu-g'>Player</th><th>{tip('If out', TIPS['KP defense'])}</th><th>Tonight</th></tr>")
+            f"<th class='mu-g'>Player</th><th>{tip('If out', TIPS['KP attack'])}</th><th>{when}</th>"
+            f"<th class='mu-g'>Player</th><th>{tip('If out', TIPS['KP defense'])}</th><th>{when}</th></tr>")
     return (f"<div class='mu'><div class='mu-box'><table class='mu-t kp-t'><thead>{head}</thead><tbody>{''.join(rows)}</tbody></table></div></div>"
-            f"<p class='muted small kp-note'>{KP_DEFENSE_NOTE}</p>")
+            f"<p class='muted small kp-note'>{note}</p>")
 
 
 def unit_ranks(x):
@@ -1218,10 +1225,10 @@ def team_panels(d):
                 outcome = f"<span class='res {res}'>{res}</span>"
             back = " <span class='muted' title='Backfilled Oct 2 from pre-game data (opening line); not in the paper record'>†</span>" if "retroactively" in str(r.logged_at) else ""
             rows.append(f"<tr><td>{pd.Timestamp(r.date):%b %-d}{back}</td><td class='tm'>{'vs' if home else '@'} {logo(opp, 18)}<b>{e(opp)}</b></td>"
-                        f"<td class='num'>{o_ev}</td><td class='num'>{o_pp}</td><td class='num'>{proj:.2f}</td><td class='num'><b>{int(goals)}</b></td>"
-                        f"<td class='num'>{r.proj:.2f}</td><td class='num'><b>{int(r.final_total)}</b></td>"
+                        f"<td class='num tg-x'>{o_ev}</td><td class='num tg-x'>{o_pp}</td><td class='num'>{proj:.2f}</td><td class='num'><b>{int(goals)}</b></td>"
+                        f"<td class='num tg-x'>{r.proj:.2f}</td><td class='num'><b>{int(r.final_total)}</b></td>"
                         f"<td class='num'>{'–' if pd.isna(r.bet_total) else line(r.bet_total)}</td>"
-                        f"<td><span class='callpill c-{c.lower()}'>{c}</span></td><td>{outcome}</td></tr>")
+                        f"<td><span class='callpill c-{c.lower()}'>{c}</span><span class='tg-res-m'> {outcome}</span></td><td class='tg-x'>{outcome}</td></tr>")
         n = len(x)
         seven = int((x.final_total >= 7).sum())
         summ = (f"Last {n} game{'s' if n != 1 else ''} this season: scored <b>{np.mean(ag):.2f}</b> a game vs <b>{np.mean(pg):.2f}</b> projected; "
@@ -1230,11 +1237,11 @@ def team_panels(d):
         ranks = (f"<p class='tg-ranks'>{tip('Ranks now', TIPS['Unit ranks'], 'tl')}: <b>{e(unit_ranks(mine))}</b></p>"
                  if mine is not None and "r_gf_ev" in mine else "")
         out[t] = (f"<div class='tg'>{ranks}<p class='tg-sum'>{summ}</p><div class='scroll'><table class='tg-t'><thead><tr><th>Date</th><th>Opponent</th>"
-                  f"<th class='num'>{tip('Opp 5v5 OFF / DEF', 'The opponent’s 5-on-5 ranks on that game day: goals scored / goals allowed (1 = best of 32).')}</th>"
-                  f"<th class='num'>{tip('Opp PP OFF / DEF', 'The opponent’s power-play ranks on that game day: power-play goals / power-play goals allowed (1 = best of 32).')}</th>"
+                  f"<th class='num tg-x'>{tip('Opp 5v5 OFF / DEF', 'The opponent’s 5-on-5 ranks on that game day: goals scored / goals allowed (1 = best of 32).')}</th>"
+                  f"<th class='num tg-x'>{tip('Opp PP OFF / DEF', 'The opponent’s power-play ranks on that game day: power-play goals / power-play goals allowed (1 = best of 32).')}</th>"
                   f"<th class='num'>{tip('Proj', f'{TEAMS.get(t, t)} projected goals (last run before the game).')}</th><th class='num'>Goals</th>"
-                  f"<th class='num'>{tip('Proj tot', 'Projected game total (last run before the game).')}</th><th class='num'>Total</th>"
-                  f"<th class='num'>{tip('Line', 'Last pre-game line, the one the dashboard grades.')}</th><th>Call</th><th>Result</th></tr></thead>"
+                  f"<th class='num tg-x'>{tip('Proj tot', 'Projected game total (last run before the game).')}</th><th class='num'>Total</th>"
+                  f"<th class='num'>{tip('Line', 'Last pre-game line, the one the dashboard grades.')}</th><th>Call</th><th class='tg-x'>Result</th></tr></thead>"
                   f"<tbody>{''.join(rows)}</tbody></table></div></div>")
     return out
 
@@ -1324,9 +1331,9 @@ def rankings(d=None):
     n = len(r)
     panels = team_panels(d) if d is not None else {}
 
-    def detail(team):  # hidden panel row under the team's row (opened by clicking the row)
+    def detail(team, stats=""):  # hidden panel row under the team's row (opened by clicking the row)
         body = panels.get(team, "<p class='muted tg-sum'>No finished games logged yet this season.</p>")
-        return f"<tr class='rk-detail' data-team='{e(team)}' hidden><td colspan='99'>{body}</td></tr>"
+        return f"<tr class='rk-detail' data-team='{e(team)}' hidden><td colspan='99'>{stats}{body}</td></tr>"
 
     def tcls(rank):  # rank fifths: 1st fifth = great ... last fifth = trash (green = strong unit)
         return "t-" + TIER_NAMES[4 - min(4, (rank - 1) * 5 // n)]
@@ -1346,23 +1353,30 @@ def rankings(d=None):
         def sched(x):  # last column
             if not x["games"]:
                 return "<td class='num muted' data-k='99'>–</td>"
-            return f"<td class='num' data-k='{x[f'r_{opp}']}'>#{x[f'r_{opp}']} <span class='muted small'>{x[opp] * 100:+.1f}%</span></td>"
+            return f"<td class='num rk-x' data-k='{x[f'r_{opp}']}'>#{x[f'r_{opp}']} <span class='muted small'>{x[opp] * 100:+.1f}%</span></td>"
+
+        def phone_stats(x):  # phone only (the stat columns are hidden there): the nine stats + schedule in the panel
+            items = "".join(f"<div class='rk-ms {tcls(x[f'r_{c}{side}'])}'><span>{e(h)}</span><b>{x[f'{c}{side}']:.{dec}f}</b>"
+                            f"<span class='small'>#{x[f'r_{c}{side}']}</span></div>" for c, h, dec, _ in RANK_STATS)
+            if x["games"]:
+                items += f"<div class='rk-ms'><span>Sched</span><b>#{x[f'r_{opp}']}</b><span class='small'>{x[opp] * 100:+.1f}%</span></div>"
+            return f"<div class='rk-mstats'>{items}</div>"
         rows = "".join(
             f"<tr class='rk-row' data-team='{e(x['team'])}' title='Click for {e(x['team'])} game-by-game'><td class='num' data-k='{x[f'r_{score}']}'>{x[f'r_{score}']}</td><td class='tm' data-k='{e(x['team'])}'><span class='rk-caret'>▸</span>{logo(x['team'], 30)}<b title='{e(TEAMS.get(x['team'], x['team']))}'>{e(x['team'])}</b></td>"
             f"<td class='num {tcls(x[f'r_{score}'])}' data-k='{x[f'r_{score}']}'><b>{x[score] * (1 if kind == 'off' else -1):+.2f}</b></td>"
             f"<td class='num {tcls(x[f'r_{model}'])}' data-k='{x[f'r_{model}']}'>{x[model]:.2f} <span class='muted small'>#{x[f'r_{model}']}</span></td>" + adj(x)
-            + "".join(f"<td class='num {tcls(x[f'r_{c}{side}'])}' data-k='{x[f'r_{c}{side}']}'>{x[f'{c}{side}']:.{dec}f} <span class='muted small'>#{x[f'r_{c}{side}']}</span></td>"
+            + "".join(f"<td class='num rk-x {tcls(x[f'r_{c}{side}'])}' data-k='{x[f'r_{c}{side}']}'>{x[f'{c}{side}']:.{dec}f} <span class='muted small'>#{x[f'r_{c}{side}']}</span></td>"
                       for c, _, dec, _ in RANK_STATS)
-            + sched(x) + "</tr>" + detail(x["team"])
+            + sched(x) + "</tr>" + detail(x["team"], phone_stats(x))
             for _, x in r.sort_values(f"r_{score}").iterrows())
         verb = "allowed" if kind == "def" else ""
-        heads = "".join(f"<th class='num'>{tip(h, f'{expl}{(' ' + verb) if verb else ''}. Weight in the total: {w[c] * 100:.0f}%. ' + ('Rank 1 = most.' if kind == 'off' else 'Rank 1 = fewest.'), 'tr' if i > 4 else '')}</th>"
+        heads = "".join(f"<th class='num rk-x'>{tip(h, f'{expl}{(' ' + verb) if verb else ''}. Weight in the total: {w[c] * 100:.0f}%. ' + ('Rank 1 = most.' if kind == 'off' else 'Rank 1 = fewest.'), 'tr' if i > 4 else '')}</th>"
                         for i, (c, h, _, expl) in enumerate(RANK_STATS))
         title = "Total Offense" if kind == "off" else "Total Defense (stats allowed)"
         return (f"<div class='rk' data-kind='{'offense' if kind == 'off' else 'defense'}'><h3>{title}</h3><table class='gt rk-t' data-sort='2'><thead><tr><th class='num'>#</th><th>Team</th>"
                 f"<th class='num'>{tip('Total', TIPS[k + ' composite'])}</th><th class='num'>{tip('Model', TIPS[k + ' total'])}</th>"
                 f"<th class='num'>{tip('Adj #', TIPS['Rank adj'])}</th>{heads}"
-                f"<th class='num'>{tip('Sched', TIPS[k + ' sched'], 'tr')}</th>"
+                f"<th class='num rk-x'>{tip('Sched', TIPS[k + ' sched'], 'tr')}</th>"
                 f"</tr></thead><tbody>{rows}</tbody></table></div>")
     wf = split_model.WEIGHTS
     fmt = lambda side: ", ".join(f"{h} {wf[side][c] * 100:.0f}%" for c, h, *_ in sorted(RANK_STATS, key=lambda t: -wf[side][t[0]]))
@@ -1505,6 +1519,9 @@ table.tg-t{border-collapse:collapse;font-size:12.5px;width:auto}table.tg-t th,ta
 table.tg-t th{font-size:11px;color:var(--muted);font-weight:700;text-align:left}table.tg-t th.num,table.tg-t td.num{text-align:right}
 table.tg-t td.tm img,table.tg-t td.tm picture{vertical-align:middle;margin:0 4px}
 @media (max-width:760px){table.tg-t{font-size:11px}table.tg-t th,table.tg-t td{padding:3px 5px}}
+@media (max-width:520px){.scroll table th,.scroll table td{padding:5px 3px;font-size:11px}.scroll table th .tip{white-space:normal}.scroll table th{white-space:normal;font-size:9.5px;letter-spacing:.02em;vertical-align:bottom}.scroll td.matchup picture,.scroll td.matchup img{display:none}.scroll table td{white-space:normal}.d-long{display:none}.d-short{display:inline!important}}
+.rk-mstats{display:none}.tg-res-m{display:none}@media (max-width:760px){table.rk-t .rk-x,table.tg-t .tg-x{display:none}table.tg-t th,table.tg-t td{padding:4px 3px!important;font-size:11px}table.tg-t th{white-space:normal;font-size:9px;letter-spacing:0}table.tg-t td.tm img,table.tg-t td.tm picture{display:none}.tg-res-m{display:block;margin-top:2px}table.tg-t td{white-space:normal}table.tg-t .callpill{font-size:9.5px;padding:1px 5px}tr.rk-detail>td{padding-left:4px!important;padding-right:4px!important}.rk-mstats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;margin:4px 0 10px}.rk-ms{display:flex;align-items:baseline;gap:6px;padding:5px 8px;border-radius:6px;background:var(--ice);font-size:12px}.rk-ms span:first-child{flex:1;color:var(--ink);font-weight:600}.rk-ms .small{opacity:.8}.rk-ms.t-great{background:rgba(22,163,74,.50)}.rk-ms.t-good{background:rgba(22,163,74,.22)}.rk-ms.t-mid{background:rgba(234,179,8,.28)}.rk-ms.t-bad{background:rgba(220,38,38,.22)}.rk-ms.t-trash{background:rgba(220,38,38,.50)}}
+@media (max-width:380px){.scroll table th,.scroll table td{padding:4px 2px}.scroll table td{font-size:10.5px}.scroll table th{font-size:8.5px;letter-spacing:0}}
 @media (max-width:760px){.gtable,.legend.tbl-only{display:none}.mcards{display:grid;gap:12px;grid-template-columns:minmax(0,1fr)}.mc{min-width:0}}
 .mc{background:var(--card);border:2px solid color-mix(in srgb,var(--muted) 45%,transparent);border-radius:12px;padding:12px 12px 8px}
 .mc.flagged{border-color:var(--gold)}
@@ -1563,7 +1580,7 @@ h2{margin:0 0 4px;font-size:21px;letter-spacing:-.01em}
 th,td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}
 th{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:700}
 .num{text-align:right;font-variant-numeric:tabular-nums}tr.total td{font-weight:800}
-.pos{color:var(--pos)}.neg{color:var(--neg)}td.matchup{display:flex;align-items:center;gap:4px}
+.pos{color:var(--pos)}.neg{color:var(--neg)}td.matchup{display:flex;align-items:center;gap:4px}.d-short{display:none}
 ul.notes{margin:12px 0 0;padding-left:20px;color:var(--muted)}
 dl{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;margin:12px 0 0}
 dl div{background:var(--ice);border-radius:10px;padding:10px 12px}dt{font-weight:800}dd{margin:2px 0 0;color:var(--muted)}
