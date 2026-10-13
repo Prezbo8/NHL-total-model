@@ -339,6 +339,8 @@ def today(day=None):
     games = sm.load_split()
     season = sm.season_of(date.fromisoformat(day))  # from the date, not the data (opening day has no games yet)
     health.attempt("Goalie data", lambda: goalies.refresh([season]) or True)
+    if (games.season == season).any():  # skater totals this season (injury adjustment + key players); none before opening night
+        health.attempt("MoneyPuck skaters", lambda: players.refresh_skaters([season]) or True)
     import speed  # team skating speed: this season uses LAST season's numbers (fetched once per season)
     health.attempt("NHL EDGE speed", lambda: speed.refresh(season - 1) or True)
     proj, project = sm.walk_split(games, known_starters=False, with_projector=True, live_season=season)
@@ -517,6 +519,13 @@ def today(day=None):
             sm.save_rankings_day(rk, day)
         except Exception as e:
             print(f"(team rankings not saved: {e})")
+        try:  # each team's top 5 attackers / defenders and whether they play (dashboard 'Key players')
+            rosters = {t: (lineup_info.get(t) or {}).get("roster") or [p for p, _, _ in lineups.nhl_roster(t)] for t in playing}
+            kp = injuries.key_players(rosters, injured, lineup_info, season, injuries.team_games_this_season(games, season))
+            with open(paths.data("key_players.json"), "w") as f:
+                json.dump({"date": day, "teams": kp}, f, indent=1)
+        except Exception as e:
+            print(f"(key players not saved: {e})")
         try:  # games already under way: record who actually started (NHL box score)
             paper.update_actual_starters()
         except Exception as e:

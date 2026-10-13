@@ -3,6 +3,7 @@
   python3 src/dashboard.py
 """
 import html
+import json
 import os
 from datetime import date
 
@@ -13,7 +14,7 @@ import grade
 import paper
 import paths
 import split_model
-from teams import TEAMS
+from teams import COLORS, SECONDARY, TEAMS
 
 OUT = os.path.join(paths.DOCS_DIR, "index.html")
 
@@ -27,6 +28,8 @@ SCALE = 4.5  # projected-goal bars run 0 -> 4.5 goals
 
 
 TIPS = {
+    "KP attack": "How much the team's projected goals drop if this player sits (the model's injury adjustment: his ice time × how much better he is than a replacement-level player × how much of him is in the team's rating). Players ranked by this number. OUT players are already taken off the projection.",
+    "KP defense": "How much the OPPONENT's projected goals rise if this player sits (same injury adjustment, defensive side). Players ranked by this number. OUT players are already in the projection. Rough guide only: tested on 2021-26, this side is too small and noisy to prove on its own.",
     "Proj total": "Projected total goals for the game (away + home), from the model.",
     "P(7+)": "Model's chance of 7 or more total goals, from the projected total and how evenly matched the teams are. 7+ wins an over 6.5 and an over 6 (exactly 6 pushes an over 6). NHL average ≈ 45%.",
     "Line": "Consensus total: opening line → line when logged (on results: logged line → closing line). ↑/↓ = which way it moved.",
@@ -659,6 +662,7 @@ def day_table(g):
     g = current(g).sort_values(["proj", "p7"], ascending=[False, False])  # highest projected total first
     final_day = bool(len(g)) and g.final_total.notna().any()  # result layout once any game is final; the rest show as pending
     ranks = rank_tags(g.date.iloc[0]) if len(g) else {}  # the ranks teams had on game day
+    kp = load_key_players()
     head = f"<th>{tip('Team', cls='tl')}</th>"
     if final_day:
         head += f"<th class='num'>{tip('G', 'Final goals for this team (shootout winner gets +1, as sportsbooks settle).')}</th>"
@@ -762,9 +766,11 @@ def day_table(g):
                     f"<td rowspan='2'>{gtime}{callpill}<br>{ln}</td>")
         mu = matchup(r)
         mu = f"<details class='mu-why'><summary>Matchup: 5-on-5 &amp; power play</summary>{mu}</details>" if mu else ""
+        kpt = key_players(r, kp)
+        mu += f"<details class='mu-why'><summary>Key players: top 5 attackers &amp; defenders</summary>{kpt}</details>" if kpt else ""
         ctx = f"<div class='why-text'>{mu}{reasoning(r, flagged)}</div>"
         mcards.append(mobile_card(r, final, callpill, st, f"{vs} {outcome}" if final_day else ln,
-                                  breakdown_cells, cls, ranks))
+                                  breakdown_cells, cls, ranks, kpt))
         away = team("away", r.away, r.proj_away, r.away_score if final else None) + game + detail("away")
         home = team("home", r.home, r.proj_home, r.home_score if final else None) + detail("home")
         body.append(f"<tbody class='game {cls}'><tr class='away'>{away}</tr><tr class='home'>{home}</tr>"
@@ -777,7 +783,7 @@ def day_table(g):
             "Hover or tap any underlined label for an explanation.</p>")
 
 
-def mobile_card(r, final, callpill, st, status, breakdown_cells, cls, ranks):
+def mobile_card(r, final, callpill, st, status, breakdown_cells, cls, ranks, kpt=""):
     """Phone layout (shown under 760px wide instead of the table): one card per game with the same
     call, line/result, teams, goalies, tier-colored breakdown and reasoning."""
     def team(side, abbr, proj, score):
@@ -800,7 +806,9 @@ def mobile_card(r, final, callpill, st, status, breakdown_cells, cls, ranks):
             f"{team('away', r.away, r.proj_away, r.away_score if final else None)}"
             f"{team('home', r.home, r.proj_home, r.home_score if final else None)}"
             f"<div class='mc-sum'>{total} · P(7+) <b>{r.p7:.0%}</b></div>{bd}"
-            f"<details class='mc-why'><summary>Why this call</summary><div class='why-text'>{matchup(r)}{reasoning(r, bool(r.flag))}</div></details></article>")
+            f"<details class='mc-why'><summary>Why this call</summary><div class='why-text'>{matchup(r)}"
+            + (f"<details class='mu-why'><summary>Key players: top 5 attackers &amp; defenders</summary>{kpt}</details>" if kpt else "")
+            + f"{reasoning(r, bool(r.flag))}</div></details></article>")
 
 
 def day_cards(g):
@@ -1074,6 +1082,74 @@ def matchup(r):
                       for lbl, k in (("OFF", "5v5 OFF"), ("OPP DEF", "5v5 OPP DEF"), ("Proj", "5v5"),
                                      ("OFF", "PP OFF"), ("OPP DEF", "PP OPP DEF"), ("Proj", "PP"))) + "</tr>")
     return f"<div class='mu'><div class='mu-box'><table class='mu-t'><thead>{head}</thead><tbody>{rows}</tbody></table></div></div>"
+
+
+KP_STATUS = {"in": ("Plays", "kp-in"), "out": ("OUT", "kp-out"), "dtd": ("Day-to-day", "kp-q"), "gtd": ("Game-time", "kp-q"),
+             "": ("–", "muted")}
+
+
+KP_SIMILAR = 110  # RGB distance under which two team colors count as the same look
+
+
+KP_DEFENSE_NOTE = ("Defender numbers are a rough guide: tested on 2021-26 lineups, the defensive side of the injury adjustment "
+                   "is too small and noisy to prove on its own (it swings season to season). Attacker numbers hold up every season.")
+
+
+def load_key_players():
+    """data/key_players.json (written by each model run for that day's slate) or {}."""
+    path = paths.data("key_players.json")
+    if not os.path.exists(path):
+        return {}
+    with open(path) as f:
+        return json.load(f)
+
+
+def key_players(r, kp):
+    """Key players table for the why section: each team's top 5 attackers and top 5 defenders, what the model
+    takes off if he sits and whether he plays tonight. Only for the slate the last model run saved."""
+    teams = kp.get("teams", {}) if kp.get("date") == r.date else {}
+    if r.away not in teams or r.home not in teams:
+        return ""
+
+    rgb = lambda c: [int(c[i:i + 2], 16) for i in (1, 3, 5)]
+
+    def team_fill(c):
+        """Inline style: a team color, with black or white text for contrast."""
+        if not c:
+            return ""
+        r_, g_, b_ = rgb(c)
+        ink = "#111" if 0.299 * r_ + 0.587 * g_ + 0.114 * b_ > 150 else "#fff"
+        return f" style='background:{c};color:{ink}'"
+
+    ca, ch = COLORS.get(r.away), COLORS.get(r.home)
+    if ca and ch and sum((x - y) ** 2 for x, y in zip(rgb(ca), rgb(ch))) ** 0.5 < KP_SIMILAR:
+        ch = SECONDARY.get(r.home, ch)  # two reds, two navies...: the home team (listed second) switches
+    fills = {r.away: team_fill(ca), r.home: team_fill(ch)}
+
+    def cells(p, side, fill):
+        if p is None:
+            return f"<td class='kp-n mu-g'{fill}></td><td{fill}></td><td{fill}></td>"
+        label, cls = KP_STATUS.get(p["status"], KP_STATUS[""])
+        if p["status"] == "out" and p.get("tag") in ("IR", "scratch"):
+            label += f" · {p['tag']}"
+        eff = f"{(-1 if side == 'off' else 1) * p['impact'] * 100:+.1f}%" if abs(p["impact"]) >= 0.0005 else "–"
+        return (f"<td class='kp-n mu-g{' kp-gone' if p['status'] == 'out' else ''}'{fill}>{e(p['name'])}"
+                f" <span class='kp-pos'>{e(p['pos'])}</span></td><td class='mu-v'{fill}>{eff}</td>"
+                f"<td{fill}><span class='kp-st {cls}'>{label}</span></td>")
+    rows = []
+    for me in (r.away, r.home):
+        t, fill = teams[me], fills[me]
+        for i in range(5):
+            o = t["off"][i] if i < len(t["off"]) else None
+            d = t["def"][i] if i < len(t["def"]) else None
+            tm = f"<td class='mu-tm' rowspan='5'>{logo(me, 20)}<b>{e(me)}</b></td>" if i == 0 else ""
+            rows.append(f"<tr{' class=kp-first' if i == 0 and me == r.home else ''}>{tm}{cells(o, 'off', fill)}{cells(d, 'def', fill)}</tr>")
+    head = (f"<tr class='mu-sec'><th class='mu-tm' rowspan='2'>Team</th><th class='mu-g' colspan='3'>Top 5 attackers</th>"
+            f"<th class='mu-g' colspan='3'>Top 5 defenders</th></tr><tr>"
+            f"<th class='mu-g'>Player</th><th>{tip('If out', TIPS['KP attack'])}</th><th>Tonight</th>"
+            f"<th class='mu-g'>Player</th><th>{tip('If out', TIPS['KP defense'])}</th><th>Tonight</th></tr>")
+    return (f"<div class='mu'><div class='mu-box'><table class='mu-t kp-t'><thead>{head}</thead><tbody>{''.join(rows)}</tbody></table></div></div>"
+            f"<p class='muted small kp-note'>{KP_DEFENSE_NOTE}</p>")
 
 
 def unit_ranks(x):
@@ -1387,7 +1463,7 @@ body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 -apple-system
 @media (max-width:600px){.lastrun{position:static;text-align:left;margin-top:8px}}
 .why-text .tt{display:block;margin:3px 0;padding-left:10px;border-left:3px solid var(--line)}
 .mcards{display:none}
-.rk-tag{margin-left:6px;font-size:10px;font-weight:700;color:var(--muted);white-space:nowrap}.mu{margin:4px 0 10px;overflow-x:auto}.mu-box{display:inline-block;border:3px solid color-mix(in srgb,var(--muted) 60%,transparent);border-radius:10px;overflow:hidden;background:var(--card)}details.mu-why{margin:0 0 8px}details.mu-why>summary{cursor:pointer;font-weight:700;font-size:12.5px;color:var(--accent)}table.mu-t{border-collapse:separate;border-spacing:0;width:auto;font-size:12px;font-variant-numeric:tabular-nums;background:var(--card)}table.mu-t th,table.mu-t td,.gt tr.whyrow table.mu-t th,.gt tr.whyrow table.mu-t td{padding:5px 12px!important;text-align:center!important;white-space:nowrap;border:none!important;border-radius:0!important;height:auto!important;vertical-align:middle!important;line-height:1.25!important;box-shadow:inset -1px 0 0 var(--line),inset 0 -1px 0 var(--line)}table.mu-t tbody tr:last-child td{box-shadow:inset -1px 0 0 var(--line)}table.mu-t tr>*:last-child{box-shadow:inset 0 -1px 0 var(--line)}table.mu-t tbody tr:last-child td:last-child{box-shadow:none}table.mu-t th{font-size:10px;color:var(--muted);font-weight:800;text-transform:uppercase;letter-spacing:.05em;background:var(--ice)}table.mu-t tr.mu-sec th{color:var(--ink);font-size:10.5px}.gt tr.whyrow table.mu-t .mu-g,table.mu-t .mu-g{box-shadow:inset 8px 0 0 var(--muted),inset -1px 0 0 var(--line),inset 0 -1px 0 var(--line);padding-left:20px!important}.gt table.mu-t tbody tr:last-child td.mu-g,table.mu-t tbody tr:last-child td.mu-g{box-shadow:inset 8px 0 0 var(--muted),inset -1px 0 0 var(--line)}table.mu-t .mu-tm,.gt tr.whyrow table.mu-t .mu-tm{text-align:left!important;min-width:64px}table.mu-t td.mu-tm b{font-size:13.5px;vertical-align:middle}table.mu-t td.mu-tm img,table.mu-t td.mu-tm picture{vertical-align:middle;margin-right:6px}table.mu-t td.mu-v{min-width:62px;line-height:1.15}table.mu-t td.mu-v b{display:block;font-size:13.5px}.mu-rk{display:block;font-size:9.5px;font-weight:600;opacity:.75}table.mu-t td.mu-p b{font-size:14px}.rk-sm{display:block;font-size:9.5px;font-weight:600;opacity:.75;line-height:1.05}.tg-ranks{font-size:12.5px;margin:0 0 4px}
+.rk-tag{margin-left:6px;font-size:10px;font-weight:700;color:var(--muted);white-space:nowrap}.mu{margin:4px 0 10px;overflow-x:auto}.mu-box{display:inline-block;border:3px solid color-mix(in srgb,var(--muted) 60%,transparent);border-radius:10px;overflow:hidden;background:var(--card)}details.mu-why{margin:0 0 8px}details.mu-why>summary{cursor:pointer;font-weight:700;font-size:12.5px;color:var(--accent)}table.mu-t{border-collapse:separate;border-spacing:0;width:auto;font-size:12px;font-variant-numeric:tabular-nums;background:var(--card)}table.mu-t th,table.mu-t td,.gt tr.whyrow table.mu-t th,.gt tr.whyrow table.mu-t td{padding:5px 12px!important;text-align:center!important;white-space:nowrap;border:none!important;border-radius:0!important;height:auto!important;vertical-align:middle!important;line-height:1.25!important;box-shadow:inset -1px 0 0 var(--line),inset 0 -1px 0 var(--line)}table.mu-t tbody tr:last-child td{box-shadow:inset -1px 0 0 var(--line)}table.mu-t tr>*:last-child{box-shadow:inset 0 -1px 0 var(--line)}table.mu-t tbody tr:last-child td:last-child{box-shadow:none}table.mu-t th{font-size:10px;color:var(--muted);font-weight:800;text-transform:uppercase;letter-spacing:.05em;background:var(--ice)}table.mu-t tr.mu-sec th{color:var(--ink);font-size:10.5px}.gt tr.whyrow table.mu-t .mu-g,table.mu-t .mu-g{box-shadow:inset 8px 0 0 var(--muted),inset -1px 0 0 var(--line),inset 0 -1px 0 var(--line);padding-left:20px!important}.gt table.mu-t tbody tr:last-child td.mu-g,table.mu-t tbody tr:last-child td.mu-g{box-shadow:inset 8px 0 0 var(--muted),inset -1px 0 0 var(--line)}table.mu-t .mu-tm,.gt tr.whyrow table.mu-t .mu-tm{text-align:left!important;min-width:64px}table.mu-t td.mu-tm b{font-size:13.5px;vertical-align:middle}table.mu-t td.mu-tm img,table.mu-t td.mu-tm picture{vertical-align:middle;margin-right:6px}table.mu-t td.mu-v{min-width:62px;line-height:1.15}table.mu-t td.mu-v b{display:block;font-size:13.5px}.mu-rk{display:block;font-size:9.5px;font-weight:600;opacity:.75}table.mu-t td.mu-p b{font-size:14px}table.kp-t td.kp-n,.gt tr.whyrow table.kp-t td.kp-n{text-align:left!important;font-weight:600}.kp-note{margin:4px 0 8px;max-width:760px}.kp-pos{font-size:9.5px;font-weight:700;opacity:.75}td.kp-gone{text-decoration:line-through}.kp-st{font-size:10.5px;font-weight:800;padding:2px 7px;border-radius:999px;white-space:nowrap}.kp-in{opacity:.85}.kp-out{background:#dc2626;color:#fff;box-shadow:0 0 0 1.5px #fff}.kp-q{background:#eab308;color:#111;box-shadow:0 0 0 1.5px #fff}table.kp-t tr.kp-first>*{box-shadow:inset 0 3px 0 color-mix(in srgb,var(--muted) 60%,transparent),inset -1px 0 0 var(--line),inset 0 -1px 0 var(--line)}table.kp-t tr.kp-first>.mu-g{box-shadow:inset 0 3px 0 color-mix(in srgb,var(--muted) 60%,transparent),inset 8px 0 0 var(--muted),inset 0 -1px 0 var(--line)}.rk-sm{display:block;font-size:9.5px;font-weight:600;opacity:.75;line-height:1.05}.tg-ranks{font-size:12.5px;margin:0 0 4px}
 .b2b-sq{display:inline-block;width:9px;height:9px;background:#dc2626;border-radius:2px;margin-right:5px;vertical-align:middle}
 .acc-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:18px;margin-top:16px}.acc-grid h3{margin:0 0 6px;font-size:15px}table.acc-t{width:100%}table.acc-t td,table.acc-t th{padding:6px 8px}
 .rk-switch{display:inline-flex;gap:4px;padding:4px;margin:0 0 14px;background:var(--ice);border:1px solid var(--line);border-radius:999px}

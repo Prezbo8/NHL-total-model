@@ -53,7 +53,7 @@ def nhl_roster(abbr):
 
 def outs(day, teams):
     """For each team playing: ({players on the roster but not in the projected lineup}, lineup info).
-    Returns {abbr: {"missing": [(nhl_id, name, reason)], "gtd": [names], "source": str, "updated": str}}."""
+    Returns {abbr: {"missing": [(nhl_id, name, reason)], "gtd": [names], "source": str, "updated": str, "roster": [nhl_ids]}}."""
     slugs = team_slugs(day)
     result = {}
     for abbr in teams:
@@ -78,5 +78,6 @@ def outs(day, teams):
                 continue  # dressed
             reason = "IR (DailyFaceoff)" if m.norm_name(name) in ir_names else "not in lineup"
             missing.append((pid, name, reason))
-        result[abbr] = {"missing": missing, "gtd": lu["gtd"], "source": lu["source"], "updated": lu["updated"]}
+        result[abbr] = {"missing": missing, "gtd": lu["gtd"], "source": lu["source"], "updated": lu["updated"],
+                        "roster": [pid for pid, _, _ in roster]}
     return result
