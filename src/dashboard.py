@@ -1378,11 +1378,12 @@ def rankings(d=None):
                 f"<th class='num'>{tip('Adj #', TIPS['Rank adj'])}</th>{heads}"
                 f"<th class='num rk-x'>{tip('Sched', TIPS[k + ' sched'], 'tr')}</th>"
                 f"</tr></thead><tbody>{rows}</tbody></table></div>")
+    form = form_view()
     wf = split_model.WEIGHTS
     fmt = lambda side: ", ".join(f"{h} {wf[side][c] * 100:.0f}%" for c, h, *_ in sorted(RANK_STATS, key=lambda t: -wf[side][t[0]]))
     switch = ("<div class='rk-switch' role='tablist'><button type='button' data-show='offense' class='on'>Offense</button>"
-              "<button type='button' data-show='defense'>Defense</button></div>")
-    return (f"{switch}<div class='rk-wrap rk-stack'>{table('off')}{table('def')}</div>"
+              "<button type='button' data-show='defense'>Defense</button>" + ("<button type='button' data-show='form'>Form</button>" if form else "") + "</div>")
+    return (f"{switch}<div class='rk-wrap rk-stack'>{table('off')}{table('def')}{form}</div>"
             "<ul class='notes'><li><b>Total</b> = the nine stats combined, each weighted by how well it predicted a team's "
             "future goals in 2021-26 (half a season vs the other half, 320 team-halves). Offense: " + fmt("F") + ". Defense: " + fmt("A") + ".</li>"
             "<li>Stats are per game and built like the model's ratings: last season pulled a third of the way to league average "
@@ -1393,6 +1394,85 @@ def rankings(d=None):
             "<li>Colors = rank fifths, green = strong, red = weak. The #OFF / #DEF tags on the dashboard use these Total ranks.</li>"
             f"<li>Click a team to see its last {TEAM_GAMES} games this season: projected vs actual goals, the total vs the line, "
             "and the model's last pre-game call. † = backfilled day (opening line), not in the paper record.</li></ul>")
+
+
+FORM_COLS = (  # (column, header, explanation); every number is per game, + = good for the team
+    ("net", "Net", "Scoring + Allowing: goals a game better (+) or worse (−) than the model expected, both ends combined."),
+    ("scoring", "Scoring", "Goals scored a game minus what the model projected before each game. + = scoring more than expected."),
+    ("allowing", "Allowing", "Goals the model projected against minus goals actually allowed, a game. + = allowing fewer than expected."),
+    ("finishing", "Finish", "Goals scored minus expected goals (xG), a game, vs the league average. + = finishing chances better than usual (skill or hot shooting)."),
+    ("goaltending", "Goalie", "Expected goals against minus goals allowed, a game, vs the league average. + = goalies stopping more than expected."),
+)
+FORM_WINDOWS = (("season", "Season"), ("30", "Last 30"), ("14", "Last 14"), ("7", "Last 7"))
+
+
+def form_notes(x, label, f):
+    """'Right now' notes for one window of the Form view, written from that window's numbers."""
+    if x.empty:
+        return ""
+    team = lambda r: f"{e(TEAMS.get(r.team, r.team))} ({r.net:+.2f})"
+    top, bottom = x.head(3), x.tail(3).iloc[::-1]
+    items = [f"<li><b>Most above expectations</b>: {', '.join(team(r) for r in top.itertuples())}.</li>",
+             f"<li><b>Most below expectations</b>: {', '.join(team(r) for r in bottom.itertuples())}.</li>"]
+    why = []
+    for r in pd.concat([top, bottom]).itertuples():  # what drives the biggest movers
+        part = max((("goaltending", "its goalies", r.goaltending), ("finishing", "its finishing", r.finishing)), key=lambda t: abs(t[2]))
+        if abs(r.net) >= 0.3 and abs(part[2]) >= 0.5 * abs(r.net) and np.sign(part[2]) == np.sign(r.net):
+            why.append(f"{e(r.team)} is mostly {part[1]} ({part[2]:+.2f})")
+    if why:
+        items.append(f"<li><b>Why</b>: {'; '.join(why)}.</li>")
+    split = [f"{e(r.team)} (scoring {r.scoring:+.2f}, goalie {r.goaltending:+.2f})" for r in x.itertuples()
+             if abs(r.scoring) >= 0.75 and abs(r.goaltending) >= 0.75 and np.sign(r.scoring) != np.sign(r.goaltending)]
+    if split:
+        items.append(f"<li><b>Scoring and goaltending pulling opposite ways</b>: {', '.join(split)}.</li>")
+    windows = f.groupby("window").gp.sum()
+    if label != "Season" and "season" in windows and windows.get(next(w for w, l in FORM_WINDOWS if l == label)) == windows["season"]:
+        items.append("<li class='muted'>Same games as the season so far (the season is younger than this window).</li>")
+    gp = x.gp
+    items.append(f"<li class='muted'>{gp.min()}-{gp.max()} games per team in this window.</li>")
+    return f"<h4 class='fm-h'>Right now ({e(label.lower())})</h4><ul class='notes fm-notes'>{''.join(items)}</ul>"
+
+
+def form_view():
+    """Team rankings 'Form' view: over / under performance vs the model and vs xG for the season and the last 30 /
+    14 / 7 days (data/team_form.csv, written by each model run). Context only, not in the projection."""
+    path = paths.data("team_form.csv")
+    if not os.path.exists(path):
+        return ""
+    f = pd.read_csv(path)
+    if f.empty:
+        return ""
+    for c in ("finishing", "goaltending"):  # vs the league average in that window (league-wide G - xG drifts by season)
+        f[c] = f[c] - f.groupby("window")[c].transform(lambda v: np.average(v, weights=f.loc[v.index, "gp"]))
+
+    def cls(v):  # per game: +0.5 great .. -0.5 trash
+        return "t-" + ("great" if v >= 0.5 else "good" if v >= 0.2 else "mid" if v > -0.2 else "bad" if v > -0.5 else "trash")
+    tables = []
+    for win, label in FORM_WINDOWS:
+        x = f[f.window == win].sort_values("net", ascending=False).reset_index(drop=True)
+        rows = "".join(
+            f"<tr class='rk-row'><td class='num rk-x' data-k='{i + 1}'>{i + 1}</td><td class='tm' data-k='{e(r.team)}'>{logo(r.team, 26)}<b>{e(r.team)}</b></td>"
+            + "".join(f"<td class='num {cls(getattr(r, c))}' data-k='{-getattr(r, c):.4f}'>{'<b>' if c == 'net' else ''}{getattr(r, c):+.2f}{'</b>' if c == 'net' else ''}</td>"
+                      for c, _, _ in FORM_COLS)
+            + f"<td class='num muted' data-k='{-r.gp}'>{r.gp}</td></tr>"
+            for i, r in enumerate(x.itertuples()))
+        heads = "".join(f"<th class='num'>{tip(h, ex, 'tr' if j > 2 else '')}</th>" for j, (_, h, ex) in enumerate(FORM_COLS))
+        tables.append(f"<div class='fm-win' data-win='{win}'{'' if win == 'season' else ' hidden'}><table class='gt rk-t fm-t' data-sort='2'><thead><tr>"
+                      f"<th class='num rk-x'>#</th><th>Team</th>{heads}<th class='num'>{tip('GP', 'Games in this window.', 'tr')}</th></tr></thead><tbody>{rows}</tbody></table>"
+                      f"{form_notes(x, label, f)}</div>")
+    sub = "<div class='fm-switch'>" + "".join(f"<button type='button' data-win='{w}'{' class=on' if w == 'season' else ''}>{lbl}</button>" for w, lbl in FORM_WINDOWS) + "</div>"
+    cols = "".join(f"<li><b>{h}</b>: {ex}</li>" for _, h, ex in FORM_COLS)
+    return (f"<div class='rk' data-kind='form' hidden><h3>Form: over / under performing</h3>{sub}{''.join(tables)}"
+            f"<h4 class='fm-h'>What the columns mean</h4><ul class='notes fm-notes'>{cols}<li>Every number is per game; + (green) = good for "
+            "that team, − (red) = bad. Click a column to sort by it.</li></ul>"
+            "<h4 class='fm-h'>How to read it</h4><ul class='notes fm-notes'>"
+            "<li><b>Context only, not in the projection.</b> Tested on 2021-26 (research/studies/recent_form.py): a team scoring above or "
+            "below the model does not keep doing it in the next games (mostly luck), and xG-based form carries over only ~7%, so the model "
+            "keeps using season-long ratings.</li>"
+            "<li><b>Finish and Goalie say why.</b> A team far above expectations mostly because of Goalie (or Finish) is riding hot "
+            "goaltending (or shooting), which usually cools off.</li>"
+            "<li><b>Small windows are noisy.</b> Over 7 days a team plays about 3 games, so Last 7 is mostly noise; Last 30 and the season "
+            "mean more.</li></ul></div>")
 
 
 def backtest():
@@ -1456,7 +1536,15 @@ SCRIPT = """<script>
     sw.querySelectorAll('button').forEach(function(b){ b.classList.toggle('on', b.dataset.show === k); b.setAttribute('aria-selected', b.dataset.show === k); });
   }
   sw.addEventListener('click', function(e){ var b = e.target.closest('button'); if (!b) return; show(b.dataset.show); history.replaceState(null, '', '#' + b.dataset.show); });
-  show(location.hash === '#defense' ? 'defense' : 'offense');
+  show(location.hash === '#defense' ? 'defense' : location.hash === '#form' && document.querySelector('.rk[data-kind="form"]') ? 'form' : 'offense');
+})();
+(function(){  // Form view: Season / Last 30 / 14 / 7 days
+  var sw = document.querySelector('.fm-switch'); if (!sw) return;
+  sw.addEventListener('click', function(e){
+    var b = e.target.closest('button'); if (!b) return;
+    document.querySelectorAll('.fm-win').forEach(function(t){ t.hidden = t.dataset.win !== b.dataset.win; });
+    sw.querySelectorAll('button').forEach(function(x){ x.classList.toggle('on', x === b); });
+  });
 })();
 // one floating explanation box, placed next to the hovered/tapped label (fixed, so tables can't clip it)
 const box = document.createElement("div"); box.id = "tipbox"; document.body.appendChild(box);
@@ -1503,6 +1591,7 @@ body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 -apple-system
 .acc-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:18px;margin-top:16px}.acc-grid h3{margin:0 0 6px;font-size:15px}table.acc-t{width:100%}table.acc-t td,table.acc-t th{padding:6px 8px}
 .rk-switch{display:inline-flex;gap:4px;padding:4px;margin:0 0 14px;background:var(--ice);border:1px solid var(--line);border-radius:999px}
 .rk-switch button{font:inherit;font-size:14px;font-weight:800;padding:7px 22px;border:0;border-radius:999px;background:transparent;color:var(--muted);cursor:pointer}
+.fm-switch{display:flex;flex-wrap:wrap;gap:4px;margin:0 0 10px}.fm-switch button{font:inherit;font-size:12.5px;font-weight:700;padding:5px 12px;border:1px solid var(--line);border-radius:999px;background:transparent;color:var(--muted);cursor:pointer}.fm-switch button.on{background:var(--card);color:var(--ink);border-color:var(--muted)}.fm-note{max-width:820px}.fm-h{margin:14px 0 4px;font-size:13.5px}.fm-notes{max-width:820px;margin-top:4px}@media (max-width:760px){table.fm-t td.tm img,table.fm-t td.tm picture{display:none}table.fm-t th,table.fm-t td{padding:5px 3px!important;font-size:11.5px}table.fm-t th{white-space:normal;font-size:9px;letter-spacing:0}}
 .rk-switch button.on{background:var(--card);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.25)}
 .rk[hidden]{display:none!important}
 table.rk-t th.sortable{cursor:pointer;user-select:none}table.rk-t th.sorted{color:var(--ink)}

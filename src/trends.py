@@ -43,3 +43,29 @@ def lean(t):
         return ""
     r = float(np.average(rates, weights=weights))
     return "OVER" if r >= BASE_7PLUS + LEAN_EDGE else "UNDER" if r <= BASE_7PLUS - LEAN_EDGE else ""
+
+
+FORM_WINDOWS = (("season", None), ("30", 30), ("14", 14), ("7", 7))  # calendar days before the day, like the MLB model
+
+
+def team_form(proj, games, day, season):
+    """Over / under performance per team and window (dashboard 'Form' view, context only - not in the projection).
+    Per game: goals scored / allowed vs the model's pre-game projection (walk-forward, so no hindsight) and vs
+    expected goals (xG: finishing and goaltending). Tested Oct 13 2026 (research/studies/recent_form.py): goal
+    over/underperformance doesn't carry over; xG form carries over only ~7%."""
+    x = proj[(proj.season == season) & (proj.gameDate < int(day.replace("-", "")))].merge(games[["gameId", "hg", "ag", "hxg", "axg"]], on="gameId")
+    rows = pd.concat([
+        pd.DataFrame({"team": x.home, "gameDate": x.gameDate, "gf": x.hg, "pgf": x.lam_h, "xgf": x.hxg, "ga": x.ag, "pga": x.lam_a, "xga": x.axg}),
+        pd.DataFrame({"team": x.away, "gameDate": x.gameDate, "gf": x.ag, "pgf": x.lam_a, "xgf": x.axg, "ga": x.hg, "pga": x.lam_h, "xga": x.hxg})])
+    rows["date"] = pd.to_datetime(rows.gameDate.astype(str))
+    out = []
+    for win, days in FORM_WINDOWS:
+        w = rows if days is None else rows[rows.date >= pd.Timestamp(day) - pd.Timedelta(days=days)]
+        for t, g in w.groupby("team"):
+            out.append({"window": win, "team": t, "gp": len(g),
+                        "scoring": round((g.gf - g.pgf).mean(), 3), "allowing": round((g.pga - g.ga).mean(), 3),
+                        "finishing": round((g.gf - g.xgf).mean(), 3), "goaltending": round((g.xga - g.ga).mean(), 3)})
+    f = pd.DataFrame(out)
+    if len(f):
+        f["net"] = (f.scoring + f.allowing).round(3)
+    return f

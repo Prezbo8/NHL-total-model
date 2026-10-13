@@ -521,6 +521,10 @@ def today(day=None):
             sm.save_rankings_day(rk, day)
         except Exception as e:
             print(f"(team rankings not saved: {e})")
+        try:  # over / under performance vs the model and vs xG, season + last 30/14/7 days (dashboard 'Form', context only)
+            trends.team_form(proj, games, day, season).to_csv(paths.data("team_form.csv"), index=False)
+        except Exception as e:
+            print(f"(team form not saved: {e})")
         try:  # each team's top 5 attackers / defenders and whether they play (dashboard 'Key players')
             rosters = {t: (lineup_info.get(t) or {}).get("roster") or [p for p, _, _ in lineups.nhl_roster(t)] for t in playing}
             kp = injuries.key_players(rosters, injured, lineup_info, season, injuries.team_games_this_season(games, season),
