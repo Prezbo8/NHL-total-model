@@ -86,7 +86,7 @@ inj = injuries.fetch()
 check("ESPN injury feed reads", len(inj) > 20, f"{len(inj)} skaters")
 tg = injuries.team_games_this_season(g, 2026)
 mc = injuries.adjustments([{"team": "EDM", "name": "Connor McDavid", "pos": "C", "status": "Out"}], 2026, tg)["EDM"]
-check("McDavid out lowers EDM scoring ~5-8%", 0.92 < mc["off"] < 0.95, f"x{mc['off']:.3f}")
+check("McDavid out lowers EDM scoring ~5-10%", 0.90 < mc["off"] < 0.95, f"x{mc['off']:.3f}")  # ~9% once his current-season games count (skaters refreshed hourly)
 dtd = injuries.adjustments([{"team": "EDM", "name": "Connor McDavid", "pos": "C", "status": "Day-To-Day"}], 2026, tg)["EDM"]
 check("day-to-day is not adjusted", dtd["off"] == 1.0 and dtd["dtd"] == ["Connor McDavid"])
 gone = injuries.adjustments([{"team": "EDM", "name": "Connor McDavid", "pos": "C", "status": "Out"}], 2026, {"EDM": 82})["EDM"]

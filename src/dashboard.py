@@ -770,7 +770,7 @@ def day_table(g):
         mu += f"<details class='mu-why'><summary>Key players: top 5 attackers &amp; defenders</summary>{kpt}</details>" if kpt else ""
         ctx = f"<div class='why-text'>{mu}{reasoning(r, flagged)}</div>"
         mcards.append(mobile_card(r, final, callpill, st, f"{vs} {outcome}" if final_day else ln,
-                                  breakdown_cells, cls, ranks, kpt))
+                                  breakdown_cells, cls, ranks, key_players(r, kp, phone=True)))
         away = team("away", r.away, r.proj_away, r.away_score if final else None) + game + detail("away")
         home = team("home", r.home, r.proj_home, r.home_score if final else None) + detail("home")
         body.append(f"<tbody class='game {cls}'><tr class='away'>{away}</tr><tr class='home'>{home}</tr>"
@@ -806,7 +806,7 @@ def mobile_card(r, final, callpill, st, status, breakdown_cells, cls, ranks, kpt
             f"{team('away', r.away, r.proj_away, r.away_score if final else None)}"
             f"{team('home', r.home, r.proj_home, r.home_score if final else None)}"
             f"<div class='mc-sum'>{total} · P(7+) <b>{r.p7:.0%}</b></div>{bd}"
-            f"<details class='mc-why'><summary>Why this call</summary><div class='why-text'>{matchup(r)}"
+            f"<details class='mc-why'><summary>Why this call</summary><div class='why-text'>{matchup(r, phone=True)}"
             + (f"<details class='mu-why'><summary>Key players: top 5 attackers &amp; defenders</summary>{kpt}</details>" if kpt else "")
             + f"{reasoning(r, bool(r.flag))}</div></details></article>")
 
@@ -1049,7 +1049,7 @@ def load_rankings(day=None):
     return r
 
 
-def matchup(r):
+def matchup(r, phone=False):
     """Matchup table for the why section: each team's attack (OFF) vs the opponent's defense (OPP DEF) and the goals
     the model projects from it, for 5-on-5 and the power play. Ratings are goals a game vs an average opponent with the
     rank of 32 underneath, as of game day, colored for that team's scoring (top attack / weak opposing defense = green)."""
@@ -1081,6 +1081,17 @@ def matchup(r):
             + "".join(f"<th class='{'mu-g' if k in ('5v5 OFF', 'PP OFF') else ''}'>{tip(lbl, TIPS[k])}</th>"
                       for lbl, k in (("OFF", "5v5 OFF"), ("OPP DEF", "5v5 OPP DEF"), ("Proj", "5v5"),
                                      ("OFF", "PP OFF"), ("OPP DEF", "PP OPP DEF"), ("Proj", "PP"))) + "</tr>")
+    if phone:  # stacked: 5-on-5 table, then power play table (no sideways scrolling on an iPhone)
+        out = []
+        for name, unit, kind, k in (("5-on-5", "ev", "ev", "5v5"), ("Power play", "pp", "pp", "PP")):
+            body = "".join(f"<tr><td class='mu-tm'>{logo(me, 20)}<b>{e(me)}</b></td>{cell(me, f'gf_{unit}', ' mu-g')}"
+                           f"{cell(op, f'ga_{unit}')}{proj(side, kind)}</tr>"
+                           for side, me, op in (("away", r.away, r.home), ("home", r.home, r.away)))
+            hd = (f"<tr class='mu-sec'><th class='mu-tm' rowspan='2'>{tip('Team', TIPS['Unit ranks'], 'tl')}</th>"
+                  f"<th class='mu-g' colspan='3'>{name}</th></tr><tr><th class='mu-g'>{tip('OFF', TIPS[f'{k} OFF'])}</th>"
+                  f"<th>{tip('OPP DEF', TIPS[f'{k} OPP DEF'])}</th><th>{tip('Proj', TIPS[k])}</th></tr>")
+            out.append(f"<div class='mu-box'><table class='mu-t'><thead>{hd}</thead><tbody>{body}</tbody></table></div>")
+        return f"<div class='mu mu-phone'>{''.join(out)}</div>"
     return f"<div class='mu'><div class='mu-box'><table class='mu-t'><thead>{head}</thead><tbody>{rows}</tbody></table></div></div>"
 
 
@@ -1104,7 +1115,7 @@ def load_key_players():
         return json.load(f)
 
 
-def key_players(r, kp):
+def key_players(r, kp, phone=False):
     """Key players table for the why section: each team's top 5 attackers and top 5 defenders, what the model
     takes off if he sits and whether he plays tonight. Only for the slate the last model run saved."""
     teams = kp.get("teams", {}) if kp.get("date") == r.date else {}
@@ -1136,6 +1147,16 @@ def key_players(r, kp):
         return (f"<td class='kp-n mu-g{' kp-gone' if p['status'] == 'out' else ''}'{fill}>{e(p['name'])}"
                 f" <span class='kp-pos'>{e(p['pos'])}</span></td><td class='mu-v'{fill}>{eff}</td>"
                 f"<td{fill}><span class='kp-st {cls}'>{label}</span></td>")
+    if phone:  # stacked: attackers table, then defenders table; team as a header row (no sideways scrolling)
+        out = []
+        for side, title, key in (("off", "Top 5 attackers", "KP attack"), ("def", "Top 5 defenders", "KP defense")):
+            body = "".join(f"<tr class='kp-team'><td colspan='3'>{logo(me, 18)}<b>{e(me)}</b></td></tr>"
+                           + "".join(f"<tr>{cells(p, side, fills[me])}</tr>" for p in teams[me][side])
+                           for me in (r.away, r.home))
+            hd = (f"<tr class='mu-sec'><th colspan='3'>{title}</th></tr><tr><th class='mu-g'>Player</th>"
+                  f"<th>{tip('If out', TIPS[key])}</th><th>Tonight</th></tr>")
+            out.append(f"<div class='mu-box'><table class='mu-t kp-t'><thead>{hd}</thead><tbody>{body}</tbody></table></div>")
+        return f"<div class='mu mu-phone'>{''.join(out)}</div><p class='muted small kp-note'>{KP_DEFENSE_NOTE}</p>"
     rows = []
     for me in (r.away, r.home):
         t, fill = teams[me], fills[me]
@@ -1463,7 +1484,7 @@ body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 -apple-system
 @media (max-width:600px){.lastrun{position:static;text-align:left;margin-top:8px}}
 .why-text .tt{display:block;margin:3px 0;padding-left:10px;border-left:3px solid var(--line)}
 .mcards{display:none}
-.rk-tag{margin-left:6px;font-size:10px;font-weight:700;color:var(--muted);white-space:nowrap}.mu{margin:4px 0 10px;overflow-x:auto}.mu-box{display:inline-block;border:3px solid color-mix(in srgb,var(--muted) 60%,transparent);border-radius:10px;overflow:hidden;background:var(--card)}details.mu-why{margin:0 0 8px}details.mu-why>summary{cursor:pointer;font-weight:700;font-size:12.5px;color:var(--accent)}table.mu-t{border-collapse:separate;border-spacing:0;width:auto;font-size:12px;font-variant-numeric:tabular-nums;background:var(--card)}table.mu-t th,table.mu-t td,.gt tr.whyrow table.mu-t th,.gt tr.whyrow table.mu-t td{padding:5px 12px!important;text-align:center!important;white-space:nowrap;border:none!important;border-radius:0!important;height:auto!important;vertical-align:middle!important;line-height:1.25!important;box-shadow:inset -1px 0 0 var(--line),inset 0 -1px 0 var(--line)}table.mu-t tbody tr:last-child td{box-shadow:inset -1px 0 0 var(--line)}table.mu-t tr>*:last-child{box-shadow:inset 0 -1px 0 var(--line)}table.mu-t tbody tr:last-child td:last-child{box-shadow:none}table.mu-t th{font-size:10px;color:var(--muted);font-weight:800;text-transform:uppercase;letter-spacing:.05em;background:var(--ice)}table.mu-t tr.mu-sec th{color:var(--ink);font-size:10.5px}.gt tr.whyrow table.mu-t .mu-g,table.mu-t .mu-g{box-shadow:inset 8px 0 0 var(--muted),inset -1px 0 0 var(--line),inset 0 -1px 0 var(--line);padding-left:20px!important}.gt table.mu-t tbody tr:last-child td.mu-g,table.mu-t tbody tr:last-child td.mu-g{box-shadow:inset 8px 0 0 var(--muted),inset -1px 0 0 var(--line)}table.mu-t .mu-tm,.gt tr.whyrow table.mu-t .mu-tm{text-align:left!important;min-width:64px}table.mu-t td.mu-tm b{font-size:13.5px;vertical-align:middle}table.mu-t td.mu-tm img,table.mu-t td.mu-tm picture{vertical-align:middle;margin-right:6px}table.mu-t td.mu-v{min-width:62px;line-height:1.15}table.mu-t td.mu-v b{display:block;font-size:13.5px}.mu-rk{display:block;font-size:9.5px;font-weight:600;opacity:.75}table.mu-t td.mu-p b{font-size:14px}table.kp-t td.kp-n,.gt tr.whyrow table.kp-t td.kp-n{text-align:left!important;font-weight:600}.kp-note{margin:4px 0 8px;max-width:760px}.kp-pos{font-size:9.5px;font-weight:700;opacity:.75}td.kp-gone{text-decoration:line-through}.kp-st{font-size:10.5px;font-weight:800;padding:2px 7px;border-radius:999px;white-space:nowrap}.kp-in{opacity:.85}.kp-out{background:#dc2626;color:#fff;box-shadow:0 0 0 1.5px #fff}.kp-q{background:#eab308;color:#111;box-shadow:0 0 0 1.5px #fff}table.kp-t tr.kp-first>*{box-shadow:inset 0 3px 0 color-mix(in srgb,var(--muted) 60%,transparent),inset -1px 0 0 var(--line),inset 0 -1px 0 var(--line)}table.kp-t tr.kp-first>.mu-g{box-shadow:inset 0 3px 0 color-mix(in srgb,var(--muted) 60%,transparent),inset 8px 0 0 var(--muted),inset 0 -1px 0 var(--line)}.rk-sm{display:block;font-size:9.5px;font-weight:600;opacity:.75;line-height:1.05}.tg-ranks{font-size:12.5px;margin:0 0 4px}
+.rk-tag{margin-left:6px;font-size:10px;font-weight:700;color:var(--muted);white-space:nowrap}.mu{margin:4px 0 10px;overflow-x:auto}.mu-box{display:inline-block;border:3px solid color-mix(in srgb,var(--muted) 60%,transparent);border-radius:10px;overflow:hidden;background:var(--card)}details.mu-why{margin:0 0 8px}details.mu-why>summary{cursor:pointer;font-weight:700;font-size:12.5px;color:var(--accent)}table.mu-t{border-collapse:separate;border-spacing:0;width:auto;font-size:12px;font-variant-numeric:tabular-nums;background:var(--card)}table.mu-t th,table.mu-t td,.gt tr.whyrow table.mu-t th,.gt tr.whyrow table.mu-t td{padding:5px 12px!important;text-align:center!important;white-space:nowrap;border:none!important;border-radius:0!important;height:auto!important;vertical-align:middle!important;line-height:1.25!important;box-shadow:inset -1px 0 0 var(--line),inset 0 -1px 0 var(--line)}table.mu-t tbody tr:last-child td{box-shadow:inset -1px 0 0 var(--line)}table.mu-t tr>*:last-child{box-shadow:inset 0 -1px 0 var(--line)}table.mu-t tbody tr:last-child td:last-child{box-shadow:none}table.mu-t th{font-size:10px;color:var(--muted);font-weight:800;text-transform:uppercase;letter-spacing:.05em;background:var(--ice)}table.mu-t tr.mu-sec th{color:var(--ink);font-size:10.5px}.gt tr.whyrow table.mu-t .mu-g,table.mu-t .mu-g{box-shadow:inset 8px 0 0 var(--muted),inset -1px 0 0 var(--line),inset 0 -1px 0 var(--line);padding-left:20px!important}.gt table.mu-t tbody tr:last-child td.mu-g,table.mu-t tbody tr:last-child td.mu-g{box-shadow:inset 8px 0 0 var(--muted),inset -1px 0 0 var(--line)}table.mu-t .mu-tm,.gt tr.whyrow table.mu-t .mu-tm{text-align:left!important;min-width:64px}table.mu-t td.mu-tm b{font-size:13.5px;vertical-align:middle}table.mu-t td.mu-tm img,table.mu-t td.mu-tm picture{vertical-align:middle;margin-right:6px}table.mu-t td.mu-v{min-width:62px;line-height:1.15}table.mu-t td.mu-v b{display:block;font-size:13.5px}.mu-rk{display:block;font-size:9.5px;font-weight:600;opacity:.75}table.mu-t td.mu-p b{font-size:14px}table.kp-t td.kp-n,.gt tr.whyrow table.kp-t td.kp-n{text-align:left!important;font-weight:600}.kp-note{margin:4px 0 8px;max-width:760px}.mu-phone{overflow:visible}.mu-phone .mu-box{display:block;margin:0 0 8px}.mu-phone table.mu-t{width:100%}.mu-phone table.mu-t th,.mu-phone table.mu-t td{padding:5px 6px!important}.mu-phone table.kp-t td.kp-n{white-space:normal;font-size:12px}.mu-phone table.kp-t .mu-g,.gt tr.whyrow .mu-phone table.kp-t .mu-g,.mu-phone table.kp-t tbody tr:last-child td.mu-g{box-shadow:inset -1px 0 0 var(--line),inset 0 -1px 0 var(--line);padding-left:10px!important}.mu-phone .kp-st{font-size:10px;padding:2px 6px}table.kp-t tr.kp-team td{text-align:left!important;background:var(--ice);font-size:12.5px}table.kp-t tr.kp-team img,table.kp-t tr.kp-team picture{vertical-align:middle;margin-right:6px}.kp-pos{font-size:9.5px;font-weight:700;opacity:.75}td.kp-gone{text-decoration:line-through}.kp-st{font-size:10.5px;font-weight:800;padding:2px 7px;border-radius:999px;white-space:nowrap}.kp-in{opacity:.85}.kp-out{background:#dc2626;color:#fff;box-shadow:0 0 0 1.5px #fff}.kp-q{background:#eab308;color:#111;box-shadow:0 0 0 1.5px #fff}table.kp-t tr.kp-first>*{box-shadow:inset 0 3px 0 color-mix(in srgb,var(--muted) 60%,transparent),inset -1px 0 0 var(--line),inset 0 -1px 0 var(--line)}table.kp-t tr.kp-first>.mu-g{box-shadow:inset 0 3px 0 color-mix(in srgb,var(--muted) 60%,transparent),inset 8px 0 0 var(--muted),inset 0 -1px 0 var(--line)}.rk-sm{display:block;font-size:9.5px;font-weight:600;opacity:.75;line-height:1.05}.tg-ranks{font-size:12.5px;margin:0 0 4px}
 .b2b-sq{display:inline-block;width:9px;height:9px;background:#dc2626;border-radius:2px;margin-right:5px;vertical-align:middle}
 .acc-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:18px;margin-top:16px}.acc-grid h3{margin:0 0 6px;font-size:15px}table.acc-t{width:100%}table.acc-t td,table.acc-t th{padding:6px 8px}
 .rk-switch{display:inline-flex;gap:4px;padding:4px;margin:0 0 14px;background:var(--ice);border:1px solid var(--line);border-radius:999px}
@@ -1484,7 +1505,7 @@ table.tg-t{border-collapse:collapse;font-size:12.5px;width:auto}table.tg-t th,ta
 table.tg-t th{font-size:11px;color:var(--muted);font-weight:700;text-align:left}table.tg-t th.num,table.tg-t td.num{text-align:right}
 table.tg-t td.tm img,table.tg-t td.tm picture{vertical-align:middle;margin:0 4px}
 @media (max-width:760px){table.tg-t{font-size:11px}table.tg-t th,table.tg-t td{padding:3px 5px}}
-@media (max-width:760px){.gtable,.legend.tbl-only{display:none}.mcards{display:grid;gap:12px}}
+@media (max-width:760px){.gtable,.legend.tbl-only{display:none}.mcards{display:grid;gap:12px;grid-template-columns:minmax(0,1fr)}.mc{min-width:0}}
 .mc{background:var(--card);border:2px solid color-mix(in srgb,var(--muted) 45%,transparent);border-radius:12px;padding:12px 12px 8px}
 .mc.flagged{border-color:var(--gold)}
 .mc-top{display:flex;align-items:center;justify-content:space-between;gap:8px}.mc-top .gtime{font-size:15px}
