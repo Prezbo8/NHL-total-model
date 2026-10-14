@@ -135,6 +135,31 @@ def key_players(rosters, injured, lineup_info, season, team_games, top=5, team_g
     return out
 
 
+def lineup_changes(baseline, kp, old_changes, at, frozen=()):
+    """Top-3 attackers whose status differs from the day's first run (baseline: {team: [{name, status, impact}]}).
+    {team: [{name, from, to, impact, at}]}; 'at' = when the change was first seen (kept while it lasts). A player back
+    to his first-run status drops off. Teams in frozen (game started) keep their old entries."""
+    out = {}
+    for team, v in kp.items():
+        if team in frozen:
+            if old_changes.get(team):
+                out[team] = old_changes[team]
+            continue
+        now = {p["name"]: p["status"] for side in ("off", "def") for p in v[side]}
+        seen = {c["name"]: c for c in old_changes.get(team, [])}
+        ch = []
+        for b in baseline.get(team, []):
+            st = now.get(b["name"])
+            if st is None or st == b["status"]:
+                continue
+            prev = seen.get(b["name"])
+            ch.append({"name": b["name"], "from": b["status"], "to": st, "impact": b["impact"],
+                       "at": prev["at"] if prev and prev["to"] == st else at})
+        if ch:
+            out[team] = ch
+    return out
+
+
 def team_gp(teams, season):
     """{(team, NHL id): games played for that team this season} from NHL club stats (a traded player has a row per team)."""
     out = {}

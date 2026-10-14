@@ -534,9 +534,14 @@ def today(day=None):
             now_utc = pd.Timestamp.now(tz="UTC")
             started = {t["abbrev"] for g in todays if pd.Timestamp(g["startTimeUTC"]) <= now_utc for t in (g["homeTeam"], g["awayTeam"])}
             kp = {t: old["teams"][t] if t in started and t in old.get("teams", {}) else v for t, v in kp.items()}  # frozen at puck drop
+            at = pd.Timestamp.now(tz="America/New_York").strftime("%-I:%M %p")
+            base = old.get("baseline") or {"at": at, "teams": {}}  # the day's first run: top-3 attackers and their status
+            for t, v in kp.items():
+                base["teams"].setdefault(t, [{k: p_[k] for k in ("name", "status", "impact")} for p_ in v["off"][:3]])
+            changes = injuries.lineup_changes(base["teams"], kp, old.get("changes", {}), at, frozen=started)
             os.makedirs(os.path.dirname(path), exist_ok=True)
             with open(path, "w") as f:
-                json.dump({"date": day, "teams": kp}, f, separators=(",", ":"))
+                json.dump({"date": day, "teams": kp, "baseline": base, "changes": changes}, f, separators=(",", ":"))
         except Exception as e:
             print(f"(key players not saved: {e})")
         try:  # games already under way: record who actually started (NHL box score)
