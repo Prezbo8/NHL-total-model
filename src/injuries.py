@@ -58,7 +58,7 @@ def adjustments(injured, season, team_games, team_gp=None):
     team_gp: {(team, NHL id): his games for that team} (team_gp()), optional."""
     team_gp = team_gp or {}
     pt = players.player_table(season)
-    pt["key"] = pt.name.map(m.norm_name)
+    pt["key"], pt["key2"] = pt.name.map(m.norm_name), pt.name.map(m.squash_name)
     out = {}
     for r in injured:
         o = out.setdefault(r["team"], {"off": 1.0, "def": 1.0, "out": [], "dtd": []})
@@ -66,7 +66,7 @@ def adjustments(injured, season, team_games, team_gp=None):
             if r["status"] == "Day-To-Day":
                 o["dtd"].append(r["name"])
             continue
-        cand = pt[pt.playerId == r["id"]] if r.get("id") else pt[pt.key == m.norm_name(r["name"])]
+        cand = pt[pt.playerId == r["id"]] if r.get("id") else pt[(pt.key == m.norm_name(r["name"])) | (pt.key2 == m.squash_name(r["name"]))]
         if len(cand) > 1:  # same name (two Sebastian Ahos): prefer the one on this team
             same = cand[(cand.team_cur == r["team"]) | (cand.team_last == r["team"]) | (cand.team == r["team"])]
             cand = same if len(same) else cand
@@ -101,24 +101,28 @@ def _effect(p, team, n, gp=None):
     return share * (p.f - players.REPLACEMENT[0]) * in_rating, share * (players.REPLACEMENT[1] - p.a) * in_rating
 
 
-def key_players(rosters, injured, lineup_info, season, team_games, top=5, team_gp=None):
+def key_players(rosters, injured, lineup_info, season, team_games, top=5, team_gp=None, names=None):
     """Each team's top `top` attackers and defenders, ranked by the model's effect if he sits (as adjustments() would
     remove it: offense = his team's goals, defense = the opponent's goals), with tonight's status.
     rosters: {team: [NHL ids]}; players on the injury list count even when off the roster (IR).
+    names: {NHL id: NHL name} (shown instead of MoneyPuck's, which drops accented letters).
     Returns {team: {"off": [{name, pos, impact, status}], "def": [...]}}; status = in / out / dtd / gtd / '' (no lineup)."""
+    names = names or {}
     pt = players.player_table(season)
-    pt["key"] = pt.name.map(m.norm_name)
+    pt["key"], pt["key2"] = pt.name.map(m.norm_name), pt.name.map(m.squash_name)
     out = {}
     for team, ids in rosters.items():
         hurt = [r for r in injured if r["team"] == team]
         by_id = {r["id"]: r for r in hurt if r.get("id")}
         by_name = {m.norm_name(r["name"]): r for r in hurt}
-        d = pt[pt.playerId.isin(set(ids) | set(by_id)) | (pt.key.isin(by_name) & ((pt.team_cur == team) | (pt.team_last == team)))]
+        by_name2 = {m.squash_name(r["name"]): r for r in hurt}
+        d = pt[pt.playerId.isin(set(ids) | set(by_id))
+               | ((pt.key.isin(by_name) | pt.key2.isin(by_name2)) & ((pt.team_cur == team) | (pt.team_last == team)))]
         d = d.drop_duplicates("playerId")
         n = team_games.get(team, 0)
 
         def row(p, k):
-            r = by_id.get(p.playerId) or by_name.get(p.key)
+            r = by_id.get(p.playerId) or by_name.get(p.key) or by_name2.get(p.key2)
             if r is None:
                 status = "in" if team in lineup_info else ""
             elif r["status"] in OUT_STATUSES:
@@ -129,7 +133,7 @@ def key_players(rosters, injured, lineup_info, season, team_games, top=5, team_g
             if r is not None and r.get("tag") == "scratch":
                 eff = max(eff, 0.0)  # same rule as adjustments(): a scratch is never a boost
             tag = (r or {}).get("tag") or ("IR" if r is not None and r["status"] == "Injured Reserve" else "")
-            return {"name": p["name"], "pos": p.position, "impact": round(SCALE * eff, 4), "status": status, "tag": tag}
+            return {"name": names.get(p.playerId) or p["name"], "pos": p.position, "impact": round(SCALE * eff, 4), "status": status, "tag": tag}
         out[team] = {side: sorted((row(p, k) for _, p in d.iterrows()), key=lambda x: -x["impact"])[:top]
                      for k, side in ((0, "off"), (1, "def"))}
     return out
@@ -138,7 +142,8 @@ def key_players(rosters, injured, lineup_info, season, team_games, top=5, team_g
 def lineup_changes(baseline, kp, old_changes, at, frozen=()):
     """Top-3 attackers whose status differs from the day's first run (baseline: {team: [{name, status, impact}]}).
     {team: [{name, from, to, impact, at}]}; 'at' = when the change was first seen (kept while it lasts). A player back
-    to his first-run status drops off. Teams in frozen (game started) keep their old entries."""
+    to his first-run status drops off. Teams in frozen (game started) keep their old entries. 'in' and '' (no lineup
+    posted yet, not injured) count as the same: a missing DailyFaceoff lineup is not a lineup change."""
     out = {}
     for team, v in kp.items():
         if team in frozen:
@@ -150,7 +155,7 @@ def lineup_changes(baseline, kp, old_changes, at, frozen=()):
         ch = []
         for b in baseline.get(team, []):
             st = now.get(b["name"])
-            if st is None or st == b["status"]:
+            if st is None or (st or "in") == (b["status"] or "in"):
                 continue
             prev = seen.get(b["name"])
             ch.append({"name": b["name"], "from": b["status"], "to": st, "impact": b["impact"],

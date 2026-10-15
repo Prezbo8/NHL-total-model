@@ -297,6 +297,12 @@ def norm_name(s):
     return " ".join(s.replace(".", "").lower().split())
 
 
+def squash_name(s):
+    """MoneyPuck drops accented letters ('Tim Stützle' -> 'Tim Sttzle'): the same key for both spellings."""
+    s = str(s).encode("ascii", "ignore").decode()
+    return " ".join(s.replace(".", "").lower().split())
+
+
 def dailyfaceoff(day):
     """Projected/confirmed starters: {normalized team name: (goalie name, status)}"""
     html = urllib.request.urlopen(fetch(f"https://www.dailyfaceoff.com/starting-goalies/{day}")).read().decode()
@@ -526,9 +532,10 @@ def today(day=None):
         except Exception as e:
             print(f"(team form not saved: {e})")
         try:  # each team's top 5 attackers / defenders and whether they play (dashboard 'Key players')
-            rosters = {t: (lineup_info.get(t) or {}).get("roster") or [p for p, _, _ in lineups.nhl_roster(t)] for t in playing}
-            kp = injuries.key_players(rosters, injured, lineup_info, season, injuries.team_games_this_season(games, season),
-                                      team_gp=team_gp)
+            rost = {t: (lineup_info.get(t) or {}).get("names") or {p: n for p, n, _ in lineups.nhl_roster(t)} for t in playing}
+            kp = injuries.key_players({t: list(v) for t, v in rost.items()}, injured, lineup_info, season,
+                                      injuries.team_games_this_season(games, season), team_gp=team_gp,
+                                      names={p: n for v in rost.values() for p, n in v.items()})
             path = paths.data(f"key_players/{day}.json")  # one file per day, kept for the results pages
             old = json.load(open(path)) if os.path.exists(path) else {}
             now_utc = pd.Timestamp.now(tz="UTC")

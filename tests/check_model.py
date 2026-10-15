@@ -91,6 +91,11 @@ dtd = injuries.adjustments([{"team": "EDM", "name": "Connor McDavid", "pos": "C"
 check("day-to-day is not adjusted", dtd["off"] == 1.0 and dtd["dtd"] == ["Connor McDavid"])
 gone = injuries.adjustments([{"team": "EDM", "name": "Connor McDavid", "pos": "C", "status": "Out"}], 2026, {"EDM": 82})["EDM"]
 check("no double counting for long absences", gone["off"] > mc["off"], f"82 games without him -> x{gone['off']:.3f}")
+ts = injuries.adjustments([{"team": "OTT", "name": "Tim Stützle", "pos": "C", "status": "Out"}], 2026, tg)["OTT"]
+check("accented names match MoneyPuck's spelling (Stützle out is adjusted)", ts["off"] < 0.97, f"x{ts['off']:.3f}")
+bl = {"COL": [{"name": "A", "status": "in", "impact": 0.05}, {"name": "B", "status": "out", "impact": 0.03}]}
+lc = injuries.lineup_changes(bl, {"COL": {"off": [{"name": "A", "status": ""}, {"name": "B", "status": "in"}], "def": []}}, {}, "1:00 PM")
+check("lineup flag: no lineup posted is not a change, out -> in is", [c["name"] for c in lc.get("COL", [])] == ["B"])
 
 print("odds")
 rows = odds.day_games(datetime.date(2026, 10, 1), 15)
