@@ -52,6 +52,46 @@ def fetch():
     return rows
 
 
+def _subseq(a, b):
+    it = iter(b)
+    return all(c in it for c in a)
+
+
+def _loose(pt, name, team, pos=""):
+    """Fallback name match on this team only: same first initial + same last name, allowing letters MoneyPuck dropped
+    ('Oskar Bck' = ESPN 'Oskar Back') or a different first name ('Joseph Veleno' = 'Joe Veleno'). One match or none."""
+    k = m.norm_name(name).split()
+    if len(k) < 2:
+        return pt.iloc[0:0]
+    t = pt[(pt.team_cur == team) | (pt.team_last == team)]
+    ok = [i for i, key in zip(t.index, t.key) if key.split() and key[0] == k[0][0]
+          and (key.split()[-1] == k[-1] or (_subseq(key.split()[-1], k[-1]) and len(k[-1]) - len(key.split()[-1]) <= 3))]
+    if not ok:  # new team, not in MoneyPuck's data yet: league-wide, same first name + dropped letters only
+        ok = [i for i, key in zip(pt.index, pt.key) if key.split()[:1] == k[:1] and len(key.split()) == len(k)
+              and key.split()[-1] != k[-1] and _subseq(key.split()[-1], k[-1]) and len(k[-1]) - len(key.split()[-1]) <= 3]
+    return _by_pos(pt.loc[ok], pos) if ok else pt.iloc[0:0]
+
+
+def _by_pos(cand, pos):
+    """Several candidates (VAN has two Elias Petterssons): keep the one at the listed position (D vs forward), if unique."""
+    if len(cand) > 1 and pos:
+        cand = cand[(cand.position == "D") == (pos == "D")]
+    return cand if len(cand) == 1 else cand.iloc[0:0]
+
+
+def resolve(pt, r):
+    """The player_table row for an injury-list row {team, name, id?}, or None. pt needs key / key2 columns."""
+    cand = pt[pt.playerId == r["id"]] if r.get("id") else pt[(pt.key == m.norm_name(r["name"])) | (pt.key2 == m.squash_name(r["name"]))]
+    if len(cand) > 1:  # same name (two Sebastian Ahos): prefer the one on this team
+        same = cand[(cand.team_cur == r["team"]) | (cand.team_last == r["team"]) | (cand.team == r["team"])]
+        cand = same if len(same) else cand
+        if len(cand) > 1 and r.get("pos"):
+            cand = _by_pos(cand, r["pos"]) if len(_by_pos(cand, r["pos"])) else cand
+    if cand.empty and not r.get("id"):
+        cand = _loose(pt, r["name"], r["team"], r.get("pos", ""))
+    return None if cand.empty else cand.iloc[0]
+
+
 def adjustments(injured, season, team_games, team_gp=None):
     """{team: {"off": mult on its goals, "def": mult on its opponents' goals, "out": [(name, goals)], "dtd": [names]}}
     team_games: {team: games played this season} (for how much of each player is in the rating);
@@ -59,20 +99,19 @@ def adjustments(injured, season, team_games, team_gp=None):
     team_gp = team_gp or {}
     pt = players.player_table(season)
     pt["key"], pt["key2"] = pt.name.map(m.norm_name), pt.name.map(m.squash_name)
-    out = {}
+    out, counted = {}, set()
     for r in injured:
         o = out.setdefault(r["team"], {"off": 1.0, "def": 1.0, "out": [], "dtd": []})
         if r["status"] not in OUT_STATUSES:
             if r["status"] == "Day-To-Day":
                 o["dtd"].append(r["name"])
             continue
-        cand = pt[pt.playerId == r["id"]] if r.get("id") else pt[(pt.key == m.norm_name(r["name"])) | (pt.key2 == m.squash_name(r["name"]))]
-        if len(cand) > 1:  # same name (two Sebastian Ahos): prefer the one on this team
-            same = cand[(cand.team_cur == r["team"]) | (cand.team_last == r["team"]) | (cand.team == r["team"])]
-            cand = same if len(same) else cand
-        if cand.empty:
+        p = resolve(pt, r)
+        if p is None:
             continue  # no NHL history since 2020 (prospect/depth player): nothing to remove
-        p = cand.iloc[0]
+        if p.playerId in counted:  # same player listed twice under different spellings (ESPN / Rotowire / lineup)
+            continue
+        counted.add(p.playerId)
         d_off, d_def = _effect(p, r["team"], team_games.get(r["team"], 0), team_gp.get((r["team"], p.playerId)))
         if r.get("tag") == "scratch":
             # a healthy scratch is replaced by a normal roster player, not a better one: only count
@@ -113,16 +152,17 @@ def key_players(rosters, injured, lineup_info, season, team_games, top=5, team_g
     out = {}
     for team, ids in rosters.items():
         hurt = [r for r in injured if r["team"] == team]
-        by_id = {r["id"]: r for r in hurt if r.get("id")}
-        by_name = {m.norm_name(r["name"]): r for r in hurt}
-        by_name2 = {m.squash_name(r["name"]): r for r in hurt}
-        d = pt[pt.playerId.isin(set(ids) | set(by_id))
-               | ((pt.key.isin(by_name) | pt.key2.isin(by_name2)) & ((pt.team_cur == team) | (pt.team_last == team)))]
+        by_id = {}
+        for r in hurt:  # each injury row -> one NHL id (same matching as adjustments: twins, nicknames, accents)
+            p_ = resolve(pt, r)
+            if p_ is not None and (p_.playerId not in by_id or (r["status"] in OUT_STATUSES and by_id[p_.playerId]["status"] not in OUT_STATUSES)):
+                by_id[p_.playerId] = r  # listed twice (ESPN day-to-day + not in lineup): 'out' wins, as in adjustments()
+        d = pt[pt.playerId.isin(set(ids) | set(by_id))]
         d = d.drop_duplicates("playerId")
         n = team_games.get(team, 0)
 
         def row(p, k):
-            r = by_id.get(p.playerId) or by_name.get(p.key) or by_name2.get(p.key2)
+            r = by_id.get(p.playerId)
             if r is None:
                 status = "in" if team in lineup_info else ""
             elif r["status"] in OUT_STATUSES:

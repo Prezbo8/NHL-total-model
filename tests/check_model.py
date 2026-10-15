@@ -93,6 +93,21 @@ gone = injuries.adjustments([{"team": "EDM", "name": "Connor McDavid", "pos": "C
 check("no double counting for long absences", gone["off"] > mc["off"], f"82 games without him -> x{gone['off']:.3f}")
 ts = injuries.adjustments([{"team": "OTT", "name": "Tim Stützle", "pos": "C", "status": "Out"}], 2026, tg)["OTT"]
 check("accented names match MoneyPuck's spelling (Stützle out is adjusted)", ts["off"] < 0.97, f"x{ts['off']:.3f}")
+lo = injuries.adjustments([{"team": "NYR", "name": "Joe Veleno", "status": "Out"}, {"team": "DAL", "name": "Oskar Back", "status": "Out"}], 2026, tg)
+check("nickname / dropped-letter names match on the same team (Joe = Joseph Veleno, Back = Bck)",
+      [n for t in ("NYR", "DAL") for n, _, _ in lo[t]["out"]] == ["Joe Veleno", "Oskar Back"])
+tw = injuries.adjustments([{"team": "VAN", "name": "Elias N. Pettersson", "pos": "D", "status": "Out"}], 2026, tg)["VAN"]
+tf = injuries.adjustments([{"team": "VAN", "name": "Elias Pettersson", "pos": "C", "status": "Out"}], 2026, tg)["VAN"]
+check("two Elias Petterssons (VAN): the listed position picks the right one", tf["off"] < tw["off"], f"C x{tf['off']:.3f}, D x{tw['off']:.3f}")
+import lineups
+_lu = (lineups.team_slugs, lineups.projected_lineup, lineups.nhl_roster)
+lineups.team_slugs = lambda day: {"EDM": "x"}
+lineups.projected_lineup = lambda slug: {"dressed": [(m.norm_name("Matthew Savoie"), 93, "Matthew Savoie")]
+                                         + [(f"player {i}", i, f"Player {i}") for i in range(17)], "ir": [], "gtd": [], "source": "", "updated": ""}
+lineups.nhl_roster = lambda t: [(1, "Matt Savoie", 22), (2, "Player 3", 3), (3, "Zach Hyman", 18)]
+lo2 = lineups.outs("2026-10-15", ["EDM"])["EDM"]["missing"]
+lineups.team_slugs, lineups.projected_lineup, lineups.nhl_roster = _lu
+check("DailyFaceoff nickname (Matthew = NHL Matt Savoie) is not a scratch", [n for _, n, _ in lo2] == ["Zach Hyman"], str(lo2))
 bl = {"COL": [{"name": "A", "status": "in", "impact": 0.05}, {"name": "B", "status": "out", "impact": 0.03}]}
 lc = injuries.lineup_changes(bl, {"COL": {"off": [{"name": "A", "status": ""}, {"name": "B", "status": "in"}], "def": []}}, {}, "1:00 PM")
 check("lineup flag: no lineup posted is not a change, out -> in is", [c["name"] for c in lc.get("COL", [])] == ["B"])
