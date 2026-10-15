@@ -75,11 +75,13 @@ def outs(day, teams):
         initial_last = {(n[0], n.split()[-1]) for n, _, _ in lu["dressed"] if n}  # 'Matthew Savoie' = NHL 'Matt Savoie'
         loose = lambda n: bool(n) and (n[0], n.split()[-1]) in initial_last
         ir_names = {n for n, _, _ in lu["ir"]}
+        ir_initial_last = {(n[0], n.split()[-1]) for n in ir_names if n}
         missing = []
         for pid, name, num in roster:
             if m.norm_name(name) in names or (num is not None and num in numbers) or loose(m.norm_name(name)):
                 continue  # dressed
-            reason = "IR (DailyFaceoff)" if m.norm_name(name) in ir_names else "not in lineup"
+            k = m.norm_name(name)
+            reason = "IR (DailyFaceoff)" if k in ir_names or (k and (k[0], k.split()[-1]) in ir_initial_last) else "not in lineup"
             missing.append((pid, name, reason))
         result[abbr] = {"missing": missing, "gtd": lu["gtd"], "source": lu["source"], "updated": lu["updated"],
                         "roster": [pid for pid, _, _ in roster], "names": {pid: name for pid, name, _ in roster}}
