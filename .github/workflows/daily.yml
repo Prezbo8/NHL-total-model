@@ -93,15 +93,25 @@ jobs:
             echo "no changes to push"
           else
             git commit -m "daily update $(date '+%Y-%m-%d %H:%M %Z')"
-            git pull --rebase
-            git push
+            # GitHub sometimes rejects a push (500 Internal Server Error, Oct 14 2026): pull + push again until it lands
+            for i in 1 2 3 4 5 6 7 8; do
+              if git pull --rebase && git push; then exit 0; fi
+              git rebase --abort 2>/dev/null || true
+              echo "push failed (try $i of 8), retrying in $((i * 20)) s"; sleep $((i * 20))
+            done
+            echo "::error::push failed 8 times (the retry step below starts a fresh run)"; exit 1
           fi
 
       - name: Rebuild GitHub Pages
         if: ${{ !cancelled() && steps.gate.outputs.run == 'true' }}
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh api -X POST "repos/${{ github.repository }}/pages/builds" || echo "pages build request failed (site may still update on its own)"
+        run: |
+          for i in 1 2 3 4 5; do
+            gh api -X POST "repos/${{ github.repository }}/pages/builds" >/dev/null && { echo "pages build requested"; exit 0; }
+            echo "pages build request failed (try $i of 5)"; sleep 30
+          done
+          echo "pages build request failed 5 times (site may still update on its own from the push)"
 
       - name: Alert on data sources failing 2+ runs in a row (GitHub issue; closes itself on recovery)
         if: ${{ !cancelled() && steps.gate.outputs.run == 'true' }}
@@ -118,14 +128,37 @@ jobs:
             gh workflow run monthly.yml -R "${{ github.repository }}" || echo "couldn't start the monthly check"
           fi
 
-      - name: Retry in 5 minutes if a source is still failing (until it works)
-        if: ${{ !cancelled() && steps.gate.outputs.run == 'true' }}
+      - name: Restart the keeper if it isn't running (it starts these runs on time)
+        if: ${{ always() && steps.gate.outputs.run == 'true' }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if [ -f data/.retry ]; then
-            echo "still failing: $(cat data/.retry)"; sleep 300
-            gh workflow run daily.yml -R "${{ github.repository }}" -f trigger=retry
+          n=$(gh run list -R "${{ github.repository }}" --workflow keeper.yml --limit 20 --json status \
+              -q '[.[] | select(.status != "completed")] | length' || echo "?")
+          if [ "$n" = "0" ]; then
+            echo "keeper not running: restarting it"
+            for i in 1 2 3 4 5; do gh workflow run keeper.yml -R "${{ github.repository }}" && break; sleep 30; done
           else
-            echo "all sources OK"
+            echo "keeper running ($n)"
           fi
+
+      - name: Retry until it works (a source still failing, or any step failed / the run was cancelled)
+        if: ${{ always() && steps.gate.outputs.run == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ "${{ job.status }}" = "cancelled" ]; then
+            echo "run was cancelled: starting a fresh one"; WAIT=0
+          elif [ "${{ job.status }}" != "success" ]; then
+            echo "a step failed: starting a fresh run in 5 minutes"; WAIT=300
+          elif [ -f data/.retry ]; then
+            echo "still failing: $(cat data/.retry)"; WAIT=300
+          else
+            echo "all OK"; exit 0
+          fi
+          sleep $WAIT
+          for i in 1 2 3 4 5 6 7 8 9 10; do
+            gh workflow run daily.yml -R "${{ github.repository }}" -f trigger=retry && exit 0
+            echo "couldn't start the retry run (try $i of 10)"; sleep 30
+          done
+          echo "::error::couldn't start a retry run; the next hourly run will try again"
