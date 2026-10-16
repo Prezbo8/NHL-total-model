@@ -5,7 +5,7 @@
 import os, re, json, shutil, sys, datetime, tempfile
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "src"))
 import pandas as pd
-import paper, goalies, injuries, model as m, split_model as sm, odds, grade, dashboard
+import paper, goalies, injuries, players, model as m, split_model as sm, odds, grade, dashboard
 SP = tempfile.mkdtemp(prefix="nhl-check-") + "/"
 results = []
 def check(name, ok, detail=""):
@@ -93,9 +93,11 @@ gone = injuries.adjustments([{"team": "EDM", "name": "Connor McDavid", "pos": "C
 check("no double counting for long absences", gone["off"] > mc["off"], f"82 games without him -> x{gone['off']:.3f}")
 ts = injuries.adjustments([{"team": "OTT", "name": "Tim Stützle", "pos": "C", "status": "Out"}], 2026, tg)["OTT"]
 check("accented names match MoneyPuck's spelling (Stützle out is adjusted)", ts["off"] < 0.97, f"x{ts['off']:.3f}")
-lo = injuries.adjustments([{"team": "NYR", "name": "Joe Veleno", "status": "Out"}, {"team": "DAL", "name": "Oskar Back", "status": "Out"}], 2026, tg)
+pt = players.player_table(2026)  # the name match itself (a depth player's effect can drop under the listing cutoff)
+pt["key"], pt["key2"] = pt.name.map(m.norm_name), pt.name.map(m.squash_name)
+lo = [injuries.resolve(pt, {"team": t, "name": n}) for t, n in (("NYR", "Joe Veleno"), ("DAL", "Oskar Back"))]
 check("nickname / dropped-letter names match on the same team (Joe = Joseph Veleno, Back = Bck)",
-      [n for t in ("NYR", "DAL") for n, _, _ in lo[t]["out"]] == ["Joe Veleno", "Oskar Back"])
+      all(r is not None for r in lo) and [r["name"] for r in lo] == ["Joseph Veleno", "Oskar Bck"], str([None if r is None else r["name"] for r in lo]))
 tw = injuries.adjustments([{"team": "VAN", "name": "Elias N. Pettersson", "pos": "D", "status": "Out"}], 2026, tg)["VAN"]
 tf = injuries.adjustments([{"team": "VAN", "name": "Elias Pettersson", "pos": "C", "status": "Out"}], 2026, tg)["VAN"]
 check("two Elias Petterssons (VAN): the listed position picks the right one", tf["off"] < tw["off"], f"C x{tf['off']:.3f}, D x{tw['off']:.3f}")
