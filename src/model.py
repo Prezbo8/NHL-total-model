@@ -521,14 +521,15 @@ def today(day=None):
         import store  # run history in Supabase (skipped when not configured; never stops the run)
         store.record_run(day, log_rows, sources={"dailyfaceoff": bool(dfo), "lines": bool(lines), "sportsbooks": bool(shop),
                                                  "lineups": bool(lineup_info), "injuries": bool(inj)})
+        rk = None
         try:  # team rankings for the dashboard (each team vs a league-average opponent)
             rk = sm.team_rankings(project, set(games[games.season >= season - 1].home), season, games)
             rk.to_csv(paths.data("team_rankings.csv"), index=False)
             sm.save_rankings_day(rk, day)
         except Exception as e:
             print(f"(team rankings not saved: {e})")
-        try:  # over / under performance vs the model and vs xG, season + last 30/14/7 days (dashboard 'Form', context only)
-            trends.team_form(proj, games, day, season).to_csv(paths.data("team_form.csv"), index=False)
+        try:  # over / under performance vs the model and vs xG + schedule faced, season + last 30/14/7 days (dashboard 'Form', context only)
+            trends.team_form(proj, games, day, season, rk).to_csv(paths.data("team_form.csv"), index=False)
         except Exception as e:
             print(f"(team form not saved: {e})")
         try:  # each team's top 5 attackers / defenders and whether they play (dashboard 'Key players')
