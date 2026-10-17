@@ -5,7 +5,6 @@ for/against per 60, weighted by how much each one plays. Catches summer roster
 changes that last season's team numbers can't see.
 """
 import io
-import json
 import os
 import time
 import urllib.request
@@ -16,8 +15,6 @@ import paths
 SKATERS = paths.data("skater_seasons.csv")
 LINEUPS = paths.data("opening_lineups.csv")
 MP_SKATERS = "https://moneypuck.com/moneypuck/playerData/seasonSummary/{}/regular/skaters.csv"
-BOX = "https://api-web.nhle.com/v1/gamecenter/{}/boxscore"
-N_GAMES = 5          # lineup = skaters used in each team's first N games
 SEASON_W = (1.0, 0.5, 0.25)  # weight of the last 3 seasons
 SHRINK_MIN = 400     # minutes of "replacement level" mixed into every player
 REPLACEMENT = (0.9, 1.1)  # replacement player: 90% of avg xGF/60, 110% of avg xGA/60
@@ -40,29 +37,6 @@ def refresh_skaters(seasons):
                         "OnIce_A_xGoals", "OnIce_F_goals", "OnIce_A_shotsOnGoal", "I_F_goals", "I_F_points"]])
         time.sleep(2)
     pd.concat(parts).to_csv(SKATERS, index=False)
-
-
-def refresh_lineups(games, seasons):
-    """Skaters + time on ice from each team's first N_GAMES games (NHL boxscores)."""
-    old = pd.read_csv(LINEUPS) if os.path.exists(LINEUPS) else pd.DataFrame(columns=["gameId"])
-    have = set(old.gameId)
-    want = set()
-    for s in seasons:
-        g = games[games.season == s]
-        for t in set(g.home) | set(g.away):
-            want |= set(g[(g.home == t) | (g.away == t)].gameId.head(N_GAMES))
-    rows = []
-    for gid in sorted(want - have):
-        box = json.loads(get(BOX.format(gid)))
-        for side in ("homeTeam", "awayTeam"):
-            team = box[side]["abbrev"]
-            st = box["playerByGameStats"][side]
-            for p in st["forwards"] + st["defense"]:
-                m, s_ = p["toi"].split(":")
-                rows.append({"gameId": gid, "season": int(str(gid)[:4]), "team": team,
-                             "playerId": p["playerId"], "toi": int(m) * 60 + int(s_)})
-        time.sleep(0.3)
-    pd.concat([old, pd.DataFrame(rows)]).to_csv(LINEUPS, index=False)
 
 
 # player rating = 50% advanced + 50% regular stats (weights fixed up front, not tuned)

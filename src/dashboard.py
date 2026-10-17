@@ -72,9 +72,6 @@ TIPS = {
     "Projected": "Starter not announced yet: DailyFaceoff's guess, or this team's usual recent starter.",
     "OVER FLAG": "The model's pick: both teams projected high-scoring and the line is 6 or 6.5. Bet the OVER at the 'Best over' book. These are the picks that count in the record.",
     "Lineups": "Projected lineup source (DailyFaceoff line combinations, checked against the official NHL roster). A reporter name = tonight's lineup; 'last game's lineup' = not updated for tonight yet. Regulars missing from the lineup are treated as out (scratch).",
-    "Trends": "Each team's last 10 games: average total goals and how many went 7+ (over 6.5). Context only: tested on 2023-26, recent form adds almost nothing beyond the projection (the model already uses it).",
-    "H2H": "Head-to-head since 2020-21: meetings, average total, how many went 7+, and the last 3 scores. Context only: tested on 2023-26, it adds very little beyond the projection.",
-    "Lean": "Trend lean: OVER/UNDER when both teams' last-10 7+ rates and the head-to-head 7+ rate run clearly above/below the league's ~45%. Weak signal: it supports or questions the model's pick, it doesn't make one.",
     "SLAM": "Flagged over where both teams are good or great at 5-on-5. Went over 55% (opening line) / 56.5% (closing line) in 2021-26.",
     "1U": "Flagged over where one team is great at 5-on-5 (above 2.19) but the other isn't good. Went over 58% (opening line) / 59% (closing line) in 2021-26.",
     "PASS": "Flagged over, but neither team is great at 5-on-5 and they aren't both good. No bet: these went over only 47% in 2021-26.",
@@ -448,28 +445,6 @@ def goalie_html(logged, now):
     return f"<div class='goalie'>{e(nm)} {badge}{changed}</div>"
 
 
-def injury_full(out, dtd):
-    """Table Out column: EVERY missing player with his effect (wraps), then day-to-day names."""
-    lines = []
-    if isinstance(out, str) and out:
-        ps = []
-        for it in out.split("; "):
-            name, d_off, d_def = (it.split("|") + ["0", "0"])[:3]
-            ps.append((name, float(d_off or 0), float(d_def or 0)))
-        ps.sort(key=lambda p: -max(abs(p[1]), abs(p[2])))  # biggest impact first
-        for name, d_off, d_def in ps:
-            tag = ""
-            if name.endswith(")") and " (" in name:
-                name, tag = name.rsplit(" (", 1)
-                tag = f" <span class='itag'>{e(tag[:-1])}</span>"
-            effect = f"{-d_off * 100:+.1f}% GF" if abs(d_off) >= abs(d_def) else f"{d_def * 100:+.1f}% GA"
-            tipt = f"{name}: team scoring {-d_off * 100:+.1f}%, opponent scoring {d_def * 100:+.1f}%"
-            lines.append(f"<span class='ip' title='{e(tipt)}'>{e(short_name(name))}{tag} <b>{effect}</b></span>")
-    if isinstance(dtd, str) and dtd:
-        lines.append(f"<span class='ip dtd' title='Day-to-day: usually plays, not adjusted'>DTD: {e(', '.join(short_name(n) for n in dtd.split(', ')))}</span>")
-    return f"<div class='outlist'>{''.join(lines)}</div>" if lines else "<span class='muted'>–</span>"
-
-
 def injury_html(out, dtd):
     """'Out: Hyman −3.0%, Nugent-Hopkins −2.0%' (impact on the team's scoring) and day-to-day names."""
     parts, players_out = [], []
@@ -633,28 +608,6 @@ def day_view(g):
 
 def _is(v):
     return str(v).strip().lower() in ("true", "1", "1.0")
-
-
-def trends_html(r):
-    """Context line: both teams' last 10, head-to-head since 2020-21, and the trend lean."""
-    def l10(side, abbr):
-        n = getattr(r, f"{side}_l10_n", None)
-        if pd.isna(n) or not n:
-            return ""
-        return f"<b>{e(abbr)}</b> L{int(n)} avg {getattr(r, f'{side}_l10_avg'):.1f} · {int(getattr(r, f'{side}_l10_7'))}/{int(n)} 7+"
-    parts = [x for x in (l10("away", r.away), l10("home", r.home)) if x]
-    hn = getattr(r, "h2h_n", None)
-    if not pd.isna(hn) and hn:
-        last = getattr(r, "h2h_last", None)
-        parts.append(f"<b>H2H</b> {int(hn)} since '20 · avg {r.h2h_avg:.1f} · {int(r.h2h_7)}/{int(hn)} 7+"
-                     + (f" <span class='muted'>· last: {e(last)}</span>" if isinstance(last, str) and last else ""))
-    if not parts:
-        return ""
-    ln = getattr(r, "trend_lean", None)
-    chip = (f" <span class='lean {str(ln).lower()}'>{tip('trends: ' + str(ln).lower(), TIPS['Lean'], 'tr')}</span>"
-            if isinstance(ln, str) and ln else "")
-    return (f"<div class='trends'>{tip('Trends', TIPS['Trends'], 'tl')} / {tip('H2H', TIPS['H2H'], 'tl')}: "
-            f"{' &nbsp;|&nbsp; '.join(parts)}{chip}</div>")
 
 
 def day_table(g):
@@ -1607,12 +1560,6 @@ def sched_tip(r, c):
             f"{'more' if v > 0 else 'fewer'} goals than average.")
 
 
-def pct0(v):
-    """Whole percent with a sign, and '0%' (not '-0%') when it rounds to zero."""
-    n = int(round(v * 100))
-    return f"{n:+d}%" if n else "0%"
-
-
 def form_notes(x, label, f):
     """'Right now' notes for one window of the Form view, written from that window's numbers."""
     if x.empty:
@@ -2024,9 +1971,6 @@ table.gt{font-size:12.5px;border-collapse:separate;border-spacing:0;width:100%;t
 .gt .score-cell{font-size:15px;font-weight:800}
 .gt td.gl{white-space:normal}.gt .gc{white-space:normal;line-height:1.5}.gt .gc .gb{margin-left:2px;white-space:nowrap}
 .gt td.outs{white-space:normal;padding-top:5px;padding-bottom:5px}
-.gt .outlist{display:flex;flex-direction:column;gap:2px;font-size:11px;line-height:1.3}
-.gt .outlist .ip{color:var(--neg)}.gt .outlist .ip b{font-weight:700;white-space:nowrap}.gt .outlist .ip.dtd{color:var(--muted)}
-.gt .itag{font-size:9.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.03em}
 .gt .pill{font-size:11px;padding:2px 7px}
 .was{font-size:9.5px;color:var(--muted);white-space:nowrap}.was .tip{border-bottom-style:dotted}
 .gtime{font-size:13px;font-weight:800;color:var(--ink);white-space:nowrap}
@@ -2042,9 +1986,6 @@ svg.cal .cal-line{fill:none;stroke-width:2;opacity:.55}.cal-line.cal-a{stroke:va
 .gt tr.srcrow td{padding:0 8px 6px 38px;white-space:nowrap}
 .gt tr.whyrow td{white-space:normal;padding:7px 14px 9px;text-align:left!important}
 .gt .why-text{font-size:12.5px;line-height:1.5;color:var(--muted);max-width:none}.gt .why-text b{color:var(--ink)}.gt tr.srcrow .lineup-src{margin-top:1px;font-size:10.5px}
-.gt .trends{font-size:11px;color:var(--ink);line-height:1.5}.gt .trends b{font-weight:700}
-.lean{display:inline-block;font-size:10px;font-weight:800;padding:1px 7px;border-radius:999px;margin-left:6px;text-transform:uppercase;letter-spacing:.03em}
-.lean.over{background:rgba(26,127,55,.16);color:var(--pos)}.lean.under{background:rgba(198,40,40,.14);color:var(--neg)}
 .lineup-src{margin-top:6px;font-size:11px;color:var(--muted);line-height:1.35}
 .tip{position:relative;cursor:help;border-bottom:1px dotted currentColor;outline:none}
 #tipbox{position:fixed;left:0;top:0;max-width:260px;white-space:pre-line;font-size:12px;font-weight:500;line-height:1.4;
