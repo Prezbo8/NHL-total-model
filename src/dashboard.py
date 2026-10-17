@@ -1139,6 +1139,44 @@ def lineup_change(r, kp):
     return html_, text
 
 
+KP_ALSO_MIN = 0.02  # 'Also out' under Key players: someone outside the top 5 who is out and worth this many goals
+
+
+def also_out(r, teams):
+    """'Also out' line under Key players: players outside the top 5 who are out tonight and move a team's goals by
+    KP_ALSO_MIN+ (from the injury list the projection used; display only). '' when there are none."""
+    import unicodedata
+    key = lambda n: " ".join(unicodedata.normalize("NFKD", str(n)).encode("ascii", "ignore").decode().replace(".", "").lower().split())
+    parts = []
+    for me, own, opp, outs in ((r.away, r.proj_away, r.proj_home, r.away_out), (r.home, r.proj_home, r.proj_away, r.home_out)):
+        listed = [p for side in ("off", "def") for p in teams.get(me, {}).get(side, [])]
+        full = {key(p["name"]) for p in listed}
+        last = {key(p["name"]).split()[-1] for p in listed if p["status"] == "out"}  # nickname spellings (Matt / Matthew)
+        found = []
+        for item in ([] if pd.isna(outs) else str(outs).split(";")):
+            bits = item.strip().split("|")
+            if len(bits) != 3:
+                continue
+            name, d_off, d_def = bits[0].strip(), float(bits[1]), float(bits[2])
+            tag = name[name.index("(") + 1:-1] if name.endswith(")") and "(" in name else ""
+            name = name[:name.index("(")].strip() if tag else name
+            k = key(name)
+            if k in full or (k.split() and k.split()[-1] in last):
+                continue  # already in the table
+            g_off, g_def = d_off * own, d_def * opp
+            if max(g_off, g_def) < KP_ALSO_MIN:
+                continue
+            eff = ", ".join(x for x in ((f"{-d_off * 100:+.1f}% attack" if abs(d_off) >= 0.0005 else ""),
+                                        (f"{d_def * 100:+.1f}% defense" if abs(d_def) >= 0.0005 else "")) if x)
+            found.append((max(g_off, g_def), f"{e(name)}{f' <span class=muted>({e(tag)})</span>' if tag else ''} <span class='muted'>{eff}</span>"))
+        if found:
+            parts.append(f"<b>{e(me)}</b>: " + "; ".join(t for _, t in sorted(found, key=lambda x: -x[0])))
+    if not parts:
+        return ""
+    return (f"<p class='kp-also'>{tip('Also out', f'Out tonight but outside the top 5, and worth at least {KP_ALSO_MIN:.2f} goals. The projection already counts them (it counts everyone out).')}"
+            f": {' · '.join(parts)}</p>")
+
+
 def key_players(r, kp, phone=False):
     """Key players table for the why section: each team's top 5 attackers and top 5 defenders, what the model
     takes off if he sits and whether he plays tonight (finished games: as of puck drop; rebuilt days: who dressed)."""
@@ -1187,7 +1225,7 @@ def key_players(r, kp, phone=False):
             hd = (f"<tr class='mu-sec'><th colspan='3'>{title}</th></tr><tr><th class='mu-g'>Player</th>"
                   f"<th>{tip('If out', TIPS[key])}</th><th>{when}</th></tr>")
             out.append(f"<div class='mu-box'><table class='mu-t kp-t'><thead>{hd}</thead><tbody>{body}</tbody></table></div>")
-        return f"<div class='mu mu-phone'>{''.join(out)}</div><p class='muted small kp-note'>{note}</p>"
+        return f"<div class='mu mu-phone'>{''.join(out)}</div>{also_out(r, teams)}<p class='muted small kp-note'>{note}</p>"
     rows = []
     for me in (r.away, r.home):
         t, fill = teams[me], fills[me]
@@ -1201,7 +1239,7 @@ def key_players(r, kp, phone=False):
             f"<th class='mu-g'>Player</th><th>{tip('If out', TIPS['KP attack'])}</th><th>{when}</th>"
             f"<th class='mu-g'>Player</th><th>{tip('If out', TIPS['KP defense'])}</th><th>{when}</th></tr>")
     return (f"<div class='mu'><div class='mu-box'><table class='mu-t kp-t'><thead>{head}</thead><tbody>{''.join(rows)}</tbody></table></div></div>"
-            f"<p class='muted small kp-note'>{note}</p>")
+            f"{also_out(r, teams)}<p class='muted small kp-note'>{note}</p>")
 
 
 def unit_ranks(x):
@@ -1719,7 +1757,7 @@ body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 -apple-system
 .acc-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:18px;margin-top:16px}.acc-grid h3{margin:0 0 6px;font-size:15px}table.acc-t{width:100%}table.acc-t td,table.acc-t th{padding:6px 8px}
 .rk-switch{display:inline-flex;gap:4px;padding:4px;margin:0 0 14px;background:var(--ice);border:1px solid var(--line);border-radius:999px}
 .rk-switch button{font:inherit;font-size:14px;font-weight:800;padding:7px 22px;border:0;border-radius:999px;background:transparent;color:var(--muted);cursor:pointer}
-.fm-switch{display:flex;flex-wrap:wrap;gap:4px;margin:0 0 10px}.fm-switch button{font:inherit;font-size:12.5px;font-weight:700;padding:5px 12px;border:1px solid var(--line);border-radius:999px;background:transparent;color:var(--muted);cursor:pointer}.fm-switch button.on{background:var(--card);color:var(--ink);border-color:var(--muted)}.fm-note{max-width:820px}.fm-h{margin:14px 0 4px;font-size:13.5px}.fm-notes{max-width:820px;margin-top:4px}@media (max-width:760px){table.fm-t td.tm img,table.fm-t td.tm picture{display:none}table.fm-t th,table.fm-t td{padding:5px 3px!important;font-size:11.5px}table.fm-t th{white-space:normal;font-size:9px;letter-spacing:0}table.fm-t .fm-p,table.fm-t .fm-gp,table.fm-t .fm-sd{display:none}table.fm-t th,table.fm-t td{padding:5px 2px!important}table.fm-t td.fm-sm,table.fm-t th.fm-sm{display:table-cell;line-height:1.25}table.fm-t th .fm-long{display:none}table.fm-t th .fm-short{display:inline}}table.fm-t .fm-sm,table.fm-t .fm-short{display:none}.fm-sl{color:var(--muted);font-size:9px;margin-right:3px}.fm-d{display:block;font-size:10px;font-weight:600;opacity:.8;line-height:1.2;white-space:nowrap}td.num:not(.rk-x):not(.fm-dc)>.fm-d{display:none}td.fm-dc .fm-d{display:inline;font-size:12.5px;opacity:1}td.fm-dc .fm-up{color:#4ade80}td.fm-dc .fm-dn{color:#f87171}td.fm-dc{color:var(--muted);border-right:2px solid var(--line)}.fm-rkm{display:none}@media (max-width:760px){table.fm-t .fm-dc{display:none}td.num:not(.rk-x):not(.fm-dc)>.fm-d{display:block}.fm-d{font-size:8.5px}.fm-rkm{display:block;font-size:8.5px;color:var(--muted);white-space:nowrap}.fm-rkm .fm-d{display:inline}}.fm-chip{display:inline-block;padding:1px 7px;border-radius:999px;font-size:11px;font-weight:700;line-height:1.5}.fm-tough{background:rgba(124,58,237,.45);color:#fff}.fm-average{background:transparent;color:var(--muted);border:1px solid var(--line)}.fm-easy{background:rgba(14,165,233,.30);color:var(--ink)}@media (max-width:760px){.fm-chip{padding:0 3px;font-size:9px;letter-spacing:-.1px}.fm-sl{margin-right:1px}}
+.fm-switch{display:flex;flex-wrap:wrap;gap:4px;margin:0 0 10px}.fm-switch button{font:inherit;font-size:12.5px;font-weight:700;padding:5px 12px;border:1px solid var(--line);border-radius:999px;background:transparent;color:var(--muted);cursor:pointer}.fm-switch button.on{background:var(--card);color:var(--ink);border-color:var(--muted)}.fm-note{max-width:820px}.fm-h{margin:14px 0 4px;font-size:13.5px}.fm-notes{max-width:820px;margin-top:4px}@media (max-width:760px){table.fm-t td.tm img,table.fm-t td.tm picture{display:none}table.fm-t th,table.fm-t td{padding:5px 3px!important;font-size:11.5px}table.fm-t th{white-space:normal;font-size:9px;letter-spacing:0}table.fm-t .fm-p,table.fm-t .fm-gp,table.fm-t .fm-sd{display:none}table.fm-t th,table.fm-t td{padding:5px 2px!important}table.fm-t td.fm-sm,table.fm-t th.fm-sm{display:table-cell;line-height:1.25}table.fm-t th .fm-long{display:none}table.fm-t th .fm-short{display:inline}}table.fm-t .fm-sm,table.fm-t .fm-short{display:none}.fm-sl{color:var(--muted);font-size:9px;margin-right:3px}.fm-d{display:block;font-size:10px;font-weight:600;opacity:.8;line-height:1.2;white-space:nowrap}td.num:not(.rk-x):not(.fm-dc)>.fm-d{display:none}td.fm-dc .fm-d{display:inline;font-size:12.5px;opacity:1}td.fm-dc .fm-up{color:#4ade80}td.fm-dc .fm-dn{color:#f87171}td.fm-dc{color:var(--muted);border-right:2px solid var(--line)}.fm-rkm{display:none}@media (max-width:760px){table.fm-t .fm-dc{display:none}td.num:not(.rk-x):not(.fm-dc)>.fm-d{display:block}.fm-d{font-size:8.5px}.fm-rkm{display:block;font-size:8.5px;color:var(--muted);white-space:nowrap}.fm-rkm .fm-d{display:inline}}.kp-also{margin:8px 0 2px;font-size:13px;line-height:1.5}.fm-chip{display:inline-block;padding:1px 7px;border-radius:999px;font-size:11px;font-weight:700;line-height:1.5}.fm-tough{background:rgba(124,58,237,.45);color:#fff}.fm-average{background:transparent;color:var(--muted);border:1px solid var(--line)}.fm-easy{background:rgba(14,165,233,.30);color:var(--ink)}@media (max-width:760px){.fm-chip{padding:0 3px;font-size:9px;letter-spacing:-.1px}.fm-sl{margin-right:1px}}
 .rk-switch button.on{background:var(--card);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.25)}
 .rk[hidden]{display:none!important}
 table.rk-t th.sortable{cursor:pointer;user-select:none}table.rk-t th.sorted{color:var(--ink)}
