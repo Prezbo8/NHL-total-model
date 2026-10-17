@@ -955,6 +955,77 @@ def closing_bets(d, keep_retro=False):
     return g
 
 
+def rec_row(r, label, side, total, odds, units):
+    """One row of the record tables: date, game, call, closing line (total over price), goals, result, units."""
+    return (f"<tr><td><span class='d-long'>{e(r.date)}</span><span class='d-short'>{e(r.date[5:].replace('-', '/'))}</span></td>"
+            f"<td class='matchup'>{logo(r.away, 22)}{logo(r.home, 22)} {e(r.away)} @ {e(r.home)}</td><td class='rc-call'>{label}</td>"
+            f"<td class='c rc-ln'><b>{side}{line(total)}</b><span class='rc-px'>{price(odds)}</span></td>"
+            f"<td class='c'>{int(r.final_total)}</td><td class='c res {e(r.res)}'>{e(r.res)}</td>"
+            f"<td class='r {'pos' if units > 0 else 'neg' if units < 0 else ''}'>{units:+.2f}</td></tr>")
+
+
+def rec_table(rows, label):
+    return (f"<div class='scroll'><table class='rec-t'><thead><tr><th>Date</th><th>Game</th><th>{label}</th>"
+            f"<th class='c'>Close</th><th class='c'>Goals</th><th class='c'>Result</th><th class='r'>Units</th></tr></thead>"
+            f"<tbody>{rows}</tbody></table></div>")
+
+
+TRACKED = {"Top total": ("Top total", "Each day's game with the highest projected total (last run before puck drop), flagged or not, as an over at the closing line."),
+           "Top P(7+)": ("Top P(7+)", "Each day's game with the highest P(7+), flagged or not, as an over at the closing line. Often the same game as Top total."),
+           "P(7+) 50%+": ("P(7+) over 50%", "Every game with P(7+) above 50% (last run before puck drop), flagged or not, as an over at the closing line."),
+           "AVOID": ("AVOID", "Every AVOID game as an UNDER at the closing total and under price: W = stayed under (avoiding the over was right).")}
+
+
+def tracked_bets(d):
+    """Tracked records beside the flagged picks (retroactive days excluded), graded at the closing line: each day's top
+    projected total and top P(7+) and every P(7+) over 50% as overs, every AVOID as an under. One row per game and side ('o' / 'u'), its labels joined."""
+    cur = current(d[~retro(d)])
+    picks = []
+    for _, g in cur.groupby("date"):
+        picks.append(g.sort_values(["proj", "p7"], ascending=False).head(1).assign(kind="Top total", side="o"))
+        picks.append(g.sort_values(["p7", "proj"], ascending=False).head(1).assign(kind="Top P(7+)", side="o"))
+    picks.append(cur[cur.p7 > 0.5].assign(kind="P(7+) 50%+", side="o"))
+    avoid = cur[[call(r, bool(r.flag)) == "AVOID" for r in cur.itertuples()]]
+    picks.append(avoid.assign(kind="AVOID", side="u"))
+    t = pd.concat(picks) if picks else cur.assign(kind="", side="")
+    t = t[t.final_total.notna() & t.close_total.notna() & t.close_over.notna() & t.close_under.notna()].copy()
+    if t.empty:
+        return t.assign(res=[], units=[])
+    over = np.sign(t.final_total - t.close_total) * np.where(t.side == "o", 1, -1)
+    t["res"] = np.where(over > 0, "W", np.where(over < 0, "L", "P"))
+    t["units"] = np.where(t.res == "W", grade.payout(np.where(t.side == "o", t.close_over, t.close_under)),
+                          np.where(t.res == "L", -1.0, 0.0))
+    return t
+
+
+def tracked_table(t):
+    """Collapsed list of the tracked picks, newest first (a game that was both Top total and Top P(7+) is one row)."""
+    if t.empty:
+        return ""
+    keys = ["date", "away", "home", "side"]
+    g = t.groupby(keys, sort=False).agg(kind=("kind", " · ".join), **{c: (c, "first") for c in
+                                        ("close_total", "close_over", "close_under", "final_total", "res", "units")}).reset_index()
+    rows = "".join(rec_row(r, e(r.kind), r.side, r.close_total, r.close_over if r.side == "o" else r.close_under, r.units)
+                   for r in g.sort_values("date", ascending=False, kind="stable").itertuples())
+    return f"<details class='tracked'><summary>Every tracked pick ({len(g)})</summary>{rec_table(rows, 'Tracked')}</details>"
+
+
+def type_table(groups):
+    """Over-under-push at the closing line, over %, and units as bet (an over, or the under for AVOID) per group."""
+    rows = ""
+    for label, x, side, why in groups:
+        o, u = (x.final_total > x.close_total).sum(), (x.final_total < x.close_total).sum()
+        p_ = len(x) - o - u
+        units = x.units.sum() if len(x) else 0.0
+        rows += (f"<tr><td>{tip(label, why, 'tl')}</td><td class='c'>{len(x)}</td><td class='c'>{o}-{u}-{p_}</td>"
+                 f"<td class='c'>{f'{o / (o + u):.0%}' if o + u else '–'}</td>"
+                 f"<td class='r {'pos' if units > 0 else 'neg' if units < 0 else ''}'>{f'{units:+.2f}u' if len(x) else '–'}</td></tr>")
+    return (f"<div class='scroll'><table class='rec-t type-t'><thead><tr><th>Type</th><th class='c'>Games</th>"
+            f"<th class='c'>{tip('Over-under-push', 'Final goals vs the closing total.', 'tr')}</th><th class='c'>Over %</th>"
+            f"<th class='r'>{tip('Units', 'As bet at the closing price, 1 unit each: the over, except AVOID = the under.', 'tr')}</th></tr></thead>"
+            f"<tbody>{rows}</tbody></table></div>")
+
+
 def record(d):
     cur = current(d[~retro(d)])
     f = cur[cur.flag]
@@ -976,20 +1047,31 @@ def record(d):
                 "🔨 SLAM": "Flagged picks the last pre-game call made a SLAM, at the closing line.",
                 "1U": "Flagged picks the last pre-game call made a 1U, at the closing line.",
                 "PASS": "Flagged picks the last pre-game call made a PASS (no bet): how they would have done at the closing line."}
-    tiles_html = "".join(f"<div class='tile'><div class='label'>{tip(a, rec_tips.get(a), 'tl')}</div><div class='num-big'>{b}</div>"
-                         f"<div class='muted'>{c_}</div></div>" for a, b, c_ in tiles)
+    tiles_html = lambda ts, tips: "".join(f"<div class='tile'><div class='label'>{tip(a, tips.get(a), 'tl')}</div><div class='num-big'>{b}</div>"
+                                          f"<div class='muted'>{c_}</div></div>" for a, b, c_ in ts)
+    tr = tracked_bets(d)
+    by_type = [("🔨 SLAM", by["SLAM"], "o", "Flagged picks the last pre-game call made a SLAM."),
+               ("1U", by["1U"], "o", "Flagged picks the last pre-game call made a 1U.")]
+    by_type += [(lab, tr[tr.kind == k] if len(tr) else tr, "u" if k == "AVOID" else "o", t) for k, (lab, t) in TRACKED.items()]
+    by_type = by_type[:2] + by_type[-1:] + by_type[2:-1]  # SLAM, 1U, AVOID, then the slate's top games
     if len(s):
-        rows = "".join(f"""<tr><td><span class='d-long'>{e(r.date)}</span><span class='d-short'>{e(r.date[5:].replace('-', '/'))}</span></td><td class='matchup'>{logo(r.away, 22)}{logo(r.home, 22)} {e(r.away)} @ {e(r.home)}</td>
-            <td>{'🔨 ' if r.call == 'SLAM' else ''}{e(r.call)}</td><td class='num'>o{line(r.close_total)} {price(r.close_over)}</td>
-            <td class='num'>{int(r.final_total)}</td><td class='res {e(r.res)}'>{e(r.res)}</td><td class='num'>{r.units:+.2f}</td></tr>"""
+        rows = "".join(rec_row(r, f"{'🔨 ' if r.call == 'SLAM' else ''}{e(r.call)}", "o", r.close_total, r.close_over, r.units)
                        for r in s.sort_values("date", ascending=False).itertuples())
-        table = f"""<div class='scroll'><table><thead><tr><th>Date</th><th>Game</th><th>Call</th><th>Closing line</th>
-          <th>Goals</th><th>Result</th><th>Units</th></tr></thead><tbody>{rows}</tbody></table></div>"""
+        table = rec_table(rows, "Call")
     else:
         table = "<p class='muted'>No live flagged picks have settled yet. Judge the rule after 50–75 flagged picks, not before.</p>"
-    return (f"<div class='tiles'>{tiles_html}</div>{table}"
-            "<p class='muted small legend'>Closing information only: a pick counts if the game was still flagged at the last model run "
-            "before puck drop, and it is graded at the closing consensus total and over price (1 unit per pick).</p>")
+    return f"""<h3 class='rec-h'>Flagged overs</h3>
+      <div class='tiles'>{tiles_html(tiles, rec_tips)}</div>{table}
+      <h3 class='rec-h'>Record by type</h3>
+      <p class='sub rec-sub'>Did the game go over the closing line? SLAM and 1U are the flagged picks above; the rest are not bets.</p>
+      {type_table(by_type)}{tracked_table(tr)}
+      <ul class='notes'>
+        <li><b>Closing information only.</b> A flagged pick counts if the game was still flagged at the last model run before
+        puck drop. Everything is graded at the closing consensus total and price, 1 unit per pick.</li>
+        <li><b>Top total / Top P(7+):</b> each day's single highest game, flagged or not. <b>P(7+) over 50%:</b> every such game.</li>
+        <li><b>AVOID:</b> every AVOID game; its units are for betting the under at the closing under price.</li>
+        <li>Retroactive days are left out of everything here.</li>
+      </ul>"""
 
 
 def rule_check():
@@ -1857,6 +1939,8 @@ th{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--mute
 .num{text-align:right;font-variant-numeric:tabular-nums}tr.total td{font-weight:800}
 .pos{color:var(--pos)}.neg{color:var(--neg)}td.matchup{display:flex;align-items:center;gap:4px}.d-short{display:none}
 ul.notes{margin:12px 0 0;padding-left:20px;color:var(--muted)}
+table.rec-t{width:100%}@media (min-width:521px){table.rec-t:not(.type-t){table-layout:fixed}table.rec-t:not(.type-t) th:nth-child(1){width:13%}table.rec-t:not(.type-t) th:nth-child(2){width:21%}table.rec-t:not(.type-t) th:nth-child(3){width:20%}table.rec-t:not(.type-t) th:nth-child(4){width:16%}table.rec-t:not(.type-t) th:nth-child(5),table.rec-t:not(.type-t) th:nth-child(6),table.rec-t:not(.type-t) th:nth-child(7){width:10%}}table.rec-t th.c,table.rec-t td.c{text-align:center}table.rec-t th.r,table.rec-t td.r{text-align:right}.scroll table.rec-t td{font-variant-numeric:tabular-nums;white-space:nowrap}.scroll table.rec-t td.rc-call{white-space:normal}.rc-px{color:var(--muted);margin-left:6px;font-size:.92em}@media (max-width:520px){table.rec-t td.rc-ln b,table.rec-t td.rc-ln .rc-px{display:block;margin:0}.scroll table.rec-t td.rc-call{min-width:44px}}
+.rec-h{margin:22px 0 10px;font-size:16px}.rec-h:first-child{margin-top:4px}.rec-sub{margin:-4px 0 10px}details.tracked{margin-top:12px}details.tracked summary{cursor:pointer;font-weight:600;padding:6px 0}
 dl{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;margin:12px 0 0}
 dl div{background:var(--ice);border-radius:10px;padding:10px 12px}dt{font-weight:800}dd{margin:2px 0 0;color:var(--muted)}
 footer{margin-top:32px;font-size:13px;color:var(--muted)}a{color:var(--accent)}
