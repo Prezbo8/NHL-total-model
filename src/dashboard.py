@@ -28,6 +28,7 @@ SCALE = 4.5  # projected-goal bars run 0 -> 4.5 goals
 
 
 TIPS = {
+    "Moves": "Every model run that changed this game's projection, with the change in the total and what caused it: a goalie switch, players out / back in, or ratings / other data (games finished elsewhere, refreshed stats). Each team's change is split by how much each factor moved; small leftovers count as ratings / other. Frozen at puck drop.",
     "KP attack": "How much the team's projected goals drop if this player sits (the model's injury adjustment: his ice time × how much better he is than a replacement-level player × how much of him is in the team's rating). Players ranked by this number. OUT players are already taken off the projection.",
     "KP defense": "How much the OPPONENT's projected goals rise if this player sits (same injury adjustment, defensive side). Players ranked by this number. OUT players are already in the projection. Rough guide only: tested on 2021-26, this side is too small and noisy to prove on its own.",
     "Proj total": "Projected total goals for the game (away + home), from the model.",
@@ -74,10 +75,10 @@ TIPS = {
     "Trends": "Each team's last 10 games: average total goals and how many went 7+ (over 6.5). Context only: tested on 2023-26, recent form adds almost nothing beyond the projection (the model already uses it).",
     "H2H": "Head-to-head since 2020-21: meetings, average total, how many went 7+, and the last 3 scores. Context only: tested on 2023-26, it adds very little beyond the projection.",
     "Lean": "Trend lean: OVER/UNDER when both teams' last-10 7+ rates and the head-to-head 7+ rate run clearly above/below the league's ~45%. Weak signal: it supports or questions the model's pick, it doesn't make one.",
-    "SLAM": "Flagged over where both teams are good or great at 5-on-5. Went over 54% (opening line) / 57% (closing line) in 2021-26.",
-    "1U": "Flagged over where one team is great at 5-on-5 (above 2.19) but the other isn't good. Went over 58% (opening and closing line) in 2021-26.",
-    "PASS": "Flagged over, but neither team is great at 5-on-5 and they aren't both good. No bet: these went over only 45% in 2021-26.",
-    "AVOID": "Not flagged, or flagged but both teams face strong goalies. These went over only 45-49% in 2021-26.",
+    "SLAM": "Flagged over where both teams are good or great at 5-on-5. Went over 55% (opening line) / 56.5% (closing line) in 2021-26.",
+    "1U": "Flagged over where one team is great at 5-on-5 (above 2.19) but the other isn't good. Went over 58% (opening line) / 59% (closing line) in 2021-26.",
+    "PASS": "Flagged over, but neither team is great at 5-on-5 and they aren't both good. No bet: these went over only 47% in 2021-26.",
+    "AVOID": "Not flagged, or flagged but both teams face strong goalies. These went over only 47-49% in 2021-26.",
     "Paper bet": "The paper-trading record's pick: flagged at the last model run before puck drop, graded at the closing consensus total and over price.",
     "Near miss": "{team} missed the {cutoff:.2f}-goal high-scoring cutoff by only {gap:.3f}. Not a bet: the over rule needs both teams over the cutoff (and a 6 or 6.5 line). Shown so close calls are easy to spot.",
     "B2B tag": "Played yesterday: the model cuts this team's scoring ~8% and raises its opponent's ~6.5%.",
@@ -116,9 +117,9 @@ def tier(stat, v):
 
 def call(r, flagged):
     """'SLAM' / '1U' / 'PASS' / 'AVOID' for a game. Tested 2021-26 at 6/6.5 lines (over %, open / close):
-    flagged + both teams good/great at 5v5 54% / 57%; flagged + one team great at 5v5 58% / 58.5%;
-    other flagged (PASS) 45% / 45%; flagged but both teams facing strong goalies (Gl bad/trash) 46% / 45%;
-    not flagged 47% / 49%."""
+    flagged + both teams good/great at 5v5 55% / 56.5%; flagged + one team great at 5v5 58% / 59%;
+    other flagged (PASS) 46.5% / 46.5%; flagged but both teams facing strong goalies (Gl bad/trash) 47% / 47%;
+    not flagged 47% / 49% (with PP/PK K = 25, Oct 16 2026)."""
     if not flagged:
         return "AVOID"
     both = lambda stat, ts: all(tier(stat, getattr(r, f"{s}_{stat}", float("nan"))) in ts for s in ("away", "home"))
@@ -178,10 +179,10 @@ def call_result(r, flagged):
 
 GL_WORDS = {"great": "a weak goalie", "good": "a beatable goalie", "mid": "an average goalie",
             "bad": "a strong goalie", "trash": "a top goalie"}
-CALL_HISTORY = {"SLAM": "Games like this went over 54% of the time at the opening line and 57% at the closing line in 2021-26.",
-                "1U": "Games like this went over 58% of the time at both the opening and closing line in 2021-26.",
-                "PASS": "Flagged games like this went over only 45% of the time in 2021-26.",
-                "AVOID": "Games like this went over only 45-49% of the time in 2021-26."}
+CALL_HISTORY = {"SLAM": "Games like this went over 55% of the time at the opening line and 56.5% at the closing line in 2021-26.",
+                "1U": "Games like this went over 58% of the time at the opening line and 59% at the closing line in 2021-26.",
+                "PASS": "Flagged games like this went over only 47% of the time in 2021-26.",
+                "AVOID": "Games like this went over only 47-49% of the time in 2021-26."}
 
 
 _RANKS = {}
@@ -278,7 +279,7 @@ def reasoning(r, flagged):
                    "so there's no team to carry the over.")
     elif flagged:
         out.append(f"<b>AVOID:</b> both teams project as high-scoring ({both_proj}), but both face a strong goalie, "
-                   "and overs in that spot went only 45-46% in 2021-26.")
+                   "and overs in that spot went only 47% in 2021-26.")
     else:
         why = []
         low = [(s_, x) for s_, x in S if not hot[s_]]
@@ -771,6 +772,7 @@ def day_table(g):
         mu = f"<details class='mu-why'><summary>Matchup: 5-on-5 &amp; power play</summary>{mu}</details>" if mu else ""
         kpt = key_players(r, kp)
         mu += f"<details class='mu-why'><summary>Key players: top 5 attackers &amp; defenders</summary>{kpt}</details>" if kpt else ""
+        mu += moves_html(r)
         ctx = f"<div class='why-text'>{lu[0] if lu else ''}{mu}{reasoning(r, flagged)}</div>"
         mcards.append(mobile_card(r, final, callpill, st, f"{vs} {outcome}" if final_day else ln,
                                   breakdown_cells, cls, ranks, key_players(r, kp, phone=True)))
@@ -811,7 +813,7 @@ def mobile_card(r, final, callpill, st, status, breakdown_cells, cls, ranks, kpt
             f"<div class='mc-sum'>{total} · P(7+) <b>{r.p7:.0%}</b></div>{bd}"
             f"<details class='mc-why'><summary>Why this call</summary><div class='why-text'>{(lineup_change(r, load_key_players(r.date)) or ('',))[0]}{matchup(r, phone=True)}"
             + (f"<details class='mu-why'><summary>Key players: top 5 attackers &amp; defenders</summary>{kpt}</details>" if kpt else "")
-            + f"{reasoning(r, bool(r.flag))}</div></details></article>")
+            + moves_html(r) + f"{reasoning(r, bool(r.flag))}</div></details></article>")
 
 
 def day_cards(g):
@@ -1175,6 +1177,24 @@ def also_out(r, teams):
         return ""
     return (f"<p class='kp-also'>{tip('Also out', f'Out tonight but outside the top 5, and worth at least {KP_ALSO_MIN:.2f} goals. The projection already counts them (it counts everyone out).')}"
             f": {' · '.join(parts)}</p>")
+
+
+def moves_html(r):
+    """'How the projection moved' box: each run that changed this game's projection (data/moves/<day>.json, frozen at
+    puck drop) with the change in the total and its causes; '' until it has moved at least once."""
+    import moves
+    hist = moves.load(r.date).get(f"{r.away}@{r.home}", [])
+    if len(hist) < 2:
+        return ""
+    items = [f"<li><b>{e(hist[0]['at'])}</b> {hist[0]['proj']:.2f} <span class='muted'>first run</span></li>"]
+    for prev, cur in zip(hist, hist[1:]):
+        d = cur["proj"] - prev["proj"]
+        why = "; ".join(f"{e(t)} <b>{g:+.2f}</b>" for t, g in moves.explain(prev, cur, r.away, r.home)) or "rounding"
+        items.append(f"<li><b>{e(cur['at'])}</b> {cur['proj']:.2f} <span class='mv-d {'mv-up' if d > 0 else 'mv-dn'}'>{d:+.2f}</span>"
+                     f"<span class='mv-why'>{why}</span></li>")
+    when = "on game day" if pd.notna(getattr(r, "final_total", np.nan)) else "today"
+    return (f"<details class='mu-why'><summary>How the projection moved {when} ({hist[0]['proj']:.2f} → {hist[-1]['proj']:.2f})</summary>"
+            f"<ul class='mv'>{''.join(items)}</ul><p class='muted small kp-note'>{e(TIPS['Moves'])}</p></details>")
 
 
 def key_players(r, kp, phone=False):
@@ -1757,7 +1777,7 @@ body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 -apple-system
 .acc-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:18px;margin-top:16px}.acc-grid h3{margin:0 0 6px;font-size:15px}table.acc-t{width:100%}table.acc-t td,table.acc-t th{padding:6px 8px}
 .rk-switch{display:inline-flex;gap:4px;padding:4px;margin:0 0 14px;background:var(--ice);border:1px solid var(--line);border-radius:999px}
 .rk-switch button{font:inherit;font-size:14px;font-weight:800;padding:7px 22px;border:0;border-radius:999px;background:transparent;color:var(--muted);cursor:pointer}
-.fm-switch{display:flex;flex-wrap:wrap;gap:4px;margin:0 0 10px}.fm-switch button{font:inherit;font-size:12.5px;font-weight:700;padding:5px 12px;border:1px solid var(--line);border-radius:999px;background:transparent;color:var(--muted);cursor:pointer}.fm-switch button.on{background:var(--card);color:var(--ink);border-color:var(--muted)}.fm-note{max-width:820px}.fm-h{margin:14px 0 4px;font-size:13.5px}.fm-notes{max-width:820px;margin-top:4px}@media (max-width:760px){table.fm-t td.tm img,table.fm-t td.tm picture{display:none}table.fm-t th,table.fm-t td{padding:5px 3px!important;font-size:11.5px}table.fm-t th{white-space:normal;font-size:9px;letter-spacing:0}table.fm-t .fm-p,table.fm-t .fm-gp,table.fm-t .fm-sd{display:none}table.fm-t th,table.fm-t td{padding:5px 2px!important}table.fm-t td.fm-sm,table.fm-t th.fm-sm{display:table-cell;line-height:1.25}table.fm-t th .fm-long{display:none}table.fm-t th .fm-short{display:inline}}table.fm-t .fm-sm,table.fm-t .fm-short{display:none}.fm-sl{color:var(--muted);font-size:9px;margin-right:3px}.fm-d{display:block;font-size:10px;font-weight:600;opacity:.8;line-height:1.2;white-space:nowrap}td.num:not(.rk-x):not(.fm-dc)>.fm-d{display:none}td.fm-dc .fm-d{display:inline;font-size:12.5px;opacity:1}td.fm-dc .fm-up{color:#4ade80}td.fm-dc .fm-dn{color:#f87171}td.fm-dc{color:var(--muted);border-right:2px solid var(--line)}.fm-rkm{display:none}@media (max-width:760px){table.fm-t .fm-dc{display:none}td.num:not(.rk-x):not(.fm-dc)>.fm-d{display:block}.fm-d{font-size:8.5px}.fm-rkm{display:block;font-size:8.5px;color:var(--muted);white-space:nowrap}.fm-rkm .fm-d{display:inline}}.kp-also{margin:8px 0 2px;font-size:13px;line-height:1.5}.fm-chip{display:inline-block;padding:1px 7px;border-radius:999px;font-size:11px;font-weight:700;line-height:1.5}.fm-tough{background:rgba(124,58,237,.45);color:#fff}.fm-average{background:transparent;color:var(--muted);border:1px solid var(--line)}.fm-easy{background:rgba(14,165,233,.30);color:var(--ink)}@media (max-width:760px){.fm-chip{padding:0 3px;font-size:9px;letter-spacing:-.1px}.fm-sl{margin-right:1px}}
+.fm-switch{display:flex;flex-wrap:wrap;gap:4px;margin:0 0 10px}.fm-switch button{font:inherit;font-size:12.5px;font-weight:700;padding:5px 12px;border:1px solid var(--line);border-radius:999px;background:transparent;color:var(--muted);cursor:pointer}.fm-switch button.on{background:var(--card);color:var(--ink);border-color:var(--muted)}.fm-note{max-width:820px}.fm-h{margin:14px 0 4px;font-size:13.5px}.fm-notes{max-width:820px;margin-top:4px}@media (max-width:760px){table.fm-t td.tm img,table.fm-t td.tm picture{display:none}table.fm-t th,table.fm-t td{padding:5px 3px!important;font-size:11.5px}table.fm-t th{white-space:normal;font-size:9px;letter-spacing:0}table.fm-t .fm-p,table.fm-t .fm-gp,table.fm-t .fm-sd{display:none}table.fm-t th,table.fm-t td{padding:5px 2px!important}table.fm-t td.fm-sm,table.fm-t th.fm-sm{display:table-cell;line-height:1.25}table.fm-t th .fm-long{display:none}table.fm-t th .fm-short{display:inline}}table.fm-t .fm-sm,table.fm-t .fm-short{display:none}.fm-sl{color:var(--muted);font-size:9px;margin-right:3px}.fm-d{display:block;font-size:10px;font-weight:600;opacity:.8;line-height:1.2;white-space:nowrap}td.num:not(.rk-x):not(.fm-dc)>.fm-d{display:none}td.fm-dc .fm-d{display:inline;font-size:12.5px;opacity:1}td.fm-dc .fm-up{color:#4ade80}td.fm-dc .fm-dn{color:#f87171}td.fm-dc{color:var(--muted);border-right:2px solid var(--line)}.fm-rkm{display:none}@media (max-width:760px){table.fm-t .fm-dc{display:none}td.num:not(.rk-x):not(.fm-dc)>.fm-d{display:block}.fm-d{font-size:8.5px}.fm-rkm{display:block;font-size:8.5px;color:var(--muted);white-space:nowrap}.fm-rkm .fm-d{display:inline}}.mv{list-style:none;margin:4px 0 4px;padding:0;font-size:12.5px;max-width:820px}.mv li{padding:4px 0;border-bottom:1px solid var(--line)}.mv li b{font-variant-numeric:tabular-nums}.mv-d{font-weight:800;margin:0 6px}.mv-up{color:#4ade80}.mv-dn{color:#f87171}.mv-why{display:block;color:var(--muted);font-size:12px;margin-top:1px}.kp-also{margin:8px 0 2px;font-size:13px;line-height:1.5}.fm-chip{display:inline-block;padding:1px 7px;border-radius:999px;font-size:11px;font-weight:700;line-height:1.5}.fm-tough{background:rgba(124,58,237,.45);color:#fff}.fm-average{background:transparent;color:var(--muted);border:1px solid var(--line)}.fm-easy{background:rgba(14,165,233,.30);color:var(--ink)}@media (max-width:760px){.fm-chip{padding:0 3px;font-size:9px;letter-spacing:-.1px}.fm-sl{margin-right:1px}}
 .rk-switch button.on{background:var(--card);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.25)}
 .rk[hidden]{display:none!important}
 table.rk-t th.sortable{cursor:pointer;user-select:none}table.rk-t th.sorted{color:var(--ink)}

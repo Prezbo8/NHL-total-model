@@ -208,6 +208,26 @@ cl, _ = retune.calls_section(g_season); gl, _ = retune.goalie_section(g_season);
 check("monthly report sections build from the real log", any("| SLAM |" in x for x in cl) and any("actually started" in x for x in gl)
       and any("finished games" in x or "No finished" in x for x in cal))
 
+print("projection moves")
+import moves
+_mv_day, _mv_path = "2000-01-01", moves.path("2000-01-01")
+_row = lambda proj, pa, ph, ag, hg, a_out, a_gadj, a_inj: {"away": "PIT", "home": "COL", "proj": proj, "proj_away": pa, "proj_home": ph,
+    "away_goalie_now": f"{ag} (Confirmed)", "home_goalie_now": f"{hg} (Confirmed)", "away_out": a_out, "home_out": None,
+    "away_gadj": a_gadj, "home_gadj": 0.01, "away_inj": a_inj, "home_inj": 0.0}
+try:
+    moves.record(_mv_day, [_row(7.00, 3.00, 4.00, "A", "B", None, 0.0, 0.0)], at="1:00 PM")
+    moves.record(_mv_day, [_row(7.00, 3.00, 4.00, "A", "B", None, 0.0, 0.0)], at="2:00 PM")  # nothing changed: not kept
+    moves.record(_mv_day, [_row(6.90, 2.90, 4.00, "A", "B", "X Player|0.03|0.0", 0.0, -0.033)], at="3:00 PM")
+    moves.record(_mv_day, [_row(7.10, 2.90, 4.20, "A", "C", "X Player (scratch)|0.03|0.0", 0.0, -0.033)], at="4:00 PM")  # tag change only
+    h_ = moves.load(_mv_day)["PIT@COL"]
+    check("moves: a snapshot only when something changed (tags / order ignored)", [x["at"] for x in h_] == ["1:00 PM", "3:00 PM", "4:00 PM"])
+    ex = moves.explain(h_[1], h_[2], "PIT", "COL") + moves.explain(h_[0], h_[1], "PIT", "COL")
+    check("moves: causes add up to the move; injury and goalie named", abs(sum(g for _, g in ex) - 0.10) < 0.006
+          and any("X Player (PIT) out" in t for t, _ in ex), str([(t, round(g, 3)) for t, g in ex]))
+finally:
+    if os.path.exists(_mv_path):
+        os.remove(_mv_path)
+
 print("dashboard")
 dashboard.OUT = SP + "site/index.html"
 import paths; paper.LOG = paths.data("paper_trades.csv")

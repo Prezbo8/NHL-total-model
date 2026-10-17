@@ -27,6 +27,7 @@ DATA = paths.data("moneypuck_games.csv")
 DATA_URL = "https://moneypuck.com/moneypuck/playerData/careers/gameByGame/all_teams.csv"
 
 K = 15          # games of "last season" weight before this season's games take over
+K_PP = 25       # same for the power-play / penalty-kill ratings: small samples, so last season counts longer (research/studies/pp_shrink.py)
 W_GOALS = 0.5   # offense/defense metric = W_GOALS*goals + (1-W_GOALS)*xG
 REGRESS = 0.33  # pull last season's rating this far back to league average
 G_SHRINK = 200  # xG faced before a goalie's own record counts as much as "average goalie" (calibrated: ratings match actual play)
@@ -552,6 +553,13 @@ def today(day=None):
                 json.dump({"date": day, "teams": kp, "baseline": base, "changes": changes}, f, separators=(",", ":"))
         except Exception as e:
             print(f"(key players not saved: {e})")
+        try:  # how each game's projection moved today (dashboard 'How the projection moved'), frozen at puck drop
+            import moves
+            now_utc = pd.Timestamp.now(tz="UTC")
+            moves.record(day, log_rows, {f"{g['awayTeam']['abbrev']}@{g['homeTeam']['abbrev']}" for g in todays
+                                         if pd.Timestamp(g["startTimeUTC"]) <= now_utc})
+        except Exception as e:
+            print(f"(projection moves not saved: {e})")
         try:  # games already under way: record who actually started (NHL box score)
             paper.update_actual_starters()
         except Exception as e:

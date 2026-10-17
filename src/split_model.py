@@ -182,13 +182,15 @@ def season_of(day):
 
 
 def walk_split(games, k=m.K, w=m.W_GOALS, regress=m.REGRESS, known_starters=True, with_projector=False, roster_w=0.0,
-               live_season=None, use_speed=True, record_detail=False, guess="mode", damp=1.0):
+               live_season=None, use_speed=True, record_detail=False, guess="mode", damp=1.0, pp_k=m.K_PP, pp_regress=None):
     """live_season: the season being projected. If it's newer than the data (e.g. opening day, before any
     of its games exist), last season's ratings are rolled over into this season's starting ratings.
     guess (known_starters=False): "mode" = the team's most common starter in its last 10 games;
     "blend" = each of those last-10 starters, weighted by how many of them he started.
     damp (research, research/studies/matchup_damp.py): each side's distance from league average enters the
-    matchup as (rating / average) ** damp; 1.0 = the live model (full multiplication)."""
+    matchup as (rating / average) ** damp; 1.0 = the live model (full multiplication).
+    pp_k: K for the power-play and penalty-kill ratings (live m.K_PP; None = same as 5v5). pp_regress (research,
+    research/studies/pp_shrink.py): REGRESS for them only; None = same as 5v5 (the live model)."""
     starter, by_game, gg = m.load_goalies()
     # goalie history only from seasons that are part of this run (nothing before games' first season)
     gs = m.GoalieSkill(gg.iloc[0:0])
@@ -197,7 +199,8 @@ def walk_split(games, k=m.K, w=m.W_GOALS, regress=m.REGRESS, known_starters=True
     avg = lambda c: first[c].mean()
     # shrink sizes = k games' worth of each denominator
     t5, tpp = avg("ev_iceTime"), (avg("pp_iceTime") + avg("pk_iceTime")) / 2
-    R = {"off5": Rate(k * t5), "def5": Rate(k * t5), "pp": Rate(k * tpp), "pk": Rate(k * tpp),
+    kp = k if pp_k is None else pp_k
+    R = {"off5": Rate(k * t5), "def5": Rate(k * t5), "pp": Rate(kp * tpp), "pk": Rate(kp * tpp),
          "drawn": Rate(k), "taken": Rate(k)}
     lg_init = {"off5": avg("ev_xFor") / t5, "def5": avg("ev_xFor") / t5,
                "pp": avg("pp_xFor") / avg("pp_iceTime"), "pk": avg("pp_xFor") / avg("pp_iceTime"),
@@ -289,8 +292,8 @@ def walk_split(games, k=m.K, w=m.W_GOALS, regress=m.REGRESS, known_starters=True
                 if (r.gameId, t) in starter:
                     recent[t] = (recent.get(t, []) + [starter[(r.gameId, t)]])[-10:]
         if season != last:  # keep the current season's ratings live for today's games
-            for rate in R.values():
-                rate.end_season(regress)
+            for key, rate in R.items():
+                rate.end_season(pp_regress if pp_regress is not None and key in ("pp", "pk") else regress)
     if last > games.season.max():  # new season with no games yet: start it like any other season
         gs.new_season()
     proj = pd.DataFrame(rows, columns=["gameId", "season", "gameDate", "home", "away", "proj", "total", "lam_h", "lam_a"])
