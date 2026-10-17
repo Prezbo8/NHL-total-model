@@ -22,7 +22,7 @@ jobs:
         run: python -c "import sys; sys.path.insert(0, 'src'); import model; assert model.refresh_data()"
       - name: Static check
         run: python -m pyflakes src/*.py research/lib/*.py research/studies/*.py tests/*.py
-      - name: Component checks (29)
+      - name: Component checks
         run: python tests/check_model.py
       - name: Projection run for tomorrow (never logged)
         run: python src/model.py today "$(date -d tomorrow +%F)" | tail -8

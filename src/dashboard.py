@@ -1436,6 +1436,15 @@ CALIBRATION_BACKTEST = [  # (bin label, games, mean predicted P(7+), share that 
 ]
 
 
+CAL_NOTE = """<div class='cal-note'><b>What this chart shows</b>
+  <p>Each dot is a group of games with a similar P(7+). It compares what the model predicted with what actually happened.</p>
+  <ul><li><b>On the line:</b> the model's percentages are about right.</li>
+  <li><b>Above the line:</b> more games went 7+ than the model expected.</li>
+  <li><b>Below the line:</b> fewer games went 7+ than the model expected.</li></ul>
+  <p><b>Circles</b> are past seasons and <b>squares</b> are this season. This season's dots will jump around until there are a lot
+  more games, so don't read much into them yet.</p></div>"""
+
+
 def calibration(s):
     """Calibration chart + table: predicted P(7+) vs how often games went 7+, per P(7+) bin, for the 2023-26 backtest
     and this season (last pre-game P(7+) of finished games). Dots on the diagonal = the percentages can be trusted."""
@@ -1480,7 +1489,8 @@ def calibration(s):
                    for b in CALIBRATION_BACKTEST)
     return (f"<h3>{tip('P(7+) calibration', 'Games grouped by the model’s chance of 7+ goals. Each dot = how often those games actually went 7+. On the diagonal = the percentages can be trusted.', 'tl')}</h3>"
             f"<div class='cal-legend'>{legend}</div>"
-            f"<div class='cal-wrap'><svg class='cal' viewBox='0 0 {W} {H}' role='img' aria-label='P(7+) calibration: model chance vs how often games went 7+'>{g}</svg></div>"
+            f"<div class='cal-row'><div class='cal-wrap'><svg class='cal' viewBox='0 0 {W} {H}' role='img' aria-label='P(7+) calibration: model chance vs how often games went 7+'>{g}</svg></div>"
+            f"{CAL_NOTE}</div>"
             f"<div class='scroll'><table class='acc-t'><thead><tr><th>Model P(7+)</th><th class='num'>Backtest games</th><th class='num'>Model</th><th class='num'>Went 7+</th>"
             f"<th class='num'>This season</th><th class='num'>Model</th><th class='num'>Went 7+</th></tr></thead><tbody>{rows}</tbody></table></div>"
             f"<p class='muted small'>This season's groups appear on the chart once they have {CAL_MIN_GAMES}+ games; smaller ones are in the table only.</p>")
@@ -2023,7 +2033,7 @@ table.gt{font-size:12.5px;border-collapse:separate;border-spacing:0;width:100%;t
 .callpill{display:inline-block;font-size:10px;font-weight:800;padding:1px 8px;border-radius:999px;margin-bottom:2px;letter-spacing:.04em}
 .callpill.c-slam{background:var(--gold);color:#1a1200}.callpill.c-1u{border:1.5px solid var(--gold);color:var(--ink)}
 .callpill.c-pass{border:1px dashed var(--gold);color:var(--muted);font-weight:700}
-.cal-sec{margin-top:18px}.cal-sec h3{margin:0 0 6px}.cal-legend{display:flex;gap:16px;font-size:12.5px;color:var(--muted);margin-bottom:4px}.cal-key{display:inline-flex;align-items:center;gap:6px}.cal-wrap{max-width:560px}svg.cal{width:100%;height:auto;display:block}
+.cal-sec{margin-top:18px}.cal-sec h3{margin:0 0 6px}.cal-legend{display:flex;gap:16px;font-size:12.5px;color:var(--muted);margin-bottom:4px}.cal-key{display:inline-flex;align-items:center;gap:6px}.cal-wrap{max-width:560px;flex:0 1 560px;min-width:0}.cal-row{display:flex;flex-wrap:wrap;gap:12px 24px;align-items:center}.cal-note{flex:1 1 260px;max-width:420px;font-size:13.5px;color:var(--muted);line-height:1.5}.cal-note b{color:var(--ink)}.cal-note p{margin:6px 0}.cal-note ul{margin:6px 0;padding-left:18px}svg.cal{width:100%;height:auto;display:block}
 svg.cal .cal-grid{stroke:var(--line);stroke-width:1}svg.cal .cal-diag{stroke:var(--muted);stroke-width:1;stroke-dasharray:4 4}svg.cal .cal-ax{fill:var(--muted);font-size:11px}svg.cal .cal-lbl{fill:var(--ink);font-size:11.5px;font-weight:700}
 svg.cal .cal-line{fill:none;stroke-width:2;opacity:.55}.cal-line.cal-a{stroke:var(--cal-a)}.cal-line.cal-b{stroke:var(--cal-b)}circle.cal-a,rect.cal-a{fill:var(--cal-a);stroke:var(--card);stroke-width:2}circle.cal-b,rect.cal-b{fill:var(--cal-b);stroke:var(--card);stroke-width:2}.cal-key svg circle,.cal-key svg rect{stroke:none}svg.cal .cal-hit{fill:transparent;stroke:none}svg.cal .cal-pt{cursor:default;outline:none}svg.cal .cal-pt:hover circle:not(.cal-hit),svg.cal .cal-pt:hover rect,svg.cal .cal-pt:focus circle:not(.cal-hit){stroke:var(--ink)}
 .near{font-size:9.5px;font-weight:700;color:var(--gold);white-space:nowrap}.near .tip{border-bottom-style:dotted}

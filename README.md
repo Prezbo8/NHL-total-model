@@ -61,8 +61,8 @@ Only data from the 2020-21 season onward is used.
 
 | | Bets | Win % | ROI |
 |---|---|---|---|
-| At the opening line | 585 | 53.0% | +1.3% |
-| At the closing line | 840 | 54.7% | +2.4% |
+| At the opening line | 580 | 53.7% | +2.6% |
+| At the closing line | 840 | 55.1% | +3.0% |
 | Line shopping (best book) | | | about +2 pts more |
 
 The past edge is small (±3–4% uncertainty). The live paper-trading record decides whether it's real.
@@ -89,6 +89,7 @@ src/                          everything the daily run uses
   store.py                      run history in Supabase (every run's projections; skipped without the key)
   rule_check.py                 one-time SLAM rule check at 75 settled picks (data/rule_check.json)
   trends.py                     last-10 and head-to-head context shown on the dashboard
+  moves.py                      how each game's projection moved during the day, and why (data/moves/)
   dashboard.py                  builds the website in docs/ (slate, record, accuracy + P(7+) chart, rankings)
   backfill.py                   adds a past day from pre-game data only (marked retroactive)
   teams.py  paths.py            team names, file locations
@@ -102,9 +103,10 @@ data/                         CSV data
   odds_*.csv  sbr_odds.csv      historical lines
   game_starts.csv  referees.csv research inputs (start times, referees)
   monthly/                      monthly check-up reports
+  key_players/  moves/          per-day key players and projection-move snapshots (dashboard)
 docs/                         the website (GitHub Pages)
 supabase/schema.sql           Supabase tables (nhl_*) for the run history: paste once into the SQL Editor
-tests/check_model.py          49 component checks (paper log, settling, goalies, model, injuries, odds, dashboard)
+tests/check_model.py          56 component checks (paper log, settling, goalies, model, injuries, odds, dashboard, projection moves)
 ```
 
 ## Schedule
@@ -136,7 +138,7 @@ python3 src/paper.py report               # paper-trading record
 python3 src/dashboard.py                  # rebuild the website
 python3 research/lib/history.py           # backtest the overs rule
 python3 research/studies/<name>.py        # any study (see research/README.md)
-python3 tests/check_model.py              # 49 component checks (also run on GitHub: Tests workflow)
+python3 tests/check_model.py              # 56 component checks (also run on GitHub: Tests workflow)
 ```
 
 The first run downloads MoneyPuck's game file (~126 MB, not stored in the repo).
