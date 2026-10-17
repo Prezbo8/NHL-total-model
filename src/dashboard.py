@@ -1533,14 +1533,21 @@ FORM_COLS = (  # (column, header, explanation); every number is per game, + = go
 FORM_WINDOWS = (("season", "Season"), ("30", "Last 30"), ("14", "Last 14"), ("7", "Last 7"))
 FORM_SCHED = (  # schedule faced in the window (trends.team_form with rankings), judged by today's Total ranks
     ("opp_d", "Defenses faced", "How good the defenses this team played in this window were. <b>Tough</b> = they allow 3%+ fewer goals "
-     "than an average defense, <b>Easy</b> = 3%+ more, else <b>Average</b>. '4 of 5 top-10' = games against a top-10 Total Defense. "
+     "than an average defense, <b>Easy</b> = 3%+ more, else <b>Average</b>. '4 of 5 top-10' = games against a top-10 Total Defense, '1 bottom-5' = against one of the 5 worst. "
      "Tap a cell for each opponent and its rank. Scoring already accounts for this (each game's projection includes the opponent); "
      "Finish doesn't."),
     ("opp_o", "Offenses faced", "How good the offenses this team played in this window were. <b>Tough</b> = they score 3%+ more goals "
-     "than an average offense, <b>Easy</b> = 3%+ fewer. '3 of 5 top-10' = games against a top-10 Total Offense. Tap a cell for the "
+     "than an average offense, <b>Easy</b> = 3%+ fewer. '3 of 5 top-10' = games against a top-10 Total Offense, '1 bottom-5' = against one of the 5 worst. Tap a cell for the "
      "opponents. Allowing already accounts for this; Goalie doesn't."),
 )
 SCHED_EDGE = 0.03  # 3% more / fewer goals than average = Tough / Easy
+BOTTOM5_RANK = 28  # Total rank 28-32 of 32 = a bottom-5 defense / offense
+
+
+def bottom5(r, c):
+    """Games in the window against a bottom-5 defense (c = 'opp_d') or offense ('opp_o'), from the opponents' ranks."""
+    k = 1 if c == "opp_d" else 2
+    return sum(float(o.split(":")[k]) >= BOTTOM5_RANK for o in str(r.opps).split(";") if o.count(":") == 2)
 
 
 def sched_level(c, v):
@@ -1556,8 +1563,9 @@ def sched_tip(r, c):
     lst = ", ".join(f"{o[0]} #{o[k]}" for o in opps)
     v = getattr(r, c)
     more = "allow" if c == "opp_d" else "score"
+    top = int(getattr(r, "top10_d" if c == "opp_d" else "top10_o"))
     return (f"{which} faced, newest first (#1 = best): {lst}. On average they {more} {abs(v) * 100:.0f}% "
-            f"{'more' if v > 0 else 'fewer'} goals than average.")
+            f"{'more' if v > 0 else 'fewer'} goals than average. {top} of {r.gp} games vs a top-10, {bottom5(r, c)} vs a bottom-5.")
 
 
 def form_notes(x, label, f):
@@ -1581,7 +1589,7 @@ def form_notes(x, label, f):
         items.append(f"<li><b>Scoring and goaltending pulling opposite ways</b>: {', '.join(split)}.</li>")
     if "opp_d" in x and x.opp_d.notna().any():  # schedule faced, in words
         sd = x.dropna(subset=["opp_d"])
-        fmt = lambda r: f"{e(r.team)} ({int(r.top10_d)} of {r.gp} vs top-10)"
+        fmt = lambda r: f"{e(r.team)} ({int(r.top10_d)} of {r.gp} vs top-10, {bottom5(r, 'opp_d')} vs bottom-5)"
         tough, easy = sd[sd.opp_d <= -SCHED_EDGE].sort_values("opp_d"), sd[sd.opp_d >= SCHED_EDGE].sort_values("opp_d", ascending=False)
         if len(tough):
             items.append(f"<li><b>Toughest defenses faced</b>: {', '.join(fmt(r) for r in tough.head(3).itertuples())}.</li>")
@@ -1627,8 +1635,9 @@ def form_view():
             return "<td class='num muted fm-sd' data-k='99'>–</td>"
         n = int(getattr(r, "top10_d" if c == "opp_d" else "top10_o"))
         hard = -v if c == "opp_d" else v
-        return (f"<td class='num fm-sd' data-k='{-hard:.4f}'>{tip(chip(c, v), sched_tip(r, c), 'tr')}"
-                f"<span class='muted small'> {n} of {r.gp} top-10</span></td>")
+        return (f"<td class='num fm-sd' data-k='{-hard:.4f}'><span class='fm-stack'>{tip(chip(c, v), sched_tip(r, c), 'tr')}"
+                f"<span class='fm-cl'><span class='fm-tag'>Top 10</span><span class='muted small'>{n} of {r.gp}</span></span>"
+                f"<span class='fm-cl'><span class='fm-tag'>Bottom 5</span><span class='muted small'>{bottom5(r, c)} of {r.gp}</span></span></span></td>")
 
     def sched_phone(r):  # phones: both in one stacked cell (D over O), sorted by the defenses faced
         if not sched:
@@ -1895,6 +1904,7 @@ th,td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:left;white
 th{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:700}
 .num{text-align:right;font-variant-numeric:tabular-nums}tr.total td{font-weight:800}
 .pos{color:var(--pos)}.neg{color:var(--neg)}td.matchup{display:flex;align-items:center;gap:4px}.d-short{display:none}
+table th.fm-sd,table td.fm-sd{text-align:center}.fm-stack{display:inline-flex;flex-direction:column;align-items:stretch;gap:3px;line-height:1.25}.fm-stack>.tip{align-self:center}.fm-cl{display:flex;justify-content:space-between;align-items:center;gap:8px}.fm-tag{font-size:10px;font-weight:700;padding:0 6px;border-radius:999px;border:1px solid var(--line);color:var(--ink);white-space:nowrap}
 ul.notes{margin:12px 0 0;padding-left:20px;color:var(--muted)}
 table.rec-t{width:100%}@media (min-width:521px){table.rec-t:not(.type-t){table-layout:fixed}table.rec-t:not(.type-t) th:nth-child(1){width:13%}table.rec-t:not(.type-t) th:nth-child(2){width:21%}table.rec-t:not(.type-t) th:nth-child(3){width:20%}table.rec-t:not(.type-t) th:nth-child(4){width:16%}table.rec-t:not(.type-t) th:nth-child(5),table.rec-t:not(.type-t) th:nth-child(6),table.rec-t:not(.type-t) th:nth-child(7){width:10%}}table.rec-t th.c,table.rec-t td.c{text-align:center}table.rec-t th.r,table.rec-t td.r{text-align:right}.scroll table.rec-t td{font-variant-numeric:tabular-nums;white-space:nowrap}.scroll table.rec-t td.rc-call{white-space:normal}.rc-px{color:var(--muted);margin-left:6px;font-size:.92em}@media (max-width:520px){table.rec-t td.rc-ln b,table.rec-t td.rc-ln .rc-px{display:block;margin:0}.scroll table.rec-t td.rc-call{min-width:44px}}
 .rec-h{margin:22px 0 10px;font-size:16px}.rec-h:first-child{margin-top:4px}.rec-sub{margin:-4px 0 10px}details.tracked{margin-top:12px}details.tracked summary{cursor:pointer;font-weight:600;padding:6px 0}
