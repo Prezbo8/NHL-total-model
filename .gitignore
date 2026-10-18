@@ -12,3 +12,6 @@ data/dressed.csv
 
 # research: skaters' 5on4 / 4on5 ice time (research/studies/pp_injuries.py)
 data/skater_special_teams.csv
+
+# research: MoneyPuck season summaries per skater / goalie (shooter talent, goalie shot-type studies)
+data/mp_seasons/

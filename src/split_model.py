@@ -182,7 +182,7 @@ def season_of(day):
 
 
 def walk_split(games, k=m.K, w=m.W_GOALS, regress=m.REGRESS, known_starters=True, with_projector=False, roster_w=0.0,
-               live_season=None, use_speed=True, record_detail=False, guess="mode", damp=1.0, pp_k=m.K_PP, pp_regress=None):
+               live_season=None, use_speed=True, record_detail=False, guess="mode", damp=1.0, pp_k=m.K_PP, pp_regress=None, w_def=0.0):
     """live_season: the season being projected. If it's newer than the data (e.g. opening day, before any
     of its games exist), last season's ratings are rolled over into this season's starting ratings.
     guess (known_starters=False): "mode" = the team's most common starter in its last 10 games;
@@ -190,7 +190,9 @@ def walk_split(games, k=m.K, w=m.W_GOALS, regress=m.REGRESS, known_starters=True
     damp (research, research/studies/matchup_damp.py): each side's distance from league average enters the
     matchup as (rating / average) ** damp; 1.0 = the live model (full multiplication).
     pp_k: K for the power-play and penalty-kill ratings (live m.K_PP; None = same as 5v5). pp_regress (research,
-    research/studies/pp_shrink.py): REGRESS for them only; None = same as 5v5 (the live model)."""
+    research/studies/pp_shrink.py): REGRESS for them only; None = same as 5v5 (the live model).
+    w_def (research, research/studies/goals_xg_mix.py): share of actual goals in the 5v5 defense and penalty-kill
+    ratings; 0 = the live model (xG only, the goalie rating handles goals vs xG)."""
     starter, by_game, gg = m.load_goalies()
     # goalie history only from seasons that are part of this run (nothing before games' first season)
     gs = m.GoalieSkill(gg.iloc[0:0])
@@ -275,13 +277,14 @@ def walk_split(games, k=m.K, w=m.W_GOALS, regress=m.REGRESS, known_starters=True
             row = r._asdict()
             R["off5"].add(r.home, bl(row["ev_goalsFor"], row["ev_xFor"]), row["ev_iceTime"])
             R["off5"].add(r.away, bl(row["ev_goalsAgainst"], row["ev_xAgainst"]), row["ev_iceTime"])
-            R["def5"].add(r.home, row["ev_xAgainst"], row["ev_iceTime"])
-            R["def5"].add(r.away, row["ev_xFor"], row["ev_iceTime"])
+            bd = lambda gl, x: w_def * gl + (1 - w_def) * x
+            R["def5"].add(r.home, bd(row["ev_goalsAgainst"], row["ev_xAgainst"]), row["ev_iceTime"])
+            R["def5"].add(r.away, bd(row["ev_goalsFor"], row["ev_xFor"]), row["ev_iceTime"])
             # home 5on4 row = home power play; home 4on5 row = away power play
             R["pp"].add(r.home, bl(row["pp_goalsFor"], row["pp_xFor"]), row["pp_iceTime"])
             R["pp"].add(r.away, bl(row["pk_goalsAgainst"], row["pk_xAgainst"]), row["pk_iceTime"])
-            R["pk"].add(r.home, row["pk_xAgainst"], row["pk_iceTime"])
-            R["pk"].add(r.away, row["pp_xFor"], row["pp_iceTime"])
+            R["pk"].add(r.home, bd(row["pk_goalsAgainst"], row["pk_xAgainst"]), row["pk_iceTime"])
+            R["pk"].add(r.away, bd(row["pp_goalsFor"], row["pp_xFor"]), row["pp_iceTime"])
             R["drawn"].add(r.home, row["pp_iceTime"], 1); R["drawn"].add(r.away, row["pk_iceTime"], 1)
             R["taken"].add(r.home, row["pk_iceTime"], 1); R["taken"].add(r.away, row["pp_iceTime"], 1)
             other = 0.995 * other + 0.005 * (row["o_goalsFor"] + row["o_goalsAgainst"])
