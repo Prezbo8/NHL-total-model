@@ -106,7 +106,7 @@ data/                         CSV data
   key_players/  moves/          per-day key players and projection-move snapshots (dashboard)
 docs/                         the website (GitHub Pages)
 supabase/schema.sql           Supabase tables (nhl_*) for the run history: paste once into the SQL Editor
-tests/check_model.py          56 component checks (paper log, settling, goalies, model, injuries, odds, dashboard, projection moves)
+tests/check_model.py          57 component checks (paper log, settling, goalies, model, injuries, odds, dashboard, projection moves)
 ```
 
 ## Schedule
@@ -138,7 +138,7 @@ python3 src/paper.py report               # paper-trading record
 python3 src/dashboard.py                  # rebuild the website
 python3 research/lib/history.py           # backtest the overs rule
 python3 research/studies/<name>.py        # any study (see research/README.md)
-python3 tests/check_model.py              # 56 component checks (also run on GitHub: Tests workflow)
+python3 tests/check_model.py              # 57 component checks (also run on GitHub: Tests workflow)
 ```
 
 The first run downloads MoneyPuck's game file (~126 MB, not stored in the repo).

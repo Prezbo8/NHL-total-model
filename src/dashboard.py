@@ -28,7 +28,7 @@ SCALE = 4.5  # projected-goal bars run 0 -> 4.5 goals
 
 
 TIPS = {
-    "Moves": "Every model run that changed this game's projection, with the change in the total and what caused it: a goalie switch, players out / back in, or ratings / other data (games finished elsewhere, refreshed stats). Each team's change is split by how much each factor moved; small leftovers count as ratings / other. Frozen at puck drop.",
+    "Moves": "A log of every model run for this game (about hourly, frozen at puck drop): the change in the total and what caused it (a goalie switch, players out / back in, or ratings / other data such as games finished elsewhere and refreshed stats), plus anything else the scraper picked up (goalie confirmed, day-to-day players, a new projected lineup, the line moving), or no change. Each team's change is split by how much each factor moved; small leftovers count as ratings / other.",
     "KP attack": "How much the team's projected goals drop if this player sits (the model's injury adjustment: his ice time × how much better he is than a replacement-level player × how much of him is in the team's rating). Players ranked by this number. OUT players are already taken off the projection.",
     "KP defense": "How much the OPPONENT's projected goals rise if this player sits (same injury adjustment, defensive side). Players ranked by this number. OUT players are already in the projection. Rough guide only: tested on 2021-26, this side is too small and noisy to prove on its own.",
     "Proj total": "Projected total goals for the game (away + home), from the model.",
@@ -1217,8 +1217,9 @@ def also_out(r, teams):
 
 
 def moves_html(r):
-    """'How the projection moved' box: each run that changed this game's projection (data/moves/<day>.json, frozen at
-    puck drop) with the change in the total and its causes; '' until it has moved at least once."""
+    """'How the projection moved' box: a log of every run for this game (data/moves/<day>.json, frozen at puck drop):
+    the change in the total and its causes, anything else picked up (goalie status, day-to-day, lineup, line), or
+    'no change'; '' until the game has been run at least twice."""
     import moves
     hist = moves.load(r.date).get(f"{r.away}@{r.home}", [])
     if len(hist) < 2:
@@ -1226,9 +1227,12 @@ def moves_html(r):
     items = [f"<li><b>{e(hist[0]['at'])}</b> {hist[0]['proj']:.2f} <span class='muted'>first run</span></li>"]
     for prev, cur in zip(hist, hist[1:]):
         d = cur["proj"] - prev["proj"]
-        why = "; ".join(f"{e(t)} <b>{g:+.2f}</b>" for t, g in moves.explain(prev, cur, r.away, r.home)) or "rounding"
-        items.append(f"<li><b>{e(cur['at'])}</b> {cur['proj']:.2f} <span class='mv-d {'mv-up' if d > 0 else 'mv-dn'}'>{d:+.2f}</span>"
-                     f"<span class='mv-why'>{why}</span></li>")
+        why = ([f"{e(t)} <b>{g:+.2f}</b>" for t, g in moves.explain(prev, cur, r.away, r.home)] or ["rounding"] if moves.moved(prev, cur) else []) \
+            + [e(t) for t in moves.news(prev, cur, r.away, r.home)]
+        delta = (f"<span class='mv-d {'mv-up' if d > 0 else 'mv-dn'}'>{d:+.2f}</span>" if abs(d) >= moves.MIN_MOVE
+                 else " <span class='muted'>no change</span>" if not why else "")
+        items.append(f"<li><b>{e(cur['at'])}</b> {cur['proj']:.2f} {delta}"
+                     + (f"<span class='mv-why'>{'; '.join(why)}</span>" if why else "") + "</li>")
     when = "on game day" if pd.notna(getattr(r, "final_total", np.nan)) else "today"
     return (f"<details class='mu-why'><summary>How the projection moved {when} ({hist[0]['proj']:.2f} → {hist[-1]['proj']:.2f})</summary>"
             f"<ul class='mv'>{''.join(items)}</ul><p class='muted small kp-note'>{e(TIPS['Moves'])}</p></details>")

@@ -1,8 +1,9 @@
 """How each game's projection moved during the day (dashboard 'How the projection moved').
 
-Every model run adds a snapshot per game that hasn't started, but only when something changed (projection, goalie or
-who is out), to data/moves/<day>.json: {"AWY@HOM": [{at, proj, a/h: {lam, goalie, out, gadj, inj}}, ...]}.
-explain() turns two snapshots into the change in the total and its causes, each team's change split into
+Every model run adds a snapshot per game that hasn't started to data/moves/<day>.json, changed or not (a run log):
+{"AWY@HOM": [{at, proj, line, a/h: {lam, goalie, status, out, dtd, lineup, gadj, inj}}, ...]}.
+news() lists what the scraper picked up that the projection doesn't show (goalie status, day-to-day, lineup source,
+the line); explain() turns two snapshots into the change in the total and its causes, each team's change split into
 goalie / injuries & lineup / ratings & other data (finished games, refreshed stats) by how much each factor moved.
 """
 import json
@@ -14,8 +15,8 @@ import pandas as pd
 import paths
 import split_model
 
-MIN_MOVE = 0.005
-EXTRA_HALF = split_model.EXTRA / 2  # each team's fixed part, not scaled by goalie / injuries  # a snapshot is kept when the total moves this much, or a goalie / out list changes
+MIN_MOVE = 0.005  # a smaller move in the total counts as no change
+EXTRA_HALF = split_model.EXTRA / 2  # each team's fixed part, not scaled by goalie / injuries
 
 
 def path(day):
@@ -27,10 +28,16 @@ def load(day):
     return json.load(open(p)) if os.path.exists(p) else {}
 
 
+def _names(v, sep):
+    return sorted({x.split("|")[0].split(" (")[0].strip() for x in str(v or "").split(sep) if x.strip()})  # tags / order ignored
+
+
 def _side(r, s):
-    out = sorted({x.split("|")[0].split(" (")[0].strip() for x in str(r.get(f"{s}_out") or "").split(";") if x.strip()})  # tags / order ignored
-    return {"lam": round(float(r[f"proj_{s}"]), 3), "goalie": str(r[f"{s}_goalie_now"]).split(" (")[0],
-            "out": out, "gadj": round(float(r.get(f"{s}_gadj") or 0), 4), "inj": round(float(r.get(f"{s}_inj") or 0), 4)}
+    g = str(r[f"{s}_goalie_now"])
+    return {"lam": round(float(r[f"proj_{s}"]), 3), "goalie": g.split(" (")[0],
+            "status": g.split(" (", 1)[1].rstrip(")") if " (" in g else "",
+            "out": _names(r.get(f"{s}_out"), ";"), "dtd": _names(r.get(f"{s}_dtd"), ","), "lineup": r.get(f"{s}_lineup") or "",
+            "gadj": round(float(r.get(f"{s}_gadj") or 0), 4), "inj": round(float(r.get(f"{s}_inj") or 0), 4)}
 
 
 def record(day, rows, started=(), at=None):
@@ -41,18 +48,38 @@ def record(day, rows, started=(), at=None):
         key = f"{r['away']}@{r['home']}"
         if key in started:
             continue  # frozen at puck drop
-        snap = {"at": at, "proj": round(float(r["proj"]), 3), "a": _side(r, "away"), "h": _side(r, "home")}
-        hist = d.setdefault(key, [])
-        if hist:
-            last = hist[-1]
-            same = (abs(last["proj"] - snap["proj"]) < MIN_MOVE
-                    and all(last[s]["goalie"] == snap[s]["goalie"] and last[s]["out"] == snap[s]["out"] for s in ("a", "h")))
-            if same:
-                continue
-        hist.append(snap)
+        line = None if pd.isna(r.get("bet_total")) or pd.isna(r.get("bet_over")) else [float(r["bet_total"]), int(r["bet_over"])]
+        d.setdefault(key, []).append({"at": at, "proj": round(float(r["proj"]), 3), "line": line,
+                                      "a": _side(r, "away"), "h": _side(r, "home")})
     os.makedirs(os.path.dirname(path(day)), exist_ok=True)
     with open(path(day), "w") as f:
         json.dump(d, f, separators=(",", ":"))
+
+
+def moved(prev, cur):
+    """True when the projection, a goalie or who is out changed (what explain() accounts for)."""
+    return abs(cur["proj"] - prev["proj"]) >= MIN_MOVE or any(
+        prev[s]["goalie"] != cur[s]["goalie"] or prev[s]["out"] != cur[s]["out"] for s in ("a", "h"))
+
+
+def news(prev, cur, away, home):
+    """[text] what this run picked up beyond the projection's causes: goalie status (same goalie), day-to-day
+    players, a new lineup source / update, the line. Keys missing from either snapshot count as unchanged."""
+    out = []
+    for s, t in (("a", away), ("h", home)):
+        p, c = prev[s], cur[s]
+        has = lambda k: k in p and k in c
+        if p["goalie"] == c["goalie"] and has("status") and p["status"] != c["status"]:
+            out.append(f"{t} goalie {c['goalie']}: {p['status']} → {c['status']}")
+        if has("dtd"):
+            out += [f"{n} ({t}) day-to-day" for n in c["dtd"] if n not in p["dtd"]]
+            out += [f"{n} ({t}) off day-to-day" for n in p["dtd"] if n not in c["dtd"] and n not in c["out"]]
+        if has("lineup") and p["lineup"] != c["lineup"] and c["lineup"]:
+            out.append(f"{t} lineup: {c['lineup']}")
+    if "line" in prev and "line" in cur and prev["line"] != cur["line"] and cur["line"]:
+        was = f"{prev['line'][0]:g} o{prev['line'][1]:+d}" if prev["line"] else "none"
+        out.append(f"Line {was} → {cur['line'][0]:g} o{cur['line'][1]:+d}")
+    return out
 
 
 def explain(prev, cur, away, home):

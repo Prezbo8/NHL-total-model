@@ -213,14 +213,23 @@ import moves
 _mv_day, _mv_path = "2000-01-01", moves.path("2000-01-01")
 _row = lambda proj, pa, ph, ag, hg, a_out, a_gadj, a_inj: {"away": "PIT", "home": "COL", "proj": proj, "proj_away": pa, "proj_home": ph,
     "away_goalie_now": f"{ag} (Confirmed)", "home_goalie_now": f"{hg} (Confirmed)", "away_out": a_out, "home_out": None,
-    "away_gadj": a_gadj, "home_gadj": 0.01, "away_inj": a_inj, "home_inj": 0.0}
+    "away_gadj": a_gadj, "home_gadj": 0.01, "away_inj": a_inj, "home_inj": 0.0, "bet_total": 6.5, "bet_over": -110}
 try:
     moves.record(_mv_day, [_row(7.00, 3.00, 4.00, "A", "B", None, 0.0, 0.0)], at="1:00 PM")
-    moves.record(_mv_day, [_row(7.00, 3.00, 4.00, "A", "B", None, 0.0, 0.0)], at="2:00 PM")  # nothing changed: not kept
+    moves.record(_mv_day, [_row(7.00, 3.00, 4.00, "A", "B", None, 0.0, 0.0)], at="2:00 PM")  # nothing changed: still logged
     moves.record(_mv_day, [_row(6.90, 2.90, 4.00, "A", "B", "X Player|0.03|0.0", 0.0, -0.033)], at="3:00 PM")
     moves.record(_mv_day, [_row(7.10, 2.90, 4.20, "A", "C", "X Player (scratch)|0.03|0.0", 0.0, -0.033)], at="4:00 PM")  # tag change only
+    moves.record(_mv_day, [{**_row(7.10, 2.90, 4.20, "A", "C", "X Player|0.03|0.0", 0.0, -0.033), "home_goalie_now": "C (Likely)",
+                            "away_dtd": "Y Player", "home_lineup": "DailyFaceoff 5:10 PM", "bet_over": -120}], at="5:00 PM")
     h_ = moves.load(_mv_day)["PIT@COL"]
-    check("moves: a snapshot only when something changed (tags / order ignored)", [x["at"] for x in h_] == ["1:00 PM", "3:00 PM", "4:00 PM"])
+    check("moves: every run logged; changed = projection / goalie / out moved (tags / order ignored)",
+          [x["at"] for x in h_] == ["1:00 PM", "2:00 PM", "3:00 PM", "4:00 PM", "5:00 PM"]
+          and [moves.moved(a_, b_) for a_, b_ in zip(h_, h_[1:])] == [False, True, True, False]
+          and moves.news(h_[0], h_[1], "PIT", "COL") == [])
+    nw = moves.news(h_[3], h_[4], "PIT", "COL")
+    check("moves: scraper news (goalie status, day-to-day, lineup, line)", nw == [
+        "Y Player (PIT) day-to-day", "COL goalie C: Confirmed → Likely", "COL lineup: DailyFaceoff 5:10 PM", "Line 6.5 o-110 → 6.5 o-120"], str(nw))
+    h_ = [h_[0], h_[2], h_[3]]
     ex = moves.explain(h_[1], h_[2], "PIT", "COL") + moves.explain(h_[0], h_[1], "PIT", "COL")
     check("moves: causes add up to the move; injury and goalie named", abs(sum(g for _, g in ex) - 0.10) < 0.006
           and any("X Player (PIT) out" in t for t, _ in ex), str([(t, round(g, 3)) for t, g in ex]))
