@@ -626,7 +626,7 @@ def day_table(g):
                  f"<th class='ctr'>{tip('Line')}</th><th class='ctr'>{tip('Pick')}</th>")
     else:
         head += (f"<th class='gcol ctr'>{tip('Proj total')}</th><th class='ctr'>{tip('P(7+)')}</th>"
-                 f"<th class='ctr'>{tip('Line', 'Consensus total: opening line → now, and the over price (−120 = risk 120 to win 100). ★ FLAG = the model’s over pick.')}</th>")
+                 f"<th class='ctr'>{tip('Line', 'Consensus total: opening line and over price → line and over price now (−120 = risk 120 to win 100). ★ FLAG = the model’s over pick.')}</th>")
     head += (f"<th class='gcol'>{tip('Goalie', 'Starting goalie, checked against DailyFaceoff, Rotowire and GoaliePost: ✓ confirmed, Likely, Proj (not announced), ⚠ sources disagree. Hover the badge for which sources said what. On results: who actually started (NHL box score), ⇄ = not the goalie the projection used.')}</th>"
              f"<th class='num bcol'>{tip('5v5')}</th><th class='num'>{tip('PP')}</th>"
              f"<th class='num'>{tip('Gl', cls='tr')}</th><th class='num'>{tip('Oth', cls='tr')}</th><th class='num'>{tip('B2B', cls='tr')}</th><th class='num'>{tip('Spd', cls='tr')}</th>"
@@ -689,7 +689,8 @@ def day_table(g):
         if c != r.first_call:
             callpill += f" <span class='was'>{tip('was ' + r.first_call, f'First call when this game was logged: {r.first_call}. Updated with the latest goalies, lines and injuries.')}</span>"
         if final_day and not final:  # this game isn't settled yet (still on, or finished after the last run)
-            ln = ("–" if pd.isna(r.bet_total) else f"{line(r.open_total)} → {line(r.bet_total)} <span class='muted'>o{price(r.bet_over)}</span>")
+            ln = ("–" if pd.isna(r.bet_total) else f"{line(r.open_total)} <span class='muted'>{'o' + price(r.open_over) if not pd.isna(r.open_over) else ''}</span> → "
+                  f"{line(r.bet_total)} <span class='muted'>o{price(r.bet_over)}</span>")
             vs, outcome = "<span class='pill muted-pill'>pending</span>", "<span class='muted small'>not final yet</span>"
             game = (f"<td class='gcol tot' rowspan='2'><span class='big-total muted'>–</span>{vs}</td>"
                     f"<td class='num' rowspan='2'>{r.proj:.2f}</td><td class='num' rowspan='2'>{r.p7:.0%}</td>"
@@ -718,7 +719,8 @@ def day_table(g):
                     f"<td rowspan='2' class='pickcell'>{pick}</td>")
         else:
             ln = ("<span class='muted'>not posted</span>" if pd.isna(r.bet_total) else
-                  f"{line(r.open_total)} → {line(r.bet_total)} <span class='muted'>o{price(r.bet_over)}</span>")
+                  f"{line(r.open_total)} <span class='muted'>{'o' + price(r.open_over) if not pd.isna(r.open_over) else ''}</span> → "
+                  f"{line(r.bet_total)} <span class='muted'>o{price(r.bet_over)}</span>")
             game = (f"<td class='num gcol big-total' rowspan='2'>{r.proj:.2f}</td><td class='num p7' rowspan='2'>{r.p7:.0%}</td>"
                     f"<td rowspan='2'>{gtime}{callpill}<br>{ln}</td>")
         mu = matchup(r)
