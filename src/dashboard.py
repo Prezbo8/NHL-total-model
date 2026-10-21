@@ -209,7 +209,7 @@ def team_story(r, s_, x, o_, opp, rk, v):
         reasons.append((pp - lg["gf_pp"], "power play", f"its power play ranks #{t['r_gf_pp']}, {opp}'s penalty kill and penalty habits #{o['r_ga_pp']}"))
     run = ev + pp + oth
     opp_goalie = e(goalie_parts(getattr(r, f"{o_}_goalie", ""))[0])
-    for k in ("gadj", "b2badj", "spd", "inj"):
+    for k in ("gadj", "b2badj", "spd", "inj", "elim"):
         pct = v(s_, k)
         if pd.isna(pct) or abs(pct) < 0.0005:
             continue
@@ -221,8 +221,12 @@ def team_story(r, s_, x, o_, opp, rk, v):
             why = "it played yesterday" if pct < -0.05 else f"{opp} played yesterday" if pct > 0.01 else "both teams played yesterday"
         elif k == "spd":
             label, why = "team speed", f"it skates {'faster' if pct > 0 else 'slower'} than {opp}"
-        else:
+        elif k == "inj":
             label, why = "injuries", "missing players on both teams, net"
+        else:  # eliminated teams: own goals x0.99, opponent's x1.044 (elimination.py)
+            label = "out of the playoffs"
+            why = (f"{x} and {opp} are both eliminated" if 0 < pct < 0.04
+                   else f"{opp} is eliminated, and out teams allow more" if pct > 0 else f"{x} is eliminated")
         reasons.append((eff, label, f"{why}, {pct * 100:+.1f}%"))
     fmt = lambda z: f"{z[1]} <b>{z[0]:+.2f}</b> ({z[2]})"
     up = sorted([z for z in reasons if z[0] >= 0.01], key=lambda z: -z[0])
@@ -336,6 +340,15 @@ def reasoning(r, flagged):
             extra.append(f"{x}'s team speed {'adds' if v(s_, 'spd') > 0 else 'costs'} {abs(v(s_, 'spd')) * 100:.1f}%")
         if not pd.isna(v(s_, "inj")) and abs(v(s_, "inj")) >= 0.015:
             extra.append(f"injuries {'help' if v(s_, 'inj') > 0 else 'cost'} {x} {abs(v(s_, 'inj')) * 100:.1f}%")
+    # eliminated teams: a team's opponent only gets the x1.044 boost when that team is out (elimination.py)
+    gone = [x for (s_, x), (o_, _) in ((S[0], S[1]), (S[1], S[0])) if not pd.isna(v(o_, "elim")) and v(o_, "elim") > 0]
+    if len(gone) == 2:
+        extra.append(f"both teams are already out of the playoffs (out teams allow more goals: {v('away', 'elim') * 100:+.1f}% each)")
+    elif gone:
+        s_ = next(s for s, x in S if x == gone[0])
+        o_, opp = next((s, x) for s, x in S if s != s_)
+        extra.append(f"{gone[0]} is already out of the playoffs (out teams allow more goals: "
+                     f"{opp} {v(o_, 'elim') * 100:+.1f}%, {gone[0]} {v(s_, 'elim') * 100:+.1f}%)")
     if extra:
         out.append("Other factors: " + "; ".join(extra) + ".")
     # 5. why each team projects where it does (vs an average team), biggest reasons first
@@ -351,7 +364,7 @@ def reasoning(r, flagged):
     # parts that don't multiply out to the projection (games logged before breakdowns were recorded)
     def parts(s_):
         z = lambda k: 0.0 if pd.isna(v(s_, k)) else v(s_, k)
-        return (z("ev") + z("pp") + z("oth")) * (1 + z("gadj")) * (1 + z("b2badj")) * (1 + z("spd")) * (1 + z("inj"))
+        return (z("ev") + z("pp") + z("oth")) * (1 + z("gadj")) * (1 + z("b2badj")) * (1 + z("spd")) * (1 + z("inj")) * (1 + z("elim"))
     if any(abs(parts(s_) - proj[s_]) > 0.02 for s_, _ in S):
         out.append("Note: this game's breakdown was recorded on a later run than its projection, so the parts don't add up exactly.")
     # 7. track record and result

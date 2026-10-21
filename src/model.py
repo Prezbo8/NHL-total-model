@@ -370,6 +370,8 @@ def today(day=None):
     tired = {g[s]["abbrev"] for g in (health.attempt("NHL schedule (yesterday)", lambda: schedule(yday)) or [])
              if g["gameType"] in (2, 3) and g.get("gameScheduleState", "OK") == "OK"
              for s in ("homeTeam", "awayTeam")}
+    import elimination  # teams already out of the playoffs allow more goals (March-April; none out = no change)
+    out_now = health.attempt("NHL standings", elimination.out_teams, set())
     if not todays:
         print(f"No regular-season games on {day}.")
         health.finish()
@@ -457,6 +459,9 @@ def today(day=None):
         fh_inj, fa_inj = ih["off"] * ia["def"], ia["off"] * ih["def"]  # own injuries + opponent's injured defenders
         lh, la = lh * fh_inj, la * fa_inj
         det["home"]["inj"], det["away"]["inj"] = fh_inj - 1, fa_inj - 1
+        fh_el, fa_el = elimination.factors(h in out_now, a in out_now)
+        lh, la = lh * fh_el, la * fa_el
+        det["home"]["elim"], det["away"]["elim"] = fh_el - 1, fa_el - 1
         x, gap = lh + la, abs(lh - la)
         p7 = p_from(cal, 7, x, gap)
         ln = lines.get((h, a), {})
@@ -477,7 +482,8 @@ def today(day=None):
             others = ", ".join(f"{b} {t:g} {o:+d}" for b, t, o, u in sorted(shop[(h, a)]) if b != bk)
             print(f"     best over 6/6.5: {bk} o{bt:g} {bo:+d}   others: {others}")
         print(f"     G: {ag} ({as_}, {project.goalie_skill(ap):+.1%}) vs {hg} ({hs}, {project.goalie_skill(hp):+.1%})"
-              + (f"   back-to-back: {', '.join(sorted(tired & {h, a}))}" if tired & {h, a} else ""))
+              + (f"   back-to-back: {', '.join(sorted(tired & {h, a}))}" if tired & {h, a} else "")
+              + (f"   eliminated: {', '.join(sorted(out_now & {h, a}))}" if out_now & {h, a} else ""))
         for t, ii in ((a, ia), (h, ih)):
             if ii["out"] or ii["dtd"]:
                 print(f"     injuries {t}: " + ", ".join(

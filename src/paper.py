@@ -33,8 +33,8 @@ COLS = ["date", "away", "home", "proj", "proj_away", "proj_home", "cutoff", "fla
         "h2h_n", "h2h_avg", "h2h_7", "h2h_last", "trend_lean",
         # goalie confirmation sources (confirm.py) and, after the game, who actually started (NHL box score)
         "game_id", "start_utc", "away_goalie_src", "home_goalie_src", "away_goalie_actual", "home_goalie_actual"] + [
-        f"{s}_{c}" for s in ("away", "home") for c in ("ev", "pp", "oth", "gadj", "b2badj", "spd", "inj")]
-BREAKDOWN = [f"{s}_{c}" for s in ("away", "home") for c in ("ev", "pp", "oth", "gadj", "b2badj", "spd", "inj")]
+        f"{s}_{c}" for s in ("away", "home") for c in ("ev", "pp", "oth", "gadj", "b2badj", "spd", "inj", "elim")]
+BREAKDOWN = [f"{s}_{c}" for s in ("away", "home") for c in ("ev", "pp", "oth", "gadj", "b2badj", "spd", "inj", "elim")]
 # latest run's numbers for games that haven't started (what the dashboard shows); the columns above
 # stay as first logged, which is the paper bet
 NOW_BASE = ["proj", "proj_away", "proj_home", "p7", "cutoff", "flag", "bet_total", "bet_over"] + BREAKDOWN

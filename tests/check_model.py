@@ -81,6 +81,16 @@ cal = m.fit_calibration(p1[p1.season.between(2022, 2025)])
 ps = [m.p_from(cal, 7, x, 0.3) for x in (5.0, 6.0, 7.0)]
 check("P(7+) rises with projection", ps[0] < ps[1] < ps[2], ", ".join(f"{p:.0%}" for p in ps))
 
+import elimination
+_st = lambda t, d, gp, pts, c="": {"teamAbbrev": {"default": t}, "conferenceAbbrev": "E", "divisionAbbrev": d,
+                                   "gamesPlayed": gp, "points": pts, "clinchIndicator": c or None}
+_rows = ([_st(f"A{i}", "A", 78, 100) for i in range(3)] + [_st(f"M{i}", "M", 78, 100) for i in range(5)]
+         + [_st("OUT", "A", 80, 90), _st("CLOSE", "A", 78, 93), _st("FLAG", "M", 78, 80, "e")])
+check("eliminated: on points (8 conference + 3 division above its max) or the NHL 'e' flag",
+      elimination.out_teams(_rows) == {"OUT", "FLAG"}, str(sorted(elimination.out_teams(_rows))))
+check("eliminated factors: out team x0.99, its opponent x1.044", elimination.factors(True, False) == (0.99, 1.044)
+      and elimination.factors(False, False) == (1.0, 1.0) and abs(elimination.factors(True, True)[0] - 0.99 * 1.044) < 1e-12)
+
 print("injuries")
 inj = injuries.fetch()
 check("ESPN injury feed reads", len(inj) > 20, f"{len(inj)} skaters")
@@ -254,7 +264,8 @@ row0 = real[real.away_ev.notna()].iloc[0].to_dict()
 edge = [{}, dict(bet_total=nan, open_total=nan, flag=False), dict(away_goalie=nan, home_goalie_now=nan, away_gadj=nan),
         dict(away_spd=nan, home_inj=nan), dict(bet_total=6.0, final_total=6.0, away_score=nan, home_score=nan),
         dict(away_b2badj=-0.02, home_b2badj=-0.02), dict(cutoff=nan), dict(away_ev=nan),
-        dict(home_goalie="Ty D'<b>Amour (Confirmed)")]
+        dict(home_goalie="Ty D'<b>Amour (Confirmed)"), dict(away_elim=-0.01, home_elim=0.044),
+        dict(away_elim=0.99 * 1.044 - 1, home_elim=0.99 * 1.044 - 1)]
 rows = list(real.itertuples()) + [next(pd.DataFrame([{**row0, **x}]).itertuples()) for x in edge]
 texts, crash = [], ""
 for r in rows:
