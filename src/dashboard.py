@@ -75,7 +75,7 @@ TIPS = {
     "SLAM": "Flagged over where both teams are good or great at 5-on-5. Went over 55% (opening line) / 56.5% (closing line) in 2021-26.",
     "1U": "Flagged over where one team is great at 5-on-5 (above 2.19) but the other isn't good. Went over 58% (opening line) / 59% (closing line) in 2021-26.",
     "PASS": "Flagged over, but neither team is great at 5-on-5 and they aren't both good. No bet: these went over only 47% in 2021-26.",
-    "AVOID": "Not flagged, or flagged but both teams face strong goalies. These went over only 47-49% in 2021-26.",
+    "AVOID": "Not flagged, or flagged but both teams face a Strong or Good goalie. These went over only 47-49% in 2021-26.",
     "Paper bet": "The paper-trading record's pick: flagged at the last model run before puck drop, graded at the closing consensus total and over price.",
     "Near miss": "{team} missed the {cutoff:.2f}-goal high-scoring cutoff by only {gap:.3f}. Not a bet: the over rule needs both teams over the cutoff (and a 6 or 6.5 line). Shown so close calls are easy to spot.",
     "B2B tag": "Played yesterday: the model cuts this team's scoring ~8% and raises its opponent's ~6.5%.",
@@ -174,8 +174,8 @@ def call_result(r, flagged):
     return c, ("L" if over else "W") if c in ("PASS", "AVOID") else ("W" if over else "L")
 
 
-GL_WORDS = {"great": "a weak goalie", "good": "a beatable goalie", "mid": "an average goalie",
-            "bad": "a strong goalie", "trash": "a top goalie"}
+GL_WORDS = {"great": "a Trash goalie", "good": "an OK goalie", "mid": "a Mid goalie",  # same names as the goalie tags (GOALIE_TAGS)
+            "bad": "a Good goalie", "trash": "a Strong goalie"}
 CALL_HISTORY = {"SLAM": "Games like this went over 55% of the time at the opening line and 56.5% at the closing line in 2021-26.",
                 "1U": "Games like this went over 58% of the time at the opening line and 59% at the closing line in 2021-26.",
                 "PASS": "Flagged games like this went over only 47% of the time in 2021-26.",
@@ -279,7 +279,7 @@ def reasoning(r, flagged):
                    f"but neither is great at 5-on-5 ({a} {ev_t['away']}, {h} {ev_t['home']}) and they aren't both good, "
                    "so there's no team to carry the over.")
     elif flagged:
-        out.append(f"<b>AVOID:</b> both teams project as high-scoring ({both_proj}), but both face a strong goalie, "
+        out.append(f"<b>AVOID:</b> both teams project as high-scoring ({both_proj}), but both face a Strong or Good goalie, "
                    "and overs in that spot went only 47% in 2021-26.")
     else:
         why = []
@@ -316,7 +316,7 @@ def reasoning(r, flagged):
                      if now_nm not in (nm, "unknown") and nm != "unknown" else ""))
     sent = "; ".join(gl) + "."
     if c in ("SLAM", "1U") and len(strong) == 1:
-        sent += f" Only {strong[0]} faces a strong goalie, so the two-strong-goalies avoid rule doesn't apply."
+        sent += f" Only {strong[0]} faces a Strong or Good goalie, so the avoid rule for two Strong / Good goalies doesn't apply."
     unconf = sum("confirmed" not in str(getattr(r, f"{s_}_goalie_now", "")).lower().replace("unconfirmed", "") for s_, _ in S)
     if unconf and not final:
         sent += " Starters aren't confirmed yet, so this can change."
