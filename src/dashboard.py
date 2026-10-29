@@ -508,13 +508,29 @@ GOALIE_TAGS = {"trash": ("Strong", "g-strong", "one of the best starters (top ~2
                "great": ("Trash", "g-trash", "one of the weakest starters (bottom ~20%")}
 
 
+# goalie grade 1-100 = share of 2024-26 team-games facing a weaker goalie (Gl percentiles; the inner knots are the
+# Gl tier cutoffs, so Strong = 81-100, Good 61-80, Mid 41-60, OK 21-40, Trash 1-20)
+GRADE_GADJ = (-0.130, -0.120, -0.089, -0.075, TIERS["gadj"][0], -0.039, TIERS["gadj"][1], -0.022, TIERS["gadj"][2],
+              -0.006, TIERS["gadj"][3], 0.020, 0.032, 0.048, 0.081)
+GRADE_PCT = (0, 1, 5, 10, 20, 30, 40, 50, 60, 70, 80, 90, 95, 99, 100)
+GRADE_BAND = {"trash": (81, 100), "bad": (61, 80), "mid": (41, 60), "good": (21, 40), "great": (1, 20)}
+
+
+def goalie_grade(opp_gadj):
+    """1-100 goalie grade (higher = better goalie) from the opponent's goalie adjustment, kept inside its tag's band."""
+    lo, hi = GRADE_BAND[tier("gadj", opp_gadj)]
+    return int(min(hi, max(lo, round(100 - np.interp(opp_gadj, GRADE_GADJ, GRADE_PCT)))))
+
+
 def goalie_tag(nm, opp_gadj, opp):
-    """Goalie tier tag (Strong / Good / Mid / OK / Trash) from the opponent's goalie adjustment; '' when missing."""
+    """Goalie tier tag (Strong / Good / Mid / OK / Trash) + 1-100 grade from the opponent's goalie adjustment; '' when missing."""
     t = tier("gadj", opp_gadj)
     if t not in GOALIE_TAGS:
         return ""
     label, cls, words = GOALIE_TAGS[t]
-    return (f" <span class='gb {cls}'>{tip(label, f'{nm}: {words} by goals saved vs expected). '
+    g = goalie_grade(opp_gadj)
+    return (f" <span class='gb {cls}'>{tip(f'{label} {g}', f'{nm}: {words} by goals saved vs expected). '
+                                              f'Grade {g}/100 = better than {g}% of starters faced 2024-26. '
                                               f'{opp} scoring {opp_gadj * 100:+.1f}%.')}</span>")
 
 

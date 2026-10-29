@@ -202,6 +202,10 @@ check("goalie badges: conflict, sources in hover, actual starter on results",
       and "gb chg" in gc("Igor Shesterkin (Confirmed)", "Igor Shesterkin (Confirmed)", None, "D. Garand")
       and "gb ok" in gc("Dylan Garand (Likely)", "Dylan Garand (Likely)", None, "D. Garand")
       and "gb chg" in gc("Pyotr Kochetkov (Confirmed)", "Brandon Bussi (Confirmed)", None, "B. Bussi"))  # projection used Kochetkov
+_bands = {"trash": (81, 100), "bad": (61, 80), "mid": (41, 60), "good": (21, 40), "great": (1, 20)}
+check("goalie grade 1-100 sits inside its tag's band (Strong 81-100 ... Trash 1-20)",
+      all(_bands[dashboard.tier("gadj", v)][0] <= dashboard.goalie_grade(v) <= _bands[dashboard.tier("gadj", v)][1]
+          for v in [i / 1000 for i in range(-150, 100)]) and "Strong 100" in gc("A B (Confirmed)", None, None, None, -0.2, "X"))
 
 print("supabase run history (fake database, nothing is sent)")
 import store
