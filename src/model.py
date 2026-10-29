@@ -234,6 +234,20 @@ def fit_calibration(proj):
     return out
 
 
+def goalie_id(starts, name, team):
+    """Id for a goalie known only by name (goalie starts file): exact name, else same last name + first initial;
+    among several (two different goalies are named Matt Murray), the one who last played for this team, else the latest."""
+    import confirm
+    last_seen = starts.sort_values("gameId").drop_duplicates(["playerId", "team"], keep="last")
+    c = last_seen[last_seen.name.str.lower() == name.lower()]
+    if c.empty:
+        c = last_seen[[confirm.same(n, name) for n in last_seen.name]]
+    if c.empty:
+        return None
+    own = c[c.team == team]
+    return (own if len(own) else c.sort_values("gameId")).playerId.iloc[-1]
+
+
 def p_from(cal, name, x, gap):
     """P(total >= name) for projected total x and closeness gap = |home - away projection|."""
     a, b, c = cal[name]
@@ -417,13 +431,12 @@ def today(day=None):
         inj = {}
     no_inj = {"off": 1.0, "def": 1.0, "out": [], "dtd": []}
     st = pd.read_csv(goalies.STARTS)
-    ids = {n.lower(): p for n, p in zip(st.name, st.playerId)}
     recent = st[(st.started == 1) & (st.season >= st.season.max() - 1)].sort_values("gameId")
 
     def starter(team_abbrev, team_name):
         name, status, _, pid = goalie_calls.get(team_abbrev, (None, None, "", None))
         if name:
-            pid = pid or ids.get(name.lower()) or next((p for n, p in ids.items() if confirm.same(n, name)), None)
+            pid = pid or goalie_id(st, name, team_abbrev)
             return name, pid, status  # no id = no history in the goalie file: rated as an average goalie
         # fallback: whoever started most of the team's last 10 games
         r = recent[recent.team == team_abbrev].tail(10)

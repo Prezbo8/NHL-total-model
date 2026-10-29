@@ -48,6 +48,25 @@ check("Oct 1 re-settles: all 8 finals", s.final_total.notna().sum() == 8)
 check("Oct 1 totals match the real scores", list(s.final_total.astype(int)) == list(real[real.date == "2026-10-01"].final_total.astype(int)))
 check("flagged FLA@SJS: W +1.02 at consensus, best-book scored too", fs.result == "W" and abs(fs.profit - 1.02) < 1e-9 and not pd.isna(fs.profit_best))
 check("unflagged games not scored as bets", s[~s.flag].result.isna().all())
+# offline: a postponed game leaves the log; a score-feed outage skips that day without failing the step
+import io
+two = oct1.iloc[:2].copy()
+two["date"], two["away"], two["home"] = ["2026-10-05", "2026-10-06"], ["PPA", "OUA"], ["PPH", "OUH"]
+two.to_csv(paper.LOG, index=False)
+real_open, real_day = paper.urllib.request.urlopen, paper.odds.day_games
+def fake_open(req, *a, **k):
+    if str(getattr(req, "full_url", req)).endswith("2026-10-06"):
+        raise OSError("outage")
+    return io.BytesIO(json.dumps({"games": [{"awayTeam": {"abbrev": "PPA", "score": 0}, "homeTeam": {"abbrev": "PPH", "score": 0},
+                                             "gameState": "FUT", "gameScheduleState": "PPD"}]}).encode())
+paper.urllib.request.urlopen, paper.odds.day_games = fake_open, lambda *a, **k: []
+try:
+    paper.settle(); crash = ""
+except Exception as ex:
+    crash = f"{type(ex).__name__}: {ex}"
+paper.urllib.request.urlopen, paper.odds.day_games = real_open, real_day
+s2 = paper.read_log()
+check("settle: postponed game removed, outage day kept for the next run", not crash and list(s2.away) == ["OUA"], crash or str(list(s2.away)))
 c0 = {"total": 6.5, "over": -130, "under": 110}
 check("line-move: up a full line = toward over", paper.clv(6.0, -110, -110, {"total": 6.5, "over": 100, "under": -120}) == 1)
 check("line-move: same line, over got pricier = toward over", paper.clv(6.5, 100, -120, c0) == 1)
@@ -80,6 +99,9 @@ check("projected totals in a sane range", p1.proj.between(4, 8.5).all(), f"{p1.p
 cal = m.fit_calibration(p1[p1.season.between(2022, 2025)])
 ps = [m.p_from(cal, 7, x, 0.3) for x in (5.0, 6.0, 7.0)]
 check("P(7+) rises with projection", ps[0] < ps[1] < ps[2], ", ".join(f"{p:.0%}" for p in ps))
+_st = pd.read_csv(goalies.STARTS)
+check("goalie by name: the Matt Murray who last played for that team", m.goalie_id(_st, "Matt Murray", "SEA") == 8476899
+      and m.goalie_id(_st, "Matt Murray", "NSH") == 8483575 and m.goalie_id(_st, "U. Luukkonen", "BUF") == 8480045)
 
 import elimination
 _st = lambda t, d, gp, pts, c="": {"teamAbbrev": {"default": t}, "conferenceAbbrev": "E", "divisionAbbrev": d,

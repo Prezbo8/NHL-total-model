@@ -158,15 +158,23 @@ def settle():
         return
     d = read_log()
     todo = d[d.final_total.isna() & (pd.to_datetime(d.date) < pd.Timestamp(date.today()))]
+    postponed = []
     for day in sorted(todo.date.unique()):
-        with urllib.request.urlopen(fetch(f"https://api-web.nhle.com/v1/score/{day}")) as f:
-            scores = {(g["awayTeam"]["abbrev"], g["homeTeam"]["abbrev"]): g for g in json.load(f)["games"]}
-        closing = {}
-        for r in odds.day_games(date.fromisoformat(day), 15):
-            closing[(grade.ABBR.get(r["away"], r["away"]), grade.ABBR.get(r["home"], r["home"]))] = r
+        try:  # a score / odds blip skips this day; the next run settles it
+            with urllib.request.urlopen(fetch(f"https://api-web.nhle.com/v1/score/{day}")) as f:
+                scores = {(g["awayTeam"]["abbrev"], g["homeTeam"]["abbrev"]): g for g in json.load(f)["games"]}
+            closing = {}
+            for r in odds.day_games(date.fromisoformat(day), 15):
+                closing[(grade.ABBR.get(r["away"], r["away"]), grade.ABBR.get(r["home"], r["home"]))] = r
+        except Exception as e:
+            print(f"(couldn't settle {day} yet: {e})")
+            continue
         for i in todo[todo.date == day].index:
             k = (d.at[i, "away"], d.at[i, "home"])
             g = scores.get(k)
+            if g and g.get("gameScheduleState") in ("PPD", "CNCL"):  # never played on this date: a void bet
+                postponed.append(i)
+                continue
             if not g or g["gameState"] not in ("OFF", "FINAL"):
                 continue
             a, h = g["awayTeam"]["score"], g["homeTeam"]["score"]  # NHL final score counts the shootout goal
@@ -186,6 +194,9 @@ def settle():
                     rb = "W" if a + h > bbt else "P" if a + h == bbt else "L"
                     d.at[i, "result_best"] = rb
                     d.at[i, "profit_best"] = {"W": float(grade.payout(bbo)), "P": 0.0, "L": -1.0}[rb]
+    if postponed:  # the game gets logged again on its new date
+        print("(postponed / cancelled, removed from the log: " + ", ".join(f"{d.at[i, 'date']} {d.at[i, 'away']}@{d.at[i, 'home']}" for i in postponed) + ")")
+        d = d.drop(index=postponed)
     record_actual_starters(d)
     d.to_csv(LOG, index=False)
     import store  # mirror finals and paper results to Supabase (skipped when not configured)
