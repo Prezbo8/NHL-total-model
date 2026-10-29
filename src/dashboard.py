@@ -499,9 +499,30 @@ def short_name(full):
     return f"{first[0]}. {last}"
 
 
-def goalie_compact(logged, now, src=None, actual=None):
+# goalie quality tags from the opponent's Gl tier (Gl = how the goalie moves the other team's scoring):
+# (tier of the opponent's Gl, tag, class, words for the hover text); colored like the Gl cell (red = bad for the over)
+GOALIE_TAGS = {"trash": ("Strong", "g-strong", "one of the best starters (top ~20%"),
+               "bad": ("Good", "g-good", "an above-average starter (top ~20-40%"),
+               "mid": ("Mid", "g-mid", "a middle-of-the-pack starter (~40-60%"),
+               "good": ("OK", "g-ok", "a slightly below-average starter (~60-80%; also goalies with no NHL record"),
+               "great": ("Trash", "g-trash", "one of the weakest starters (bottom ~20%")}
+
+
+def goalie_tag(nm, opp_gadj, opp):
+    """Goalie tier tag (Strong / Good / Mid / OK / Trash) from the opponent's goalie adjustment; '' when missing."""
+    t = tier("gadj", opp_gadj)
+    if t not in GOALIE_TAGS:
+        return ""
+    label, cls, words = GOALIE_TAGS[t]
+    return (f" <span class='gb {cls}'>{tip(label, f'{nm}: {words} by goals saved vs expected). '
+                                              f'{opp} scoring {opp_gadj * 100:+.1f}%.')}</span>")
+
+
+def goalie_compact(logged, now, src=None, actual=None, opp_gadj=None, opp=""):
     """Table version: last name + short badge; full details in the hover text.
-    src = which sources confirmed him (confirm.py); actual = who really started (after the game)."""
+    src = which sources confirmed him (confirm.py); actual = who really started (after the game).
+    opp_gadj = the opponent's goalie adjustment, for the goalie tier tag (goalie_tag). After the game the tag
+    shows only when the projected goalie started (the adjustment was built for him)."""
     import confirm
     now = now if isinstance(now, str) else logged
     nm, status = goalie_parts(now)
@@ -513,7 +534,8 @@ def goalie_compact(logged, now, src=None, actual=None):
         right = used != "unknown" and confirm.same(actual, used)
         badge = (f"<span class='gb ok'>{tip('✓', f'{actual} started, as projected.')}</span>" if right else
                  f"<span class='gb chg'>{tip('⇄ ' + e(used.split(' ', 1)[-1]), f'{actual} started, but the projection used {used}.')}</span>")
-        return f"<span class='gc'>{e(short_name(actual) if '.' not in actual else actual)} {badge}</span>"
+        tag = goalie_tag(actual, opp_gadj, opp) if right else ""
+        return f"<span class='gc'>{e(short_name(actual) if '.' not in actual else actual)} {badge}{tag}</span>"
     last = short_name(nm) if nm != "unknown" else "?"
     if "conflict" in st:
         badge = f"<span class='gb conflict'>{tip('⚠', f'{nm}: sources disagree on the starter; the projection uses the one most sources back.{srcs}')}</span>"
@@ -527,7 +549,7 @@ def goalie_compact(logged, now, src=None, actual=None):
     changed = ""
     if old_nm != nm and old_nm != "unknown":
         changed = (f" <span class='gb chg'>{tip('⇄ ' + e(old_nm.split(' ', 1)[-1]), f'Starter changed after this game was logged: the projection used {old_nm}. A better goalie now = projection too high; a worse one = too low.')}</span>")
-    return f"<span class='gc'>{e(last)} {badge}{changed}</span>"
+    return f"<span class='gc'>{e(last)} {badge}{changed}{goalie_tag(nm, opp_gadj, opp)}</span>"
 
 
 def team_row(abbr, proj, cutoff, goalie, goalie_now=None, b2b=False, score=None, out=None, dtd=None):
@@ -669,7 +691,7 @@ def day_table(g):
 
         def detail(side):
             g_ = lambda c: getattr(r, f"{side}_{c}", float("nan"))
-            cells = f"<td class='gl gcol'>{goalie_compact(g_('goalie'), g_('goalie_now'), g_('goalie_src'), g_('goalie_actual'))}</td>"
+            cells = f"<td class='gl gcol'>{goalie_compact(g_('goalie'), g_('goalie_now'), g_('goalie_src'), g_('goalie_actual'), getattr(r, f"{'home' if side == 'away' else 'away'}_gadj", float('nan')), r.home if side == 'away' else r.away)}</td>"
             return cells + breakdown_cells(side)
 
         def breakdown_cells(side):
@@ -767,7 +789,7 @@ def mobile_card(r, final, callpill, st, status, breakdown_cells, cls, ranks, kpt
         return (f"<div class='mc-team'>{logo(abbr, 26)}<b>{e(abbr)}</b><span>{rk}</span>"
                 + (f"<span class='mc-score'>{int(score)}</span>" if final else "")
                 + f"<span class='mc-proj{' hot' if hot else ''}'>{sq}{proj:.2f}<span class='hot-dot{'' if hot else ' off'}'>●</span></span>"
-                + f"<div class='mc-gl'>{goalie_compact(g_('goalie'), g_('goalie_now'), g_('goalie_src'), g_('goalie_actual'))}</div></div>")
+                + f"<div class='mc-gl'>{goalie_compact(g_('goalie'), g_('goalie_now'), g_('goalie_src'), g_('goalie_actual'), getattr(r, f"{'home' if side == 'away' else 'away'}_gadj", float('nan')), r.home if side == 'away' else r.away)}</div></div>")
     total = (f"<span class='big-total'>{int(r.final_total)}</span> goals · proj {r.proj:.2f}" if final
              else f"Proj total <b>{r.proj:.2f}</b>")
     head = "".join(f"<th class='num'>{tip(h, cls='tr' if i > 3 else '')}</th>" for i, h in enumerate(("5v5", "PP", "Gl", "Oth", "B2B", "Spd", "Inj")))
@@ -1933,7 +1955,7 @@ footer{margin-top:32px;font-size:13px;color:var(--muted)}a{color:var(--accent)}
 .small{font-size:12px}
 .gb{display:inline-block;font-size:10px;font-weight:800;letter-spacing:.03em;padding:1px 6px;border-radius:999px;margin-left:4px;vertical-align:1px}
 .gb.ok{background:rgba(26,127,55,.15);color:var(--pos)}.gb.likely{background:rgba(201,151,0,.18);color:var(--gold)}
-.gb.proj{background:var(--ice);color:var(--muted)}.gb.conflict{background:rgba(220,38,38,.18);color:var(--neg)}.gb.chg{background:var(--neg);color:#fff}
+.gb.proj{background:var(--ice);color:var(--muted)}.gb.conflict{background:rgba(220,38,38,.18);color:var(--neg)}.gb.chg{background:var(--neg);color:#fff}.gb.g-strong{background:rgba(220,38,38,.50);color:#fff}.gb.g-good{background:rgba(220,38,38,.22);color:var(--ink)}.gb.g-mid{background:rgba(234,179,8,.28);color:var(--ink)}.gb.g-ok{background:rgba(22,163,74,.22);color:var(--ink)}.gb.g-trash{background:rgba(22,163,74,.50);color:#fff}
 .goalie{white-space:normal;min-height:34px}
 .injuries{min-height:16px;font-size:11px;line-height:1.35;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.inj.out{color:var(--neg);font-weight:700}.inj.dtd{color:var(--muted)}
 .b2b{display:inline-block;font-size:10px;font-weight:800;padding:1px 6px;border-radius:4px;background:var(--red);color:#fff;
