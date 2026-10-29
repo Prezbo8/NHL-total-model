@@ -215,7 +215,7 @@ def team_story(r, s_, x, o_, opp, rk, v):
             continue
         eff, run = run * pct, run * (1 + pct)
         if k == "gadj":
-            label, why = f"{opp_goalie} in goal", GL_WORDS.get(tier("gadj", pct), "a goalie")
+            label, why = f"{opp_goalie} in goal", f'{GL_WORDS.get(tier("gadj", pct), "a goalie")}, grade {goalie_grade(pct)}'
         elif k == "b2badj":
             label = "back-to-back"
             why = "it played yesterday" if pct < -0.05 else f"{opp} played yesterday" if pct > 0.01 else "both teams played yesterday"
@@ -311,7 +311,7 @@ def reasoning(r, flagged):
         now_nm = goalie_parts(now)[0] if isinstance(now, str) else nm
         who = e(nm) if nm != "unknown" else "an unknown starter"
         gl.append((f"{x} faces {who} (no goalie rating)" if pd.isna(v(s_, "gadj")) else
-                   f"{x} faces {who}, {GL_WORDS.get(gl_t[s_], 'a goalie')} ({v(s_, 'gadj') * 100:+.1f}%)")
+                   f"{x} faces {who}, {GL_WORDS.get(gl_t[s_], 'a goalie')}, grade {goalie_grade(v(s_, 'gadj'))} ({v(s_, 'gadj') * 100:+.1f}%)")
                   + (f", but the expected starter later changed to {e(now_nm)}, so this part is out of date"
                      if now_nm not in (nm, "unknown") and nm != "unknown" else ""))
     sent = "; ".join(gl) + "."
