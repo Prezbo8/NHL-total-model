@@ -67,6 +67,21 @@ except Exception as ex:
 paper.urllib.request.urlopen, paper.odds.day_games = real_open, real_day
 s2 = paper.read_log()
 check("settle: postponed game removed, outage day kept for the next run", not crash and list(s2.away) == ["OUA"], crash or str(list(s2.away)))
+# offline: a settled game the odds feed skipped gets its closing line on a later run (score and result untouched)
+miss = oct1.iloc[:1].copy()
+miss["date"], miss["away"], miss["home"] = (datetime.date.today() - datetime.timedelta(days=1)).isoformat(), "CLA", "CLH"
+miss[["away_score", "home_score", "final_total", "flag", "bet_total", "bet_over", "bet_under", "result", "profit"]] = [3, 4, 7, True, 6.5, -110, -110, "W", 0.909]
+miss.to_csv(paper.LOG, index=False)
+paper.urllib.request.urlopen = lambda *a, **k: io.BytesIO(json.dumps({"games": []}).encode())
+paper.odds.day_games = lambda *a, **k: [{"away": "CLA", "home": "CLH", "total": 6.5, "over": -130, "under": 110}]
+try:
+    paper.settle(); crash = ""
+except Exception as ex:
+    crash = f"{type(ex).__name__}: {ex}"
+paper.urllib.request.urlopen, paper.odds.day_games = real_open, real_day
+s3 = paper.read_log().iloc[0]
+check("settle: missed closing line filled later, score + result kept, CLV scored",
+      not crash and s3.close_total == 6.5 and s3.close_over == -130 and s3.final_total == 7 and s3.result == "W" and s3.clv == 1, crash or str(s3[["close_total", "clv"]].to_dict()))
 c0 = {"total": 6.5, "over": -130, "under": 110}
 check("line-move: up a full line = toward over", paper.clv(6.0, -110, -110, {"total": 6.5, "over": 100, "under": -120}) == 1)
 check("line-move: same line, over got pricier = toward over", paper.clv(6.5, 100, -120, c0) == 1)

@@ -152,12 +152,18 @@ def update_actual_starters():
     print(f"(actual starters: {after - before} new)")
 
 
+CLOSE_RETRY_DAYS = 3  # how long a settled game missing its closing line keeps getting re-checked
+
+
 def settle():
     if not os.path.exists(LOG):
         print("no log yet")
         return
     d = read_log()
-    todo = d[d.final_total.isna() & (pd.to_datetime(d.date) < pd.Timestamp(date.today()))]
+    past = pd.to_datetime(d.date) < pd.Timestamp(date.today())
+    # also settled games still missing a closing line (the odds feed skipped them once): retried for CLOSE_RETRY_DAYS
+    recent = pd.to_datetime(d.date) >= pd.Timestamp(date.today()) - pd.Timedelta(days=CLOSE_RETRY_DAYS)
+    todo = d[past & (d.final_total.isna() | (d.close_total.isna() & recent))]
     postponed = []
     for day in sorted(todo.date.unique()):
         try:  # a score / odds blip skips this day; the next run settles it
@@ -172,6 +178,13 @@ def settle():
         for i in todo[todo.date == day].index:
             k = (d.at[i, "away"], d.at[i, "home"])
             g = scores.get(k)
+            if not pd.isna(d.at[i, "final_total"]):  # already settled: only the closing line (and a bet's CLV) was missing
+                if k in closing:
+                    c = closing[k]
+                    d.loc[i, ["close_total", "close_over", "close_under"]] = [c["total"], c["over"], c["under"]]
+                    if not pd.isna(d.at[i, "result"]) and not pd.isna(d.at[i, "bet_under"]):
+                        d.at[i, "clv"] = clv(d.at[i, "bet_total"], d.at[i, "bet_over"], d.at[i, "bet_under"], c)
+                continue
             if g and g.get("gameScheduleState") in ("PPD", "CNCL"):  # never played on this date: a void bet
                 postponed.append(i)
                 continue
