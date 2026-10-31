@@ -49,6 +49,8 @@ jobs:
 
       - uses: actions/checkout@v7
         if: steps.gate.outputs.run == 'true'
+        with:
+          ref: main   # newest main when the job starts: a run queued behind another must see that run's push (Oct 29 2026: 3 push conflicts)
 
       - uses: actions/setup-python@v7
         if: steps.gate.outputs.run == 'true'
