@@ -20,6 +20,7 @@ import paths
 
 STATE = paths.data("source_health.json")
 RETRY_FLAG = paths.data(".retry")
+LAST_STATUS = paths.data("last_run_status.json")  # the latest run's outcome, for the dashboard's ✓ by 'Last model run'
 WAITS = [15, 45, 90, 180]
 BUDGET = 15 * 60          # total seconds of retry waiting per run
 ALERT_AFTER = 2           # consecutive failed runs before an alert
@@ -70,6 +71,8 @@ def finish():
     with open(STATE, "w") as f:
         json.dump(state, f, indent=1, sort_keys=True)
     bad = failed()
+    with open(LAST_STATUS, "w") as f:
+        json.dump({"at": now, "failed": bad}, f)
     rerun = [b for b in bad if b not in NO_RETRY]
     if rerun and datetime.now(ET).hour < 23:
         open(RETRY_FLAG, "w").write(", ".join(rerun) + "\n")
