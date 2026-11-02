@@ -23,6 +23,7 @@ RETRY_FLAG = paths.data(".retry")
 WAITS = [15, 45, 90, 180]
 BUDGET = 15 * 60          # total seconds of retry waiting per run
 ALERT_AFTER = 2           # consecutive failed runs before an alert
+NO_RETRY = {"Supabase"}   # a write target, not a data source: alerts, but a rerun wouldn't fix it
 ET = ZoneInfo("America/New_York")
 _spent, _results = 0.0, {}
 
@@ -69,9 +70,10 @@ def finish():
     with open(STATE, "w") as f:
         json.dump(state, f, indent=1, sort_keys=True)
     bad = failed()
-    if bad and datetime.now(ET).hour < 23:
-        open(RETRY_FLAG, "w").write(", ".join(bad) + "\n")
-        print(f"(sources still failing: {', '.join(bad)} -> another run in 5 minutes)")
+    rerun = [b for b in bad if b not in NO_RETRY]
+    if rerun and datetime.now(ET).hour < 23:
+        open(RETRY_FLAG, "w").write(", ".join(rerun) + "\n")
+        print(f"(sources still failing: {', '.join(rerun)} -> another run in 5 minutes)")
     elif os.path.exists(RETRY_FLAG):
         os.remove(RETRY_FLAG)
     return bad

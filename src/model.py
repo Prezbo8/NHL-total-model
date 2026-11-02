@@ -236,15 +236,19 @@ def fit_calibration(proj):
 
 def goalie_id(starts, name, team):
     """Id for a goalie known only by name (goalie starts file): exact name, else same last name + first initial;
-    among several (two different goalies are named Matt Murray), the one who last played for this team, else the latest."""
+    among several (two different goalies are named Matt Murray), the one who last played for this team, else the latest
+    (an initial-only match with several candidates and none on this team returns None)."""
     import confirm
     last_seen = starts.sort_values("gameId").drop_duplicates(["playerId", "team"], keep="last")
     c = last_seen[last_seen.name.str.lower() == name.lower()]
-    if c.empty:
+    fuzzy = c.empty
+    if fuzzy:
         c = last_seen[[confirm.same(n, name) for n in last_seen.name]]
     if c.empty:
         return None
     own = c[c.team == team]
+    if fuzzy and not len(own) and c.playerId.nunique() > 1:
+        return None  # initial-only match to several goalies, none on this team: rate as average, not a guess
     return (own if len(own) else c.sort_values("gameId")).playerId.iloc[-1]
 
 
@@ -487,7 +491,8 @@ def today(day=None):
         line_txt = f"open {fmt(ln.get('open'))}   now {fmt(ln.get('now'))}"
         if cur:
             k = int(np.floor(cur["total"])) + 1  # smallest total that wins the over
-            line_txt += f"   model P(over {cur['total']:g}) {p_from(cal, k, x, gap):.1%}"
+            if k in cal:  # calibration covers totals 4-9; an odd line (9.5, 2.5) just skips this
+                line_txt += f"   model P(over {cur['total']:g}) {p_from(cal, k, x, gap):.1%}"
         print(f"     {line_txt}")
         best = best_over((h, a), x, gap)
         if best:

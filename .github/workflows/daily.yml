@@ -2,7 +2,7 @@ name: Daily NHL run
 
 # 12:01 AM and every hour from 11 AM to 10 PM Eastern, all year (hourly runs at :17), started by keeper.yml; this schedule is the backup.
 # - GitHub schedules in UTC only, so summer (EDT) and winter (EST) sets are both listed; the "gate"
-#   step runs whichever matches today's Eastern offset and skips the other.
+#   job runs whichever matches today's Eastern offset and skips the other.
 # - Not on the hour: GitHub drops/delays scheduled runs at the top of the hour under load (none of the
 #   :00 runs on Oct 2 2026 ever fired). Running twice is harmless (first logged line stays the bet,
 #   settling skips settled games, the latest projection just refreshes).
@@ -24,19 +24,16 @@ permissions:
   issues: write    # source-failure alerts (src/health.py)
   actions: write   # start a retry run when a source is still failing
 
-concurrency:
-  group: daily
-  cancel-in-progress: false
-
 jobs:
-  run:
-    runs-on: ubuntu-24.04   # pinned: ubuntu-latest moves to Ubuntu 26 on Oct 19, 2026
-    timeout-minutes: 45
+  # its own job, outside the concurrency group: a skipped other-daylight-saving run never queues, so it
+  # can't replace a real run waiting in the group (a newly queued run cancels the pending one)
+  gate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
     env:
-      TZ: America/New_York   # "today" means today in Eastern time
-      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}   # run history (src/store.py); empty = skipped
-      SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-      NHL_TRIGGER: ${{ inputs.trigger || github.event_name }}
+      TZ: America/New_York
+    outputs:
+      run: ${{ steps.gate.outputs.run }}
     steps:
       - name: Gate (run only the schedule that matches Eastern time today)
         id: gate
@@ -47,44 +44,54 @@ jobs:
             echo "run=true" >> "$GITHUB_OUTPUT"
           else echo "run=false" >> "$GITHUB_OUTPUT"; echo "other daylight-saving slot: skipping"; fi
 
+  run:
+    needs: gate
+    if: needs.gate.outputs.run == 'true'
+    concurrency:
+      group: daily
+      cancel-in-progress: false
+    runs-on: ubuntu-24.04   # pinned: ubuntu-latest moves to Ubuntu 26 on Oct 19, 2026
+    timeout-minutes: 45
+    env:
+      TZ: America/New_York   # "today" means today in Eastern time
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}   # run history (src/store.py); empty = skipped
+      SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+      NHL_TRIGGER: ${{ inputs.trigger || github.event_name }}
+    steps:
       - uses: actions/checkout@v7
-        if: steps.gate.outputs.run == 'true'
         with:
           ref: main   # newest main when the job starts: a run queued behind another must see that run's push (Oct 29 2026: 3 push conflicts)
 
       - uses: actions/setup-python@v7
-        if: steps.gate.outputs.run == 'true'
         with:
           python-version: "3.14"
 
       - name: Install
-        if: steps.gate.outputs.run == 'true'
         run: pip install "pandas==3.0.6" "numpy==2.5.3"   # same versions tests/check_model.py passes on (Tests workflow)
 
       # each step runs even if an earlier one failed (e.g. settling hits an API outage),
       # so today's projections and the dashboard still get made; the run still shows red
       - name: Settle yesterday's paper trades
-        if: steps.gate.outputs.run == 'true'
         run: python src/paper.py settle
 
       - name: Project today's games, flag, log
-        if: ${{ !cancelled() && steps.gate.outputs.run == 'true' }}
+        if: ${{ !cancelled() }}
         run: python src/model.py today
 
       - name: Report
-        if: ${{ !cancelled() && steps.gate.outputs.run == 'true' }}
+        if: ${{ !cancelled() }}
         run: python src/paper.py report
 
       - name: SLAM rule check (runs once, when the paper log reaches 75 settled picks)
-        if: ${{ !cancelled() && steps.gate.outputs.run == 'true' }}
+        if: ${{ !cancelled() }}
         run: python src/rule_check.py || echo "rule check failed (will retry next run)"
 
       - name: Rebuild dashboard
-        if: ${{ !cancelled() && steps.gate.outputs.run == 'true' }}
+        if: ${{ !cancelled() }}
         run: python src/dashboard.py
 
       - name: Commit and push results
-        if: ${{ !cancelled() && steps.gate.outputs.run == 'true' }}
+        if: ${{ !cancelled() }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898299+github-actions[bot]@users.noreply.github.com"
@@ -105,7 +112,7 @@ jobs:
           fi
 
       - name: Rebuild GitHub Pages
-        if: ${{ !cancelled() && steps.gate.outputs.run == 'true' }}
+        if: ${{ !cancelled() }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -116,13 +123,13 @@ jobs:
           echo "pages build request failed 5 times (site may still update on its own from the push)"
 
       - name: Alert on data sources failing 2+ runs in a row (GitHub issue; closes itself on recovery)
-        if: ${{ !cancelled() && steps.gate.outputs.run == 'true' }}
+        if: ${{ !cancelled() }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: python src/health.py alert || echo "alert step failed"
 
       - name: Start this month's model check if it hasn't run yet (backup for GitHub's scheduler)
-        if: ${{ !cancelled() && steps.gate.outputs.run == 'true' }}
+        if: ${{ !cancelled() }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -131,7 +138,7 @@ jobs:
           fi
 
       - name: Restart the keeper if it isn't running (it starts these runs on time)
-        if: ${{ always() && steps.gate.outputs.run == 'true' }}
+        if: ${{ always() }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -145,7 +152,7 @@ jobs:
           fi
 
       - name: Retry until it works (a source still failing, or any step failed / the run was cancelled)
-        if: ${{ always() && steps.gate.outputs.run == 'true' }}
+        if: ${{ always() }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
