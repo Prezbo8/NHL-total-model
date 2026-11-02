@@ -78,6 +78,10 @@ jobs:
         if: ${{ !cancelled() }}
         run: python src/model.py today
 
+      - name: Tomorrow preview (early look for the dashboard tab; never logged)
+        if: ${{ !cancelled() }}
+        run: python src/model.py preview || echo "preview failed (the tab keeps the last one)"
+
       - name: Report
         if: ${{ !cancelled() }}
         run: python src/paper.py report

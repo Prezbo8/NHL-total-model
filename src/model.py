@@ -347,28 +347,42 @@ def lineup_label(info):
     return f"{src} {t}".strip()
 
 
+def save_preview(day, rows):
+    """data/preview.json: the next day's projections for the dashboard's Tomorrow preview (never logged)."""
+    with open(paths.data("preview.json"), "w") as f:
+        json.dump({"date": day, "made": pd.Timestamp.now(tz="America/New_York").strftime("%Y-%m-%d %H:%M %Z"),
+                   "rows": rows}, f, default=lambda v: v.item() if hasattr(v, "item") else str(v))
+    print(f"(preview for {day}: {len(rows)} games, in data/preview.json)")
+
+
 HIGH_Q = 0.60  # "high-scoring" = team's projected goals in the top 40% of last season's team projections
 
 
-def today(day=None):
+def today(day=None, preview=False):
     """Daily projections from the 5v5 / power-play split model (2020-21 onward data only), with the
-    overs flag: OVER only, line 6 or 6.5, both teams high-scoring."""
+    overs flag: OVER only, line 6 or 6.5, both teams high-scoring.
+    preview=True: an early look at another day (the dashboard's Tomorrow preview), saved to data/preview.json only:
+    no data refresh, no retries, no same-day goalie sources (Rotowire / GoaliePost), never logged, never sets .retry."""
     import grade
     import odds
     import split_model as sm
     import trends
     import health  # every source is retried until it works (health.attempt); failures re-run the job
     day = day or date.today().isoformat()
-    health.attempt("MoneyPuck stats", lambda: refresh_data() or (_ for _ in ()).throw(RuntimeError("download failed")),
-                   waits=[60, 180])  # on failure the previous download is still used
+    if preview:  # runs right after today's run: its data is fresh, and an early look shouldn't wait on retries
+        health.WAITS = []
+    else:
+        health.attempt("MoneyPuck stats", lambda: refresh_data() or (_ for _ in ()).throw(RuntimeError("download failed")),
+                       waits=[60, 180])  # on failure the previous download is still used
     load_games()
     games = sm.load_split()
     season = sm.season_of(date.fromisoformat(day))  # from the date, not the data (opening day has no games yet)
-    health.attempt("Goalie data", lambda: goalies.refresh([season]) or True)
-    if (games.season == season).any():  # skater totals this season (injury adjustment + key players); none before opening night
-        health.attempt("MoneyPuck skaters", lambda: players.refresh_skaters([season]) or True)
-    import speed  # team skating speed: this season uses LAST season's numbers (fetched once per season)
-    health.attempt("NHL EDGE speed", lambda: speed.refresh(season - 1) or True)
+    if not preview:
+        health.attempt("Goalie data", lambda: goalies.refresh([season]) or True)
+        if (games.season == season).any():  # skater totals this season (injury adjustment + key players); none before opening night
+            health.attempt("MoneyPuck skaters", lambda: players.refresh_skaters([season]) or True)
+        import speed  # team skating speed: this season uses LAST season's numbers (fetched once per season)
+        health.attempt("NHL EDGE speed", lambda: speed.refresh(season - 1) or True)
     proj, project = sm.walk_split(games, known_starters=False, with_projector=True, live_season=season)
     cal = fit_calibration(proj[proj.season.between(2022, season - 1)])
     prev = proj[proj.season == season - 1]
@@ -379,7 +393,8 @@ def today(day=None):
             return [g for wk in json.load(f)["gameWeek"] if wk["date"] == d for g in wk["games"]]
     sched = health.attempt("NHL schedule", lambda: schedule(day))
     if sched is None:
-        health.finish()
+        if not preview:
+            health.finish()
         raise RuntimeError("NHL schedule unavailable after retries")
     todays = [g for g in sched if g["gameType"] == 2]
     yday = (date.fromisoformat(day) - timedelta(days=1)).isoformat()
@@ -392,6 +407,9 @@ def today(day=None):
     out_now = health.attempt("NHL standings", elimination.out_teams, set())
     if not todays:
         print(f"No regular-season games on {day}.")
+        if preview:
+            save_preview(day, [])
+            return
         health.finish()
         return
     dfo = health.attempt("DailyFaceoff goalies", lambda: dailyfaceoff(day), {}, must=True)
@@ -414,8 +432,11 @@ def today(day=None):
         key = (grade.ABBR.get(r["home"], r["home"]), grade.ABBR.get(r["away"], r["away"]))
         shop.setdefault(key, []).append((names.get(r["book"], str(r["book"])), r["total"], int(r["over"]), int(r["under"])))
     import confirm  # second and third sources for starting goalies (+ Rotowire injuries)
-    rw_goalies, rw_injuries = health.attempt("Rotowire", confirm.rotowire, ({}, {}), must=True)
-    gp_goalies = health.attempt("GoaliePost", confirm.goaliepost, {}, must=True)
+    if preview:  # both only list today's games: their starters would be wrong for another day
+        (rw_goalies, rw_injuries), gp_goalies = ({}, {}), {}
+    else:
+        rw_goalies, rw_injuries = health.attempt("Rotowire", confirm.rotowire, ({}, {}), must=True)
+        gp_goalies = health.attempt("GoaliePost", confirm.goaliepost, {}, must=True)
     # starting goalies: DailyFaceoff + Rotowire + GoaliePost combined (confirm.combine)
     dfo_by_team = {t["abbrev"]: dfo.get(norm_name(f'{t["placeName"]["default"]} {t["commonName"]["default"]}'), (None, None))
                    for g in todays for t in (g["homeTeam"], g["awayTeam"])}
@@ -538,6 +559,9 @@ def today(day=None):
     print("Model uses 2020-21 onward only. Tested 2021-26: +1.3% ROI at open, +2.4% at close, 53-55% wins"
           " (+2 pts more with line shopping). Small, unproven edge: judge it on live paper trading.")
     print("\nTODAY'S FLAGS: " + ("; ".join(flagged) if flagged else "none"))
+    if preview:
+        save_preview(day, log_rows)
+        return
     if day == date.today().isoformat():  # never log past dates: that would be hindsight
         with open(paths.data("last_run.txt"), "w") as f:  # shown on the dashboard
             f.write(pd.Timestamp.now(tz="America/New_York").strftime("%Y-%m-%d %H:%M %Z") + "\n")
@@ -596,4 +620,7 @@ def today(day=None):
 
 if __name__ == "__main__":
     cmd = sys.argv[1] if len(sys.argv) > 1 else "today"
-    backtest() if cmd == "backtest" else today(sys.argv[2] if len(sys.argv) > 2 else None)
+    if cmd == "preview":  # tomorrow (Eastern), for the dashboard's Tomorrow preview tab
+        today((date.today() + timedelta(days=1)).isoformat(), preview=True)
+    else:
+        backtest() if cmd == "backtest" else today(sys.argv[2] if len(sys.argv) > 2 else None)

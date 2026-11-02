@@ -2067,10 +2067,10 @@ ul.archive li:last-child{border-bottom:none}
 
 
 def tabs(active, has_rankings):
-    """Tab bar between the dashboard and the team rankings page."""
+    """Tab bar between the dashboard, tomorrow's preview and the team rankings page."""
     if not has_rankings:
         return ""
-    t = [("dash", "index.html", "Dashboard"), ("rank", "rankings.html", "Team rankings")]
+    t = [("dash", "index.html", "Dashboard"), ("prev", "preview.html", "Tomorrow preview"), ("rank", "rankings.html", "Team rankings")]
     return ("<nav class='tabs'>" + "".join(f"<a href='{u}' class='tab{' on' if k == active else ''}'>{n}</a>" for k, u, n in t)
             + "</nav>")
 
@@ -2087,6 +2087,26 @@ def shell(title, body, root=""):
 <footer>Paper trading only, not betting advice · Team logos © NHL and its teams ·
 <a href="https://github.com/Prezbo8/NHL-total-model">github.com/Prezbo8/NHL-total-model</a></footer>
 </div></body></html>"""
+
+
+def preview(d):
+    """Tomorrow's games from data/preview.json (model.py preview, after each run): an early look, never logged."""
+    path = paths.data("preview.json")
+    if not os.path.exists(path):
+        return "<p class='muted'>No preview yet: it is made after each model run.</p>"
+    with open(path) as f:
+        p = json.load(f)
+    day = pd.Timestamp(p["date"])
+    if p["date"] <= date.today().isoformat():
+        return f"<p class='muted'>No preview for tomorrow yet (the last one was for {day:%A, %B %-d}).</p>"
+    if not p["rows"]:
+        return f"<p class='muted'>{day:%A, %B %-d}: no regular-season games.</p>"
+    g = pd.DataFrame(p["rows"]).reindex(columns=list(dict.fromkeys([*d.columns, *p["rows"][0]])))
+    return (f"<p class='sub'>{day:%A, %B %-d} · {day_summary(g)} · made {e(p['made'])}</p>"
+            "<p class='retro'><b>Early look:</b> goalies are DailyFaceoff's projections (rarely confirmed a day ahead), lines "
+            "may not be posted yet and injuries can change. Nothing here counts toward the paper trading record: these games "
+            "are projected again, and logged, on game day.</p>"
+            f"{day_view(g)}")
 
 
 def last_run():
@@ -2145,6 +2165,10 @@ Data from the 2020-21 season onward only (MoneyPuck, NHL API, DailyFaceoff, Acti
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
     with open(OUT, "w") as f:
         f.write(shell("NHL Total Model", body))
+    with open(os.path.join(os.path.dirname(OUT), "preview.html"), "w") as f:
+        f.write(shell("NHL Total Model · Tomorrow preview",
+                      f"<header class='hero'><h1>Tomorrow preview</h1>{stamp}</header>{tabs('prev', bool(rk))}"
+                      f"<section><h2>Tomorrow's slate</h2>{preview(d)}</section>"))
     rk_path = os.path.join(os.path.dirname(OUT), "rankings.html")
     if rk:
         with open(rk_path, "w") as f:
