@@ -1873,7 +1873,9 @@ body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 -apple-system
     radial-gradient(circle at 50% 50%,transparent 58px,rgba(31,111,235,.6) 59px,rgba(31,111,235,.6) 61px,transparent 62px),
     linear-gradient(160deg,#0d2440,#0a1a2e 60%,#081422)}
 .lastrun{position:absolute;top:14px;right:18px;text-align:right;font-size:11px;line-height:1.35;color:#c9d6e6;z-index:2}
-.lastrun b{display:block;font-size:13px;color:#fff;font-weight:700}.lastrun .tip{border-bottom-color:rgba(255,255,255,.45)}
+.lastrun b{display:block;font-size:13px;color:#fff;font-weight:700}
+.runok,.runbad{display:inline-block;margin-left:6px;font-size:12px;line-height:18px;width:18px;height:18px;border-radius:50%;text-align:center;cursor:help}
+.runok{background:#1f9d55;color:#fff}.runbad{background:#d97706;color:#fff}.lastrun .tip{border-bottom-color:rgba(255,255,255,.45)}
 @media (max-width:600px){.lastrun{position:static;text-align:left;margin-top:8px}}
 .why-text .tt{display:block;margin:3px 0;padding-left:10px;border-left:3px solid var(--line)}
 .mcards{display:none}
@@ -2122,11 +2124,22 @@ def last_run():
     return f"{t:%a, %b %-d} · {t:%-I:%M %p} {tz}"
 
 
+def run_status():
+    """✓ (every data source worked) or ⚠ (which ones failed) for the latest run, from data/last_run_status.json."""
+    try:
+        bad = json.load(open(paths.data("last_run_status.json")))["failed"]
+    except (OSError, ValueError, KeyError):
+        return ""
+    if not bad:
+        return f"<span class='runok' title='{e('Last run succeeded: every data source worked.')}'>✓</span>"
+    return f"<span class='runbad' title='{e('Last run: still failing after retries: ' + ', '.join(bad))}'>⚠</span>"
+
+
 def build():
     d = paper.read_log()
     lr = last_run()
     stamp = (f"<div class='lastrun'>{tip('Last model run', 'When the model last ran: re-checked goalies, lineups, injuries and lines, and re-projected every game that had not started. It runs at 12:01 AM, every hour from 11:17 AM to 10:17 PM Eastern, and 15 minutes before each game.', 'tr down')}"
-             f"<b>{e(lr)}</b></div>") if lr else ""
+             f"<b>{e(lr)}{run_status()}</b></div>") if lr else ""
     rk = rankings(d)
     body = f"""
 <header class="hero"><h1>NHL Total Model</h1>{stamp}</header>
