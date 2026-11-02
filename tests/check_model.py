@@ -169,7 +169,7 @@ check("sportsbook team codes match NHL codes", abbrs <= set(g.home), str(sorted(
 
 print("source retries + alerts (fake sources, nothing real is called)")
 import health
-health.STATE, health.RETRY_FLAG = SP + "health.json", SP + ".retry"
+health.STATE, health.RETRY_FLAG, health.LAST_STATUS = SP + "health.json", SP + ".retry", SP + "last_run_status.json"
 calls = {"n": 0}
 def flaky():
     calls["n"] += 1
