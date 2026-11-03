@@ -79,19 +79,16 @@ def fetch(url):
     return urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
 
 
-def refresh_data(tries=3, budget=None):
+def refresh_data(tries=3, budget=3 * 60):
     """Download MoneyPuck's game file to a temp file and swap it in only if it looks complete,
     so a dropped connection can never wipe the existing data. MoneyPuck updates it once a day: when the
     copy we have (kept between runs by the workflow's cache) is still current, nothing is downloaded.
-    budget: wall-clock seconds for all tries together (MoneyPuck served 50 KB/s on Nov 3 2026 = 42-min
-    downloads, which a per-read timeout never catches). Default: 8 min when there's a copy to fall back on,
-    50 min when there isn't (no copy = no projections, so it's worth the wait)."""
+    budget: wall-clock seconds for all tries together. Model runs keep the default (3 min, plenty at MoneyPuck's
+    normal speed); .github/workflows/moneypuck.yml gives it hours (Nov 3 2026: ~30 KB/s = a 70-min download)."""
     import os
     import time
     import urllib.error
     tmp, stamp = DATA + ".part", DATA + ".modified"  # stamp: MoneyPuck's Last-Modified for the copy we have
-    if budget is None:
-        budget = 8 * 60 if os.path.exists(DATA) else 50 * 60
     deadline = time.time() + budget
     for i in range(tries):
         if time.time() >= deadline:
@@ -396,11 +393,13 @@ def today(day=None, preview=False):
     day = day or date.today().isoformat()
     if preview:  # runs right after today's run: its data is fresh, and an early look shouldn't wait on retries
         health.WAITS = []
-    else:
-        # no extra retries here: refresh_data retries on its own, within its time budget (Nov 3 2026: the two
-        # retry layers together ran past the 45-min job limit); on failure the previous download is still used
-        health.attempt("MoneyPuck stats", lambda: refresh_data() or (_ for _ in ()).throw(RuntimeError("download failed")),
-                       waits=[])
+    elif os.environ.get("MONEYPUCK_BACKGROUND"):  # set by daily.yml while moneypuck.yml is getting the new file
+        print("(MoneyPuck's new file is downloading in the background (moneypuck.yml): this run uses the saved copy)")
+    elif not health.attempt("MoneyPuck stats", lambda: refresh_data() or (_ for _ in ()).throw(RuntimeError("download failed")),
+                            False, waits=[]):  # refresh_data retries on its own, within its 3 minutes
+        # too slow for a model run: daily.yml now starts moneypuck.yml, which has hours to get it; this run uses the
+        # saved copy (Nov 3 2026: MoneyPuck at ~30 KB/s made every run time out)
+        open(paths.data(".moneypuck_behind"), "w").close()
     load_games()
     games = sm.load_split()
     season = sm.season_of(date.fromisoformat(day))  # from the date, not the data (opening day has no games yet)

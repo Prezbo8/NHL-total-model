@@ -2,6 +2,7 @@
 data/moneypuck_games.csv
 data/moneypuck_games.csv.part
 data/moneypuck_games.csv.modified
+data/.moneypuck_behind
 __pycache__/
 .DS_Store
 

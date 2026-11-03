@@ -6,10 +6,13 @@ on:
   workflow_dispatch: {}
   push:
     paths: ["src/**", "research/**", "tests/**", ".github/workflows/**"]
+concurrency:   # a newer push to the same branch replaces a test run still going
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   test:
     runs-on: ubuntu-24.04
-    timeout-minutes: 60   # default is 6 h; MoneyPuck download is capped at 50 min (src/model.py refresh_data)
+    timeout-minutes: 30   # default is 6 h (a stuck download would hold a runner all day)
     env:
       TZ: America/New_York
     steps:
@@ -29,7 +32,7 @@ jobs:
           key: moneypuck-${{ github.run_id }}
           restore-keys: moneypuck-
       - name: Download MoneyPuck game data (not stored in the repo; skipped when the cached copy is current)
-        run: python -c "import sys; sys.path.insert(0, 'src'); import model; assert model.refresh_data()"
+        run: python -c "import sys, os; sys.path.insert(0, 'src'); import model; assert model.refresh_data() or os.path.exists(model.DATA)"
       - name: Save MoneyPuck data (only when this run downloaded a new version)
         if: ${{ hashFiles('data/moneypuck_games.csv.modified') != '' && steps.mp.outputs.cache-matched-key != format('moneypuck-{0}', hashFiles('data/moneypuck_games.csv.modified')) }}
         continue-on-error: true   # a cache problem must not fail the tests

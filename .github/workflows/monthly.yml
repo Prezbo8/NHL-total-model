@@ -20,7 +20,7 @@ concurrency:
 jobs:
   check:
     runs-on: ubuntu-24.04   # pinned: ubuntu-latest moves to Ubuntu 26 on Oct 19, 2026
-    timeout-minutes: 60   # MoneyPuck download is capped at 50 min without a cached copy (src/model.py refresh_data)
+    timeout-minutes: 45
     env:
       TZ: America/New_York
     steps:
