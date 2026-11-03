@@ -1,8 +1,9 @@
 name: MoneyPuck data (once-a-day download)
 
-# MoneyPuck updates its game file (127 MB) once a day, in the morning. Model runs keep a saved copy (Actions cache)
-# and only ask MoneyPuck "changed?" (0.6 s); a run that can't get a new file within 3 minutes starts this workflow,
-# which has hours to download it and saves it for the next runs. Until then the runs use the previous copy.
+# MoneyPuck updates its game file (127 MB) once a day, ~7:45 AM Eastern. The keeper starts this workflow at 8:30 AM,
+# so the 11:17 AM run already has the new file. Model runs keep a saved copy (Actions cache) and only ask MoneyPuck
+# "changed?" (0.6 s); a run that can't get a new file within 3 minutes also starts this workflow, which has hours
+# to download it and saves it for the next runs. Until then the runs use the previous copy.
 # (Nov 3 2026: MoneyPuck served ~30 KB/s = a 70-min download, and every model run timed out waiting.)
 on:
   workflow_dispatch: {}
