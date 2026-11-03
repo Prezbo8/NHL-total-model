@@ -51,7 +51,7 @@ jobs:
       group: daily
       cancel-in-progress: false
     runs-on: ubuntu-24.04   # pinned: ubuntu-latest moves to Ubuntu 26 on Oct 19, 2026
-    timeout-minutes: 45
+    timeout-minutes: 60   # MoneyPuck download is capped at 8 min with a cached copy, 50 min without one (src/model.py refresh_data)
     env:
       TZ: America/New_York   # "today" means today in Eastern time
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}   # run history (src/store.py); empty = skipped
@@ -72,6 +72,7 @@ jobs:
       # MoneyPuck's game file (126 MB, too big for the repo): keep it between runs. src/model.py downloads it
       # again only when MoneyPuck has updated it (once a day); Nov 3 2026 it served at ~50 KB/s = 40-min runs
       - name: Restore MoneyPuck data
+        id: mp
         uses: actions/cache/restore@v6
         with:
           path: |
@@ -90,8 +91,9 @@ jobs:
         run: python src/model.py today
 
       - name: Save MoneyPuck data (only when this run downloaded a new version)
-        if: ${{ !cancelled() && hashFiles('data/moneypuck_games.csv.modified') != '' }}
-        continue-on-error: true   # this version is already saved
+        # the stamp holds MoneyPuck's Last-Modified, so a new download = a key the restored cache doesn't have
+        if: ${{ !cancelled() && hashFiles('data/moneypuck_games.csv.modified') != '' && steps.mp.outputs.cache-matched-key != format('moneypuck-{0}', hashFiles('data/moneypuck_games.csv.modified')) }}
+        continue-on-error: true   # a cache problem must not fail the run
         uses: actions/cache/save@v6
         with:
           path: |

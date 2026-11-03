@@ -9,6 +9,7 @@ on:
 jobs:
   test:
     runs-on: ubuntu-24.04
+    timeout-minutes: 60   # default is 6 h; MoneyPuck download is capped at 50 min (src/model.py refresh_data)
     env:
       TZ: America/New_York
     steps:
@@ -19,6 +20,7 @@ jobs:
       - name: Install (same versions as the daily run)
         run: pip install "pandas==3.0.6" "numpy==2.5.3" pyflakes && python -c "import sys, pandas, numpy; print('python', sys.version.split()[0], '| pandas', pandas.__version__, '| numpy', numpy.__version__)"
       - name: Restore MoneyPuck data (cached by the daily run)
+        id: mp
         uses: actions/cache/restore@v6
         with:
           path: |
@@ -29,8 +31,8 @@ jobs:
       - name: Download MoneyPuck game data (not stored in the repo; skipped when the cached copy is current)
         run: python -c "import sys; sys.path.insert(0, 'src'); import model; assert model.refresh_data()"
       - name: Save MoneyPuck data (only when this run downloaded a new version)
-        if: ${{ hashFiles('data/moneypuck_games.csv.modified') != '' }}
-        continue-on-error: true   # this version is already saved
+        if: ${{ hashFiles('data/moneypuck_games.csv.modified') != '' && steps.mp.outputs.cache-matched-key != format('moneypuck-{0}', hashFiles('data/moneypuck_games.csv.modified')) }}
+        continue-on-error: true   # a cache problem must not fail the tests
         uses: actions/cache/save@v6
         with:
           path: |

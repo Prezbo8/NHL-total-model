@@ -22,7 +22,7 @@ STATE = paths.data("source_health.json")
 RETRY_FLAG = paths.data(".retry")
 LAST_STATUS = paths.data("last_run_status.json")  # the latest run's outcome, for the dashboard's ✓ by 'Last model run'
 WAITS = [15, 45, 90, 180]
-BUDGET = 15 * 60          # total seconds of retry waiting per run
+BUDGET = 15 * 60          # total seconds per run of retry waiting + time spent in failed tries
 ALERT_AFTER = 2           # consecutive failed runs before an alert
 NO_RETRY = {"Supabase"}   # a write target, not a data source: alerts, but a rerun wouldn't fix it
 ET = ZoneInfo("America/New_York")
@@ -39,6 +39,7 @@ def attempt(name, fn, default=None, must=False, waits=None):
                 break
             print(f"  ({name}: retry {i} in {wait}s)", flush=True)
             time.sleep(wait); _spent += wait
+        t0 = time.time()
         try:
             out = fn()
             if must and not out:
@@ -49,6 +50,7 @@ def attempt(name, fn, default=None, must=False, waits=None):
             return out
         except Exception as e:
             err = f"{type(e).__name__}: {str(e)[:150]}"
+            _spent += time.time() - t0   # a try that hangs before failing uses up the budget too
     _results[name] = err or "retry budget used up"
     print(f"::warning::{name} failed after retries: {_results[name]}")
     return default

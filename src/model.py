@@ -79,21 +79,29 @@ def fetch(url):
     return urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
 
 
-def refresh_data(tries=3):
+def refresh_data(tries=3, budget=None):
     """Download MoneyPuck's game file to a temp file and swap it in only if it looks complete,
     so a dropped connection can never wipe the existing data. MoneyPuck updates it once a day: when the
-    copy we have (kept between runs by the workflow's cache) is still current, nothing is downloaded."""
+    copy we have (kept between runs by the workflow's cache) is still current, nothing is downloaded.
+    budget: wall-clock seconds for all tries together (MoneyPuck served 50 KB/s on Nov 3 2026 = 42-min
+    downloads, which a per-read timeout never catches). Default: 8 min when there's a copy to fall back on,
+    50 min when there isn't (no copy = no projections, so it's worth the wait)."""
     import os
     import time
     import urllib.error
     tmp, stamp = DATA + ".part", DATA + ".modified"  # stamp: MoneyPuck's Last-Modified for the copy we have
+    if budget is None:
+        budget = 8 * 60 if os.path.exists(DATA) else 50 * 60
+    deadline = time.time() + budget
     for i in range(tries):
+        if time.time() >= deadline:
+            break
         try:
             req = fetch(DATA_URL)
             if os.path.exists(DATA) and os.path.exists(stamp):
                 req.add_header("If-Modified-Since", open(stamp).read().strip())
             try:
-                f = urllib.request.urlopen(req, timeout=300)
+                f = urllib.request.urlopen(req, timeout=min(300, max(5, deadline - time.time())))
             except urllib.error.HTTPError as e:
                 if e.code == 304:
                     print("(MoneyPuck data unchanged since the last download)")
@@ -101,8 +109,10 @@ def refresh_data(tries=3):
                 raise
             with f, open(tmp, "wb") as out:
                 modified = f.headers.get("Last-Modified")
-                while chunk := f.read(1 << 20):
+                while chunk := f.read1(1 << 20):   # read1: returns what has arrived, so the deadline is checked often
                     out.write(chunk)
+                    if time.time() > deadline:
+                        raise TimeoutError(f"still downloading after {budget // 60} min (MoneyPuck is slow)")
             with open(tmp) as f:
                 ok = f.readline().startswith("team,season") and os.path.getsize(tmp) > 50_000_000
             if ok:
@@ -113,7 +123,7 @@ def refresh_data(tries=3):
             print(f"(MoneyPuck download looked incomplete, attempt {i + 1}/{tries})")
         except Exception as e:
             print(f"(MoneyPuck download failed, attempt {i + 1}/{tries}: {e})")
-        time.sleep(30 * (i + 1))
+        time.sleep(max(0, min(30 * (i + 1), deadline - time.time())))
     if os.path.exists(tmp):
         os.remove(tmp)
     print("(using the previously downloaded MoneyPuck data)")
@@ -387,8 +397,10 @@ def today(day=None, preview=False):
     if preview:  # runs right after today's run: its data is fresh, and an early look shouldn't wait on retries
         health.WAITS = []
     else:
+        # no extra retries here: refresh_data retries on its own, within its time budget (Nov 3 2026: the two
+        # retry layers together ran past the 45-min job limit); on failure the previous download is still used
         health.attempt("MoneyPuck stats", lambda: refresh_data() or (_ for _ in ()).throw(RuntimeError("download failed")),
-                       waits=[60, 180])  # on failure the previous download is still used
+                       waits=[])
     load_games()
     games = sm.load_split()
     season = sm.season_of(date.fromisoformat(day))  # from the date, not the data (opening day has no games yet)
