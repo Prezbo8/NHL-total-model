@@ -196,6 +196,12 @@ jobs:
             echo "keeper running ($n)"
           fi
 
+      - name: Alert if the model hasn't finished a run in 2+ hours (GitHub issue; closes itself when a run works)
+        if: ${{ always() }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python src/health.py stale "${{ job.status }}" || echo "run alert step failed"
+
       - name: Retry until it works (a source still failing, or any step failed / the run was cancelled)
         if: ${{ always() }}
         env:

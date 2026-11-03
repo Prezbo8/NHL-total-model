@@ -7,6 +7,7 @@ Eastern, when there are no games left to project). A source that fails 2 runs in
 issue (you get GitHub's email / app notification); the issue closes itself when the source recovers.
 
   python3 src/health.py alert    # open / close the GitHub issues from data/source_health.json
+  python3 src/health.py stale <job status>   # open / close the "Model runs failing" issue
 """
 import json
 import os
@@ -24,6 +25,8 @@ LAST_STATUS = paths.data("last_run_status.json")  # the latest run's outcome, fo
 WAITS = [15, 45, 90, 180]
 BUDGET = 15 * 60          # total seconds per run of retry waiting + time spent in failed tries
 ALERT_AFTER = 2           # consecutive failed runs before an alert
+STALE_AFTER = 2 * 3600    # run alert: this run failed and no run has finished for this long
+RUN_ALERT = "Model runs failing"
 NO_RETRY = {"Supabase"}   # a write target, not a data source: alerts, but a rerun wouldn't fix it
 ET = ZoneInfo("America/New_York")
 _spent, _results = 0.0, {}
@@ -109,5 +112,34 @@ def alert():
             print(f"(alert closed: {title})")
 
 
+def stale(job_status, now=None):
+    """Open a GitHub issue when this run failed and the model hasn't finished a run in STALE_AFTER; close it once a
+    run succeeds. Catches what alert() can't: a run that times out never saves its status (Nov 3 2026: 4+ hours
+    of timed-out runs, every source 'healthy', no alert)."""
+    r = _gh("issue", "list", "--label", "run-alert", "--state", "open", "--json", "number,title")
+    open_issues = [i["number"] for i in json.loads(r.stdout or "[]") if i["title"] == RUN_ALERT] if r.returncode == 0 else []
+    if job_status == "success":
+        for n in open_issues:
+            _gh("issue", "close", str(n), "--comment", "The model is finishing its runs again.")
+            print("(run alert closed)")
+        return
+    if open_issues or not os.path.exists(LAST_STATUS):
+        return
+    last = json.load(open(LAST_STATUS))["at"]  # "2026-11-03 15:58 EST": written when a run finishes
+    if ((now or datetime.now(ET)) - datetime.strptime(last[:16], "%Y-%m-%d %H:%M").replace(tzinfo=ET)).total_seconds() < STALE_AFTER:
+        return
+    _gh("label", "create", "run-alert", "--color", "b60205", "--description", "The model's runs keep failing")
+    run = f"{os.environ.get('GITHUB_SERVER_URL')}/{os.environ.get('GITHUB_REPOSITORY')}/actions/runs/{os.environ.get('GITHUB_RUN_ID')}"
+    _gh("issue", "create", "--title", RUN_ALERT, "--label", "run-alert", "--body",
+        f"The model hasn't finished a run since **{last}**, and the latest run failed too ({job_status}): {run}\n\n"
+        "Runs keep retrying on their own. This issue closes itself when one works.")
+    print(f"(run alert opened: no finished run since {last})")
+
+
 if __name__ == "__main__":
-    alert() if sys.argv[1:] == ["alert"] else print(__doc__)
+    if sys.argv[1:] == ["alert"]:
+        alert()
+    elif sys.argv[1:2] == ["stale"]:
+        stale(sys.argv[2])
+    else:
+        print(__doc__)
