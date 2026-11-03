@@ -123,7 +123,8 @@ def refresh_data(tries=3, budget=3 * 60):
         time.sleep(max(0, min(30 * (i + 1), deadline - time.time())))
     if os.path.exists(tmp):
         os.remove(tmp)
-    print("(using the previously downloaded MoneyPuck data)")
+    print("(using the previously downloaded MoneyPuck data)" if os.path.exists(DATA) else
+          "(no saved MoneyPuck data yet: .github/workflows/moneypuck.yml downloads it in the background)")
     return False
 
 

@@ -192,6 +192,17 @@ health.alert()
 check("alert after 2 failed runs in a row; closes when the source recovers",
       made == ["Data source failing: Dead"] and closed == ["7"])
 health._results.clear()
+made, closed, open_alert = [], [], []
+health._gh = lambda *a: (made.append(a[a.index("--title") + 1]) if a[:2] == ("issue", "create") else closed.append(a[2]) if a[:2] == ("issue", "close") else None,
+                         type("R", (), {"returncode": 0, "stdout": json.dumps(open_alert) if a[:2] == ("issue", "list") else ""})())[1]
+json.dump({"at": "2026-11-03 15:58 EST", "failed": []}, open(health.LAST_STATUS, "w"))
+health.stale("failure", now=datetime.datetime(2026, 11, 3, 16, 30, tzinfo=health.ET))  # 32 min since the last finished run
+health.stale("failure", now=datetime.datetime(2026, 11, 3, 18, 33, tzinfo=health.ET))  # 2.6 h (Nov 3 2026 timeouts)
+open_alert.append({"title": health.RUN_ALERT, "number": 9})
+health.stale("cancelled", now=datetime.datetime(2026, 11, 3, 19, 0, tzinfo=health.ET))  # already open: no duplicate
+health.stale("success")
+check("no finished run for 2+ h opens one run alert (not after one bad run); a good run closes it",
+      made == [health.RUN_ALERT] and closed == ["9"], f"{made} {closed}")
 
 print("goalie + injury confirmations (offline)")
 import confirm
