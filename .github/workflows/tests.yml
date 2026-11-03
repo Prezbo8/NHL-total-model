@@ -18,8 +18,25 @@ jobs:
           python-version: "3.14"
       - name: Install (same versions as the daily run)
         run: pip install "pandas==3.0.6" "numpy==2.5.3" pyflakes && python -c "import sys, pandas, numpy; print('python', sys.version.split()[0], '| pandas', pandas.__version__, '| numpy', numpy.__version__)"
-      - name: Download MoneyPuck game data (not stored in the repo)
+      - name: Restore MoneyPuck data (cached by the daily run)
+        uses: actions/cache/restore@v6
+        with:
+          path: |
+            data/moneypuck_games.csv
+            data/moneypuck_games.csv.modified
+          key: moneypuck-${{ github.run_id }}
+          restore-keys: moneypuck-
+      - name: Download MoneyPuck game data (not stored in the repo; skipped when the cached copy is current)
         run: python -c "import sys; sys.path.insert(0, 'src'); import model; assert model.refresh_data()"
+      - name: Save MoneyPuck data (only when this run downloaded a new version)
+        if: ${{ hashFiles('data/moneypuck_games.csv.modified') != '' }}
+        continue-on-error: true   # this version is already saved
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            data/moneypuck_games.csv
+            data/moneypuck_games.csv.modified
+          key: moneypuck-${{ hashFiles('data/moneypuck_games.csv.modified') }}
       - name: Static check
         run: python -m pyflakes src/*.py research/lib/*.py research/studies/*.py tests/*.py
       - name: Component checks
