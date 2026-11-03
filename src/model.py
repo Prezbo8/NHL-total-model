@@ -81,19 +81,34 @@ def fetch(url):
 
 def refresh_data(tries=3):
     """Download MoneyPuck's game file to a temp file and swap it in only if it looks complete,
-    so a dropped connection can never wipe the existing data."""
+    so a dropped connection can never wipe the existing data. MoneyPuck updates it once a day: when the
+    copy we have (kept between runs by the workflow's cache) is still current, nothing is downloaded."""
     import os
     import time
-    tmp = DATA + ".part"
+    import urllib.error
+    tmp, stamp = DATA + ".part", DATA + ".modified"  # stamp: MoneyPuck's Last-Modified for the copy we have
     for i in range(tries):
         try:
-            with urllib.request.urlopen(fetch(DATA_URL), timeout=300) as f, open(tmp, "wb") as out:
+            req = fetch(DATA_URL)
+            if os.path.exists(DATA) and os.path.exists(stamp):
+                req.add_header("If-Modified-Since", open(stamp).read().strip())
+            try:
+                f = urllib.request.urlopen(req, timeout=300)
+            except urllib.error.HTTPError as e:
+                if e.code == 304:
+                    print("(MoneyPuck data unchanged since the last download)")
+                    return True
+                raise
+            with f, open(tmp, "wb") as out:
+                modified = f.headers.get("Last-Modified")
                 while chunk := f.read(1 << 20):
                     out.write(chunk)
             with open(tmp) as f:
                 ok = f.readline().startswith("team,season") and os.path.getsize(tmp) > 50_000_000
             if ok:
                 os.replace(tmp, DATA)
+                if modified:
+                    open(stamp, "w").write(modified)
                 return True
             print(f"(MoneyPuck download looked incomplete, attempt {i + 1}/{tries})")
         except Exception as e:

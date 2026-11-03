@@ -69,6 +69,17 @@ jobs:
       - name: Install
         run: pip install "pandas==3.0.6" "numpy==2.5.3"   # same versions tests/check_model.py passes on (Tests workflow)
 
+      # MoneyPuck's game file (126 MB, too big for the repo): keep it between runs. src/model.py downloads it
+      # again only when MoneyPuck has updated it (once a day); Nov 3 2026 it served at ~50 KB/s = 40-min runs
+      - name: Restore MoneyPuck data
+        uses: actions/cache/restore@v6
+        with:
+          path: |
+            data/moneypuck_games.csv
+            data/moneypuck_games.csv.modified
+          key: moneypuck-${{ github.run_id }}
+          restore-keys: moneypuck-
+
       # each step runs even if an earlier one failed (e.g. settling hits an API outage),
       # so today's projections and the dashboard still get made; the run still shows red
       - name: Settle yesterday's paper trades
@@ -77,6 +88,16 @@ jobs:
       - name: Project today's games, flag, log
         if: ${{ !cancelled() }}
         run: python src/model.py today
+
+      - name: Save MoneyPuck data (only when this run downloaded a new version)
+        if: ${{ !cancelled() && hashFiles('data/moneypuck_games.csv.modified') != '' }}
+        continue-on-error: true   # this version is already saved
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            data/moneypuck_games.csv
+            data/moneypuck_games.csv.modified
+          key: moneypuck-${{ hashFiles('data/moneypuck_games.csv.modified') }}
 
       - name: Tomorrow preview (early look for the dashboard tab; never logged)
         if: ${{ !cancelled() }}
