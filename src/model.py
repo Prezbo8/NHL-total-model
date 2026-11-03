@@ -79,26 +79,48 @@ def fetch(url):
     return urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
 
 
-def refresh_data(tries=3):
+def refresh_data(tries=3, budget=3 * 60):
     """Download MoneyPuck's game file to a temp file and swap it in only if it looks complete,
-    so a dropped connection can never wipe the existing data."""
+    so a dropped connection can never wipe the existing data. MoneyPuck updates it once a day: when the
+    copy we have (kept between runs by the workflow's cache) is still current, nothing is downloaded.
+    budget: wall-clock seconds for all tries together. Model runs keep the default (3 min, plenty at MoneyPuck's
+    normal speed); .github/workflows/moneypuck.yml gives it hours (Nov 3 2026: ~30 KB/s = a 70-min download)."""
     import os
     import time
-    tmp = DATA + ".part"
+    import urllib.error
+    tmp, stamp = DATA + ".part", DATA + ".modified"  # stamp: MoneyPuck's Last-Modified for the copy we have
+    deadline = time.time() + budget
     for i in range(tries):
+        if time.time() >= deadline:
+            break
         try:
-            with urllib.request.urlopen(fetch(DATA_URL), timeout=300) as f, open(tmp, "wb") as out:
-                while chunk := f.read(1 << 20):
+            req = fetch(DATA_URL)
+            if os.path.exists(DATA) and os.path.exists(stamp):
+                req.add_header("If-Modified-Since", open(stamp).read().strip())
+            try:
+                f = urllib.request.urlopen(req, timeout=min(300, max(5, deadline - time.time())))
+            except urllib.error.HTTPError as e:
+                if e.code == 304:
+                    print("(MoneyPuck data unchanged since the last download)")
+                    return True
+                raise
+            with f, open(tmp, "wb") as out:
+                modified = f.headers.get("Last-Modified")
+                while chunk := f.read1(1 << 20):   # read1: returns what has arrived, so the deadline is checked often
                     out.write(chunk)
+                    if time.time() > deadline:
+                        raise TimeoutError(f"still downloading after {budget // 60} min (MoneyPuck is slow)")
             with open(tmp) as f:
                 ok = f.readline().startswith("team,season") and os.path.getsize(tmp) > 50_000_000
             if ok:
                 os.replace(tmp, DATA)
+                if modified:
+                    open(stamp, "w").write(modified)
                 return True
             print(f"(MoneyPuck download looked incomplete, attempt {i + 1}/{tries})")
         except Exception as e:
             print(f"(MoneyPuck download failed, attempt {i + 1}/{tries}: {e})")
-        time.sleep(30 * (i + 1))
+        time.sleep(max(0, min(30 * (i + 1), deadline - time.time())))
     if os.path.exists(tmp):
         os.remove(tmp)
     print("(using the previously downloaded MoneyPuck data)")
@@ -371,9 +393,13 @@ def today(day=None, preview=False):
     day = day or date.today().isoformat()
     if preview:  # runs right after today's run: its data is fresh, and an early look shouldn't wait on retries
         health.WAITS = []
-    else:
-        health.attempt("MoneyPuck stats", lambda: refresh_data() or (_ for _ in ()).throw(RuntimeError("download failed")),
-                       waits=[60, 180])  # on failure the previous download is still used
+    elif os.environ.get("MONEYPUCK_BACKGROUND"):  # set by daily.yml while moneypuck.yml is getting the new file
+        print("(MoneyPuck's new file is downloading in the background (moneypuck.yml): this run uses the saved copy)")
+    elif not health.attempt("MoneyPuck stats", lambda: refresh_data() or (_ for _ in ()).throw(RuntimeError("download failed")),
+                            False, waits=[]):  # refresh_data retries on its own, within its 3 minutes
+        # too slow for a model run: daily.yml now starts moneypuck.yml, which has hours to get it; this run uses the
+        # saved copy (Nov 3 2026: MoneyPuck at ~30 KB/s made every run time out)
+        open(paths.data(".moneypuck_behind"), "w").close()
     load_games()
     games = sm.load_split()
     season = sm.season_of(date.fromisoformat(day))  # from the date, not the data (opening day has no games yet)

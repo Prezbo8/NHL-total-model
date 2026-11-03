@@ -1,6 +1,8 @@
-# MoneyPuck game file: 126 MB (over GitHub's limit), re-downloaded by every run (src/model.py today)
+# MoneyPuck game file: 126 MB (over GitHub's limit), kept between runs by the daily workflow's cache
 data/moneypuck_games.csv
 data/moneypuck_games.csv.part
+data/moneypuck_games.csv.modified
+data/.moneypuck_behind
 __pycache__/
 .DS_Store
 

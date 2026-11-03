@@ -1,0 +1,53 @@
+name: MoneyPuck data (once-a-day download)
+
+# MoneyPuck updates its game file (127 MB) once a day, in the morning. Model runs keep a saved copy (Actions cache)
+# and only ask MoneyPuck "changed?" (0.6 s); a run that can't get a new file within 3 minutes starts this workflow,
+# which has hours to download it and saves it for the next runs. Until then the runs use the previous copy.
+# (Nov 3 2026: MoneyPuck served ~30 KB/s = a 70-min download, and every model run timed out waiting.)
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: moneypuck
+  cancel-in-progress: false
+
+jobs:
+  download:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 330
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+
+      - name: Install
+        run: pip install "pandas==3.0.6" "numpy==2.5.3"
+
+      - name: Restore the saved copy
+        id: mp
+        uses: actions/cache/restore@v6
+        with:
+          path: |
+            data/moneypuck_games.csv
+            data/moneypuck_games.csv.modified
+          key: moneypuck-${{ github.run_id }}
+          restore-keys: moneypuck-
+
+      - name: Download MoneyPuck's new file (up to 5 hours; done in a second if the saved copy is current)
+        run: python -c "import sys; sys.path.insert(0, 'src'); import model; assert model.refresh_data(tries=10, budget=5 * 3600)"
+
+      - name: Save it for the model runs
+        if: ${{ steps.mp.outputs.cache-matched-key != format('moneypuck-{0}', hashFiles('data/moneypuck_games.csv.modified')) }}
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            data/moneypuck_games.csv
+            data/moneypuck_games.csv.modified
+          key: moneypuck-${{ hashFiles('data/moneypuck_games.csv.modified') }}

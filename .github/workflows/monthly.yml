@@ -41,9 +41,19 @@ jobs:
         if: steps.need.outputs.run == 'true'
         run: pip install "pandas==3.0.6" "numpy==2.5.3"
 
-      - name: Download game data
+      - name: Restore MoneyPuck data (cached by the daily run)
         if: steps.need.outputs.run == 'true'
-        run: python -c "import sys; sys.path.insert(0, 'src'); import model; model.refresh_data()"
+        uses: actions/cache/restore@v6
+        with:
+          path: |
+            data/moneypuck_games.csv
+            data/moneypuck_games.csv.modified
+          key: moneypuck-${{ github.run_id }}
+          restore-keys: moneypuck-
+
+      - name: Download game data (skipped when the cached copy is current)
+        if: steps.need.outputs.run == 'true'
+        run: python -c "import sys; sys.path.insert(0, 'src'); import model; assert model.refresh_data() or __import__('os').path.exists(model.DATA)"
 
       - name: Build the report and post it as an issue
         if: steps.need.outputs.run == 'true'
@@ -57,4 +67,12 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898299+github-actions[bot]@users.noreply.github.com"
           git add data/monthly
-          git commit -m "monthly model check $(date +%Y-%m)" && git pull --rebase && git push || echo "nothing to save"
+          if git diff --cached --quiet; then echo "nothing to save"; exit 0; fi
+          git commit -m "monthly model check $(date +%Y-%m)"
+          # must land: without the saved report, every daily run starts this check again (= a new issue each hour)
+          for i in 1 2 3 4 5 6 7 8; do
+            if git pull --rebase && git push; then exit 0; fi
+            git rebase --abort 2>/dev/null || true
+            echo "push failed (try $i of 8), retrying in $((i * 20)) s"; sleep $((i * 20))
+          done
+          echo "::error::couldn't save the report (the issue is posted; the next daily run will start this check again)"; exit 1

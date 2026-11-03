@@ -6,9 +6,13 @@ on:
   workflow_dispatch: {}
   push:
     paths: ["src/**", "research/**", "tests/**", ".github/workflows/**"]
+concurrency:   # a newer push to the same branch replaces a test run still going
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   test:
     runs-on: ubuntu-24.04
+    timeout-minutes: 30   # default is 6 h (a stuck download would hold a runner all day)
     env:
       TZ: America/New_York
     steps:
@@ -18,8 +22,26 @@ jobs:
           python-version: "3.14"
       - name: Install (same versions as the daily run)
         run: pip install "pandas==3.0.6" "numpy==2.5.3" pyflakes && python -c "import sys, pandas, numpy; print('python', sys.version.split()[0], '| pandas', pandas.__version__, '| numpy', numpy.__version__)"
-      - name: Download MoneyPuck game data (not stored in the repo)
-        run: python -c "import sys; sys.path.insert(0, 'src'); import model; assert model.refresh_data()"
+      - name: Restore MoneyPuck data (cached by the daily run)
+        id: mp
+        uses: actions/cache/restore@v6
+        with:
+          path: |
+            data/moneypuck_games.csv
+            data/moneypuck_games.csv.modified
+          key: moneypuck-${{ github.run_id }}
+          restore-keys: moneypuck-
+      - name: Download MoneyPuck game data (not stored in the repo; skipped when the cached copy is current)
+        run: python -c "import sys, os; sys.path.insert(0, 'src'); import model; assert model.refresh_data() or os.path.exists(model.DATA)"
+      - name: Save MoneyPuck data (only when this run downloaded a new version)
+        if: ${{ hashFiles('data/moneypuck_games.csv.modified') != '' && steps.mp.outputs.cache-matched-key != format('moneypuck-{0}', hashFiles('data/moneypuck_games.csv.modified')) }}
+        continue-on-error: true   # a cache problem must not fail the tests
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            data/moneypuck_games.csv
+            data/moneypuck_games.csv.modified
+          key: moneypuck-${{ hashFiles('data/moneypuck_games.csv.modified') }}
       - name: Static check
         run: python -m pyflakes src/*.py research/lib/*.py research/studies/*.py tests/*.py
       - name: Component checks
