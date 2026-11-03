@@ -1,70 +1,70 @@
 {
  "Action Network now lines": {
   "consecutive_failures": 0,
-  "last_ok": "2026-11-03 13:33 EST"
+  "last_ok": "2026-11-03 14:55 EST"
  },
  "Action Network open lines": {
   "consecutive_failures": 0,
-  "last_ok": "2026-11-03 13:33 EST"
+  "last_ok": "2026-11-03 14:55 EST"
  },
  "DailyFaceoff goalies": {
   "consecutive_failures": 0,
-  "last_ok": "2026-11-03 13:33 EST"
+  "last_ok": "2026-11-03 14:55 EST"
  },
  "DailyFaceoff lineups": {
   "consecutive_failures": 0,
-  "last_ok": "2026-11-03 13:33 EST"
+  "last_ok": "2026-11-03 14:55 EST"
  },
  "ESPN injuries": {
   "consecutive_failures": 0,
-  "last_ok": "2026-11-03 13:33 EST"
+  "last_ok": "2026-11-03 14:55 EST"
  },
  "Goalie data": {
   "consecutive_failures": 0,
-  "last_ok": "2026-11-03 13:33 EST"
+  "last_ok": "2026-11-03 14:55 EST"
  },
  "GoaliePost": {
   "consecutive_failures": 0,
-  "last_ok": "2026-11-03 13:33 EST"
+  "last_ok": "2026-11-03 14:55 EST"
  },
  "MoneyPuck skaters": {
   "consecutive_failures": 0,
-  "last_ok": "2026-11-03 13:33 EST"
+  "last_ok": "2026-11-03 14:55 EST"
  },
  "MoneyPuck stats": {
   "consecutive_failures": 0,
-  "last_ok": "2026-11-03 13:33 EST"
+  "last_ok": "2026-11-03 14:55 EST"
  },
  "NHL EDGE speed": {
   "consecutive_failures": 0,
-  "last_ok": "2026-11-03 13:33 EST"
+  "last_ok": "2026-11-03 14:55 EST"
  },
  "NHL schedule": {
   "consecutive_failures": 0,
-  "last_ok": "2026-11-03 13:33 EST"
+  "last_ok": "2026-11-03 14:55 EST"
  },
  "NHL schedule (yesterday)": {
   "consecutive_failures": 0,
-  "last_ok": "2026-11-03 13:33 EST"
+  "last_ok": "2026-11-03 14:55 EST"
  },
  "NHL standings": {
   "consecutive_failures": 0,
-  "last_ok": "2026-11-03 13:33 EST"
+  "last_ok": "2026-11-03 14:55 EST"
  },
  "NHL team skater games": {
   "consecutive_failures": 0,
-  "last_ok": "2026-11-03 13:33 EST"
+  "last_ok": "2026-11-03 14:55 EST"
  },
  "Rotowire": {
   "consecutive_failures": 0,
-  "last_ok": "2026-11-03 13:33 EST"
+  "last_ok": "2026-11-03 14:55 EST"
  },
  "Sportsbook lines": {
   "consecutive_failures": 0,
-  "last_ok": "2026-11-03 13:33 EST"
+  "last_ok": "2026-11-03 14:55 EST"
  },
  "Supabase": {
   "consecutive_failures": 0,
-  "last_ok": "2026-11-03 13:33 EST"
+  "last_ok": "2026-11-03 14:55 EST"
  }
 }
