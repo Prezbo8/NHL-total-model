@@ -21,8 +21,8 @@ OUT = os.path.join(paths.DOCS_DIR, "index.html")
 # backtest numbers (strict 2020-21+ data, frozen rule, research/lib/history.py): the Tests workflow recomputes them on every
 # push and fails when the model no longer matches (Nov 4 2026: this table still showed Oct 3's numbers)
 BACKTEST = [  # season, open bets, open ROI, close bets, close ROI
-    ("2021-22", 428, -1.8, 434, 0.2), ("2022-23", None, None, 229, 2.0), ("2023-24", 4, -50.0, 9, -25.0),
-    ("2024-25", 44, 16.5, 44, 22.5), ("2025-26", 109, 9.1, 124, 5.7),
+    ("2021-22", 425, -0.9, 428, 0.4), ("2022-23", None, None, 235, 3.2), ("2023-24", 4, -4.2, 9, -25.0),
+    ("2024-25", 45, 17.7, 47, 20.8), ("2025-26", 106, 10.2, 121, 6.6),
 ]
 BACKTEST_TOTAL = (580, 2.6, 840, 3.0)  # 2021-26: open bets, open ROI, close bets, close ROI
 
