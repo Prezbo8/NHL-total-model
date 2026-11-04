@@ -2,7 +2,7 @@
 
   python3 tests/check_model.py     # exits 1 if any check fails
 """
-import os, re, json, shutil, sys, datetime, tempfile, glob, io, contextlib
+import os, re, json, shutil, sys, datetime, tempfile, glob, contextlib
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "src"))
 import pandas as pd
 import paper, goalies, injuries, players, model as m, split_model as sm, odds, grade, dashboard
