@@ -475,8 +475,10 @@ def daily_stats(day=None):
     health.attempt("MoneyPuck stats", lambda: refresh_data(tries=10, budget=5 * 3600) or (_ for _ in ()).throw(RuntimeError("download failed")),
                    False, waits=[])  # refresh_data retries on its own, within its 5 hours
     health.attempt("Goalie data", lambda: goalies.refresh([season]) or True)
+    latest = None  # newest game in MoneyPuck's data (the dashboard shows "games through ...")
     if os.path.exists(DATA):
         games = sm.load_split()
+        latest = pd.to_datetime(str(int(games.gameDate.max()))).date().isoformat()
         if (games.season == season).any():  # skater totals this season (injury adjustment + key players); none before opening night
             health.attempt("MoneyPuck skaters", lambda: players.refresh_skaters([season]) or True)
         health.attempt("NHL EDGE speed", lambda: speed.refresh(season - 1) or True)  # last season's speed: fetched once per season
@@ -490,7 +492,7 @@ def daily_stats(day=None):
             print(f"(daily results: {len(rows[0])} teams, {len(rows[1])} goalies, {len(rows[2])} skaters)")
     failed = health.failed()
     with open(STATS_STATUS, "w") as f:
-        json.dump({"at": datetime.now().astimezone().isoformat(timespec="minutes"), "failed": failed}, f)
+        json.dump({"at": datetime.now().astimezone().isoformat(timespec="minutes"), "latest_game": latest, "failed": failed}, f)
     print("(daily stats: all OK)" if not failed else f"(daily stats failed: {', '.join(failed)})")
     return failed
 
