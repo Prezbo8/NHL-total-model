@@ -219,7 +219,7 @@ def settle():
     import store  # mirror finals and paper results to Supabase (skipped when not configured)
     store.sync_log(read_log())
     print(f"settled through {todo.date.max() if len(todo) else 'n/a'}")
-    health.note(f"✓ Settled {newly} finished games" + (f"; bets: {', '.join(bets)}" if bets else "; no bets among them") if newly
+    health.note(f"✓ Settled {health.plural(newly, 'finished game')}" + (f"; bets: {', '.join(bets)}" if bets else "; no bets among them") if newly
                 else "– Settling: no newly finished games yet" if len(todo) else "✓ Settling: nothing new to settle")
 
 

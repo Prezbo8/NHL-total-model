@@ -421,7 +421,8 @@ health.note("✓ one")
 health.note("✗ two")
 os.environ.pop("RUN_SUMMARY")
 health.note("not written")
-check("notes go to $RUN_SUMMARY, only when the workflow sets it", open(notes, encoding="utf-8").read() == "✓ one\n✗ two\n")
+check("notes go to $RUN_SUMMARY, only when the workflow sets it; counts read '1 goalie' / '31 goalies'",
+      open(notes, encoding="utf-8").read() == "✓ one\n✗ two\n" and health.plural(1, "goalie") == "1 goalie" and health.plural(31, "goalie") == "31 goalies")
 _spec = importlib.util.spec_from_file_location("summary", os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".github", "scripts", "summary.py"))
 summary = importlib.util.module_from_spec(_spec); _spec.loader.exec_module(summary)
 env = {"RUN_SUMMARY": notes, "JOB_STATUS": "success", "STARTED_BY": "hourly",
