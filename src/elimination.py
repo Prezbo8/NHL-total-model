@@ -13,10 +13,15 @@ SCORE, ALLOW = 0.99, 1.044  # out team's own goals / goals it allows (2021-26 wa
 URL = "https://api-web.nhle.com/v1/standings/now"
 
 
+def standings():
+    """The NHL standings rows (also the game notes' records, streaks and last-10 form: notes.form_snapshot)."""
+    return json.load(urllib.request.urlopen(m.fetch(URL), timeout=30))["standings"]
+
+
 def out_teams(rows=None):
     """Set of team abbreviations already eliminated, from the NHL standings (rows = the API's 'standings' list)."""
     if rows is None:
-        rows = json.load(urllib.request.urlopen(m.fetch(URL), timeout=30))["standings"]
+        rows = standings()
     t = [{"team": r["teamAbbrev"]["default"], "conf": r["conferenceAbbrev"], "div": r["divisionAbbrev"], "pts": r["points"],
           "maxp": r["points"] + 2 * (82 - r["gamesPlayed"]), "e": r.get("clinchIndicator") == "e"} for r in rows]
     out = set()

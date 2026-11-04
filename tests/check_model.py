@@ -479,5 +479,32 @@ _root = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
 hung = [x for f in sorted(glob.glob(_root + "/src/*.py") + glob.glob(_root + "/.github/scripts/*.py")) for x in no_timeout(f)]
 check("every network call has a timeout (one without can hang a run until GitHub stops it at 45 min)", not hung, ", ".join(hung))
 
+print("AI game notes (src/notes.py; nothing is sent to Gemini here)")
+import notes
+nf = {"game": "OTT @ BUF", "call": "PASS", "teams": {"OTT": {"projected_goals": 3.3, "last10_record": "4-5-1", "streak": "L1"},
+                                                     "BUF": {"projected_goals": 3.37, "last10_record": "7-2-1", "streak": "W4"}},
+      "model_notes": "PASS: both teams project as high-scoring (OTT 3.30, BUF 3.37; cutoff 3.10). OTT faces Colten Ellis, grade 35. "
+                     "BUF faces Samuel Ersson +0.21; OTT's defense #2 costs BUF -0.14. The model projects 6.67 total goals against a 6.5 line, "
+                     "with a 53% chance of 7 or more. Flagged games like this went over only 47% of the time in 2021-26."}
+good = ("Samuel Ersson has been the weak spot, and he adds +0.21 to Buffalo's projection, but this is a PASS: Ottawa's #2 defense "
+        "takes -0.14 back and neither side can carry the over at 5-on-5. Buffalo has won 4 straight and is 7-2-1 in its last 10, "
+        "Ottawa is 4-5-1, and the model has the total at 6.67 against a 6.5 line with a 53% chance of 7 or more. Flagged games like "
+        "this went over only 47% of the time in 2021-26, so the form is context rather than a reason to bet.")
+check("game notes: a note using only the facts' numbers and the model's call passes the check", notes.check(good, nf) == "", notes.check(good, nf))
+bad_num = good.replace("6.67", "6.8")
+bad_call = good.replace("this is a PASS", "this is a SLAM, not a PASS")
+check("game notes: an invented number, another call or a missing call is rejected (then the template stays)",
+      "6.8" in notes.check(bad_num, nf) and "SLAM" in notes.check(bad_call, nf) and "PASS" in notes.check(good.replace("PASS", "skip"), nf),
+      f"{notes.check(bad_num, nf)} | {notes.check(bad_call, nf)}")
+hcols = notes.colors(nf)
+chips = notes.colorize("BUF gets +0.21 from Ersson, loses -0.14, is 7-2-1 <b>", hcols)
+check("game notes: numbers get the tier colors (goal effects) and hot / cold (last 10); the text is escaped",
+      "<span class='nv t-great'>+0.21</span>" in chips and "<span class='nv t-trash'>-0.14</span>" in chips
+      and "<span class='nv hot'>7-2-1</span>" in chips and "&lt;b&gt;" in chips, chips)
+moved = json.loads(json.dumps(nf)); moved["teams"]["OTT"]["projected_goals"] = 3.31
+check("game notes: rewritten when the facts change (call), not for a hundredth of a goal; the lead varies with the game",
+      notes.signature(nf) == notes.signature(moved) and notes.signature(nf) != notes.signature({**nf, "call": "1U"})
+      and "streak (W4)" in notes.lead_with(nf), notes.lead_with(nf))
+
 print(f"\n{sum(results)}/{len(results)} checks passed")
 sys.exit(0 if all(results) else 1)

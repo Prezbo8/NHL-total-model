@@ -110,7 +110,7 @@ data/                         CSV data
   key_players/  moves/          per-day key players and projection-move snapshots (dashboard)
 docs/                         the website (GitHub Pages)
 supabase/schema.sql           Supabase tables (nhl_*): run history + once-a-day results; paste once into the SQL Editor
-tests/check_model.py          84 component checks (paper log, settling, goalies, model, injuries, odds, dashboard, projection moves, daily stats, run summaries)
+tests/check_model.py          88 component checks (paper log, settling, goalies, model, injuries, odds, dashboard, projection moves, daily stats, run summaries)
 ```
 
 ## Schedule: two kinds of runs
@@ -134,6 +134,12 @@ projections** (the hourly run), each with ✓ or ⚠.
   `_skaters`, `_meta`). (Nov 3, 2026: MoneyPuck served ~30 KB/s and every run that downloaded it timed out.)
   When it brings in new data it **starts a model run right away**, so the dashboard and projections use the
   new data within minutes instead of at the next hourly run (that model run never starts a stats run back).
+- **Game notes, written by AI** (`src/notes.py`, Google Gemini's free tier, GitHub secret `GEMINI_API_KEY`): each
+  game's paragraph is written from that game's facts (the model's call and reasons, both teams' last-10 record, streak
+  and recent scoring, the goalies' last 5 games, head to head; after the game, how the goals came), so the notes don't
+  all read alike. A check rejects any note that uses a number not in the facts or names a different call, and a note is
+  rewritten only when its game's facts change. Numbers are colored like the breakdown table (green = more goals), last
+  10 records and streaks hot / cold. Without the key, or when Gemini fails, the fixed template shows, as before.
 - **Every run ends with a Summary step**: what the job is for, what it did (✓ done, ✗ failed, – nothing
   to do) and the final result. It's the last step in the log and is also shown on the run's page on the
   Actions tab (under the job diagram). Steps add their lines with `health.note()` (Python) or `echo ... >> "$RUN_SUMMARY"`;
@@ -154,7 +160,7 @@ run in progress on the Actions tab), restart it with **Keeper** → **Run workfl
 ## Checks and commands
 
 Checks run on GitHub, not on a local machine: every push runs the **Tests** workflow (pyflakes, a syntax
-check of every workflow's shell scripts, the 84 component checks, a projection run for tomorrow, a dashboard
+check of every workflow's shell scripts, the 88 component checks, a projection run for tomorrow, a dashboard
 build, and a check that the backtest is unchanged). Change code on a branch, open a pull request, and merge once Tests pass.
 
 What the workflows run:
@@ -165,7 +171,7 @@ python3 src/model.py stats                # once a day: MoneyPuck, goalie histor
 python3 src/model.py today [YYYY-MM-DD]   # hourly: projections + flags (only today's date is logged)
 python3 src/paper.py report               # paper-trading record
 python3 src/dashboard.py                  # rebuild the website
-python3 tests/check_model.py              # 84 component checks (Tests workflow)
+python3 tests/check_model.py              # 88 component checks (Tests workflow)
 python3 research/lib/history.py           # backtest the overs rule
 python3 research/studies/<name>.py        # any study (see research/README.md)
 ```

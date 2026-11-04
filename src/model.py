@@ -629,7 +629,12 @@ def today(day=None, preview=False):
              if g["gameType"] in (2, 3) and g.get("gameScheduleState", "OK") == "OK"
              for s in ("homeTeam", "awayTeam")}
     import elimination  # teams already out of the playoffs allow more goals (March-April; none out = no change)
-    out_now = health.attempt("NHL standings", elimination.out_teams, set())
+    standings = health.attempt("NHL standings", elimination.standings, [])  # also the game notes' records and streaks
+    try:
+        out_now = elimination.out_teams(standings) if standings else set()
+    except Exception as e:
+        print(f"(elimination check skipped: {type(e).__name__}: {e})")
+        out_now = set()
     if not todays:
         print(f"No regular-season games on {day}.")
         if preview:
@@ -711,7 +716,7 @@ def today(day=None, preview=False):
     def fmt(ln):
         return f"{ln['total']:g} o{ln['over']:+d}/u{ln['under']:+d}" if ln else "-"
 
-    flagged, log_rows = [], []
+    flagged, log_rows, starters = [], [], {}  # starters: {team: (goalie name, NHL id)} for the game notes' goalie form
     print(f"{day}  (high-scoring = projected {cutoff:.2f}+ goals for that team)\n")
     for g in todays:
         h, a = g["homeTeam"]["abbrev"], g["awayTeam"]["abbrev"]
@@ -719,6 +724,7 @@ def today(day=None, preview=False):
         aname = f'{g["awayTeam"]["placeName"]["default"]} {g["awayTeam"]["commonName"]["default"]}'
         hg, hp, hs = starter(h, hname)
         ag, ap, as_ = starter(a, aname)
+        starters[h], starters[a] = (hg, hp), (ag, ap)
         lh, la, det = project(h, a, hp, ap, h in tired, a in tired, detail=True, season=season)
         ih, ia = inj.get(h, no_inj), inj.get(a, no_inj)
         fh_inj, fa_inj = ih["off"] * ia["def"], ia["off"] * ih["def"]  # own injuries + opponent's injured defenders
@@ -810,10 +816,19 @@ def today(day=None, preview=False):
             sm.save_rankings_day(rk, day)
         except Exception as e:
             print(f"(team rankings not saved: {e})")
+        tf = None
         try:  # over / under performance vs the model and vs xG + schedule faced, season + last 30/14/7 days (dashboard 'Form', context only)
-            trends.team_form(proj, games, day, season, rk).to_csv(paths.data("team_form.csv"), index=False)
+            tf = trends.team_form(proj, games, day, season, rk)
+            tf.to_csv(paths.data("team_form.csv"), index=False)
         except Exception as e:
             print(f"(team form not saved: {e})")
+        try:  # recent form for the game notes (records, streaks, goalies' last games: src/notes.py), frozen at puck drop
+            import notes
+            now_utc = pd.Timestamp.now(tz="UTC")
+            notes.form_snapshot(day, standings, starters, tf, {t["abbrev"] for g in todays if pd.Timestamp(g["startTimeUTC"]) <= now_utc
+                                                              for t in (g["homeTeam"], g["awayTeam"])}, season)
+        except Exception as e:
+            print(f"(form for the game notes not saved: {type(e).__name__}: {e})")
         try:  # each team's top 5 attackers / defenders and whether they play (dashboard 'Key players')
             rost = {t: (lineup_info.get(t) or {}).get("names") or {p: n for p, n, _ in lineups.nhl_roster(t)} for t in playing}
             kp = injuries.key_players({t: list(v) for t, v in rost.items()}, injured, lineup_info, season,
