@@ -371,5 +371,16 @@ check("daily results: every field sent exists in supabase/schema.sql (all 4 nhl_
       not unknown_d and {t for t, _ in sent} == {"nhl_daily_teams", "nhl_daily_goalies", "nhl_daily_skaters", "nhl_daily_meta"},
       ", ".join(sorted(unknown_d)))
 
+st_path = SP + "stats_status_dash.json"
+def mp_html(**kw):
+    json.dump({"latest_game": "2026-11-02", "failed": [], **kw}, open(st_path, "w"))
+    return dashboard.stats_status(st_path)
+iso = lambda h: (datetime.datetime.now().astimezone() - datetime.timedelta(hours=h)).isoformat(timespec="minutes")
+ok_html = mp_html(at=iso(1))
+check("header 'MoneyPuck data': ✓ + games through when current; ⚠ + reason when the run failed or is 30+ h old",
+      "runok" in ok_html and "games through Mon, Nov 2" in ok_html
+      and "Not working: MoneyPuck stats" in mp_html(at=iso(1), failed=["MoneyPuck stats"])
+      and "no update for 31 hours" in mp_html(at=iso(31.5)), ok_html[:80])
+
 print(f"\n{sum(results)}/{len(results)} checks passed")
 sys.exit(0 if all(results) else 1)

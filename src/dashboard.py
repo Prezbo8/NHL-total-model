@@ -1879,6 +1879,7 @@ body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 -apple-system
 .hero:has(>.lastrun){display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px 16px}
 .lastrun{position:relative;margin:-20px -6px 0 auto;text-align:right;font-size:11px;line-height:1.35;color:#c9d6e6;z-index:2}
 .lastrun b{display:block;font-size:13px;color:#fff;font-weight:700}
+.lrgrp+.lrgrp{margin-top:7px}.runsub{display:block;font-size:11px;color:#9fb3c8}
 .runok,.runbad{display:inline-block;margin-left:6px;font-size:12px;line-height:18px;width:18px;height:18px;border-radius:50%;text-align:center;cursor:help}
 .runok{background:#1f9d55;color:#fff}.runmsg{display:block;margin-top:4px;font-size:11.5px;font-weight:700;color:#fbbf24}.runmsg[hidden]{display:none}.runtodo{color:#93c5fd}.runbad{background:#d97706;color:#fff}.lastrun .tip{border-bottom-color:rgba(255,255,255,.45)}
 @media (max-width:600px){.lastrun{flex-basis:100%;text-align:left;margin:8px 0 0}}
@@ -2146,6 +2147,24 @@ def run_status():
             f"<span class='runmsg'>Not working: {e(', '.join(bad))}</span>{stale}")
 
 
+def stats_status(path=None):
+    """The once-a-day MoneyPuck run (data/stats_status.json, src/model.py daily_stats): its time + ✓, the newest game
+    in the data, or ⚠ + what failed (also when it hasn't worked for 30 hours, model.STATS_MAX_AGE)."""
+    try:
+        st = json.load(open(path or paths.data("stats_status.json")))
+        t = pd.Timestamp(st["at"]).tz_convert("America/New_York")
+    except (OSError, ValueError, KeyError):
+        return ""
+    sub = f"<span class='runsub'>games through {pd.Timestamp(st['latest_game']):%a, %b %-d}</span>" if st.get("latest_game") else ""
+    hours = (pd.Timestamp.now(tz="America/New_York") - t).total_seconds() / 3600
+    bad = st.get("failed") or ([f"no update for {int(hours)} hours"] if hours > 30 else [])
+    when = f"{t:%a, %b %-d} · {t:%-I:%M %p %Z}"
+    if not bad:
+        return f"<b>{e(when)}<span class='runok' title='{e('MoneyPuck data is current: the once-a-day run worked.')}'>✓</span></b>{sub}"
+    return (f"<b>{e(when)}<span class='runbad' title='{e('Once-a-day MoneyPuck run: ' + ', '.join(bad))}'>⚠</span></b>{sub}"
+            f"<span class='runmsg'>Not working: {e(', '.join(bad))}</span>")
+
+
 DONE = paths.data("checkpoints_done.txt")  # one key per line (e.g. pace-100) hides that reminder once it's done
 
 
@@ -2166,9 +2185,11 @@ def checkpoints(d):
 
 def build():
     d = paper.read_log()
-    lr = last_run()
-    stamp = (f"<div class='lastrun'>{tip('Last model run', 'When the model last ran: re-checked goalies, lineups, injuries and lines, and re-projected every game that had not started. It runs at 12:01 AM, every hour from 11:17 AM to 10:17 PM Eastern, and 15 minutes before each game.', 'tr down')}"
-             f"<b>{e(lr)}{run_status()}</b>{checkpoints(d)}</div>") if lr else ""
+    lr, mp = last_run(), stats_status()
+    stamp = ("<div class='lastrun'>"
+             + (f"<div class='lrgrp'>{tip('MoneyPuck data', 'When the once-a-day run last updated MoneyPuck data (team stats, goalie history, skater stats) and the Supabase daily tables. It runs at 8:30 AM Eastern, after MoneyPuck posts last night games, and again whenever an hourly run sees MoneyPuck has newer data. Games through = the newest game in that data.', 'tr down')}{mp}</div>" if mp else "")
+             + f"<div class='lrgrp'>{tip('Odds, lineups & projections', 'When the hourly run last re-checked odds, goalies, lineups and injuries, and re-projected every game that had not started. It runs at 12:01 AM, every hour from 11:17 AM to 10:17 PM Eastern, and 15 minutes before each game.', 'tr down')}"
+             f"<b>{e(lr)}{run_status()}</b></div>{checkpoints(d)}</div>") if lr else ""
     rk = rankings(d)
     body = f"""
 <header class="hero"><h1>NHL Total Model</h1>{stamp}</header>
