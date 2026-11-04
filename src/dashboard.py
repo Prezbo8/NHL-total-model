@@ -18,11 +18,13 @@ from teams import COLORS, SECONDARY, TEAMS
 
 OUT = os.path.join(paths.DOCS_DIR, "index.html")
 
-# backtest numbers (strict 2020-21+ data, frozen rule) from history.py / compare.py, Oct 2 2026
-BACKTEST = [  # season, open bets, open ROI, close bets, close ROI  (calibrated goalies + team speed; Oct 3 2026)
-    ("2021-22", 428, -1.8, 434, 0.2), ("2022-23", None, None, 229, 2.0), ("2023-24", 4, -50.0, 9, -25.0),
-    ("2024-25", 44, 16.5, 44, 22.5), ("2025-26", 109, 9.1, 124, 5.7),
+# backtest numbers (strict 2020-21+ data, frozen rule, research/lib/history.py): the Tests workflow recomputes them on every
+# push and fails when the model no longer matches (Nov 4 2026: this table still showed Oct 3's numbers)
+BACKTEST = [  # season, open bets, open ROI, close bets, close ROI
+    ("2021-22", 425, -0.9, 428, 0.4), ("2022-23", None, None, 235, 3.2), ("2023-24", 4, -4.2, 9, -25.0),
+    ("2024-25", 45, 17.7, 47, 20.8), ("2025-26", 106, 10.2, 121, 6.6),
 ]
+BACKTEST_TOTAL = (580, 2.6, 840, 3.0)  # 2021-26: open bets, open ROI, close bets, close ROI
 
 SCALE = 4.5  # projected-goal bars run 0 -> 4.5 goals
 
@@ -1032,6 +1034,9 @@ def type_table(groups):
             f"<tbody>{rows}</tbody></table></div>")
 
 
+RECORD_CALLS = ("SLAM", "1U", "PASS", "AVOID")  # a tile each: every flagged pick lands in one, so they add up to the record
+
+
 def record(d):
     cur = current(d[~retro(d)])
     f = cur[cur.flag]
@@ -1040,7 +1045,7 @@ def record(d):
     w, l, p = (s.res == "W").sum(), (s.res == "L").sum(), (s.res == "P").sum()
     calls = [call(r, True) for r in s.itertuples()]
     s["call"] = calls
-    by = {c: s[s.call == c] for c in ("SLAM", "1U", "PASS")}
+    by = {c: s[s.call == c] for c in RECORD_CALLS}  # AVOID = flagged, but both teams faced strong goalies (Nov 1 2026: MIN@WSH)
     tiles = [
         ("Flagged picks", f"{len(f)}", f"{len(s)} settled"),
         ("Record", f"{w}-{l}-{p}" if len(s) else "–", f"{(dec.res == 'W').mean():.1%} wins" if len(dec) else "no results yet"),
@@ -1052,7 +1057,8 @@ def record(d):
                 "ROI · closing line": "Profit per unit risked at the closing consensus over price. Break-even at −110 needs 52.4% wins.",
                 "🔨 SLAM": "Flagged picks the last pre-game call made a SLAM, at the closing line.",
                 "1U": "Flagged picks the last pre-game call made a 1U, at the closing line.",
-                "PASS": "Flagged picks the last pre-game call made a PASS (no bet): how they would have done at the closing line."}
+                "PASS": "Flagged picks the last pre-game call made a PASS (no bet): how they would have done at the closing line.",
+                "AVOID": "Flagged picks the last pre-game call made an AVOID because both teams faced strong goalies (no bet): how they would have done at the closing line."}
     tiles_html = lambda ts, tips: "".join(f"<div class='tile'><div class='label'>{tip(a, tips.get(a), 'tl')}</div><div class='num-big'>{b}</div>"
                                           f"<div class='muted'>{c_}</div></div>" for a, b, c_ in ts)
     tr = tracked_bets(d)
@@ -1775,8 +1781,8 @@ def backtest():
       <th>{tip('ROI at open', 'Profit per unit risked betting at the opening line.', 'down')}</th>
       <th>{tip('Bets at close', 'Flagged overs if bet at the closing line (right before puck drop). Counts differ because lines move into or out of 6/6.5.', 'down')}</th>
       <th>{tip('ROI at close', 'Profit per unit risked betting at the closing line.', 'down tr')}</th></tr></thead>
-      <tbody>{rows}<tr class='total'><td>2021–26</td><td class='num'>585</td><td class='num pos'>+1.3%</td>
-      <td class='num'>840</td><td class='num pos'>+2.4%</td></tr></tbody></table></div>
+      <tbody>{rows}<tr class='total'><td>2021–26</td><td class='num'>{BACKTEST_TOTAL[0]}</td>{roi(BACKTEST_TOTAL[1])}
+      <td class='num'>{BACKTEST_TOTAL[2]}</td>{roi(BACKTEST_TOTAL[3])}</tr></tbody></table></div>
       <ul class='notes'>
         <li><b>Open</b> = betting the first line books post; <b>close</b> = the final line before puck drop. Counts differ
             because lines move into or out of 6 / 6.5 during the day.</li>
@@ -2157,10 +2163,16 @@ def stats_status(path=None):
         t = pd.Timestamp(st["at"]).tz_convert("America/New_York")
     except (OSError, ValueError, KeyError):
         return ""
-    sub = f"<span class='runsub'>games through {pd.Timestamp(st['latest_game']):%a, %b %-d}</span>" if st.get("latest_game") else ""
+    posted = pd.Timestamp(st["posted"]).tz_convert("America/New_York") if st.get("posted") else None
+    # main line: when MoneyPuck posted the data the model uses; "checked" = the run's own time (Nov 4 2026: a re-check that
+    # found nothing new showed as "9:16 AM" and read like that's when the data came in)
+    shown = posted or t
+    checked = (f" · checked {t:%-I:%M %p}" if t.date() == posted.date() else f" · checked {t:%a %-I:%M %p}") if posted else ""
+    games = f"games through {pd.Timestamp(st['latest_game']):%a, %b %-d}" if st.get("latest_game") else ""
+    sub = f"<span class='runsub'>{games}{checked}</span>" if games or checked else ""
     hours = (pd.Timestamp.now(tz="America/New_York") - t).total_seconds() / 3600
     bad = st.get("failed") or ([f"no update for {int(hours)} hours"] if hours > 30 else [])
-    when = f"{t:%a, %b %-d} · {t:%-I:%M %p %Z}"
+    when = f"{shown:%a, %b %-d} · {shown:%-I:%M %p %Z}"
     if not bad:
         return f"<b>{e(when)}<span class='runok' title='{e('MoneyPuck data is current: the once-a-day run worked.')}'>✓</span></b>{sub}"
     return (f"<b>{e(when)}<span class='runbad' title='{e('Once-a-day MoneyPuck run: ' + ', '.join(bad))}'>⚠</span></b>{sub}"
@@ -2189,7 +2201,7 @@ def build():
     d = paper.read_log()
     lr, mp = last_run(), stats_status()
     stamp = ("<div class='lastrun'>"
-             + (f"<div class='lrgrp'>{tip('MoneyPuck data', 'When the once-a-day run last updated MoneyPuck data (team stats, goalie history, skater stats) and the Supabase daily tables. It runs from 8:00 AM Eastern and checks every 10 minutes until MoneyPuck has posted last night’s games (by 11:10 AM, before the 11:17 AM run), and again whenever an hourly run sees MoneyPuck has newer data. Games through = the newest game in that data.', 'tr down')}{mp}</div>" if mp else "")
+             + (f"<div class='lrgrp'>{tip('MoneyPuck data', 'When MoneyPuck posted the data the model uses (team stats, goalie history, skater stats; also in the Supabase daily tables); checked = when the once-a-day run last looked for newer data. It runs from 8:00 AM Eastern and checks every 10 minutes until MoneyPuck has posted last night’s games (by 11:10 AM, before the 11:17 AM run), and again whenever an hourly run sees MoneyPuck has newer data. A model run starts right after it brings in new data. Games through = the newest game in that data.', 'tr down')}{mp}</div>" if mp else "")
              + f"<div class='lrgrp'>{tip('Odds, lineups & projections', 'When the hourly run last re-checked odds, goalies, lineups and injuries, and re-projected every game that had not started. It runs at 12:01 AM, every hour from 11:17 AM to 10:17 PM Eastern, and 15 minutes before each game.', 'tr down')}"
              f"<b>{e(lr)}{run_status()}</b></div>{checkpoints(d)}</div>") if lr else ""
     rk = rankings(d)
@@ -2215,8 +2227,9 @@ def build():
 <p style="margin:0">Each team's goals are projected separately for <b>5-on-5</b> (expected goals + actual goals for/against per 60) and the
 <b>power play</b> (PP and PK efficiency × penalties drawn and taken), plus other situations. The opposing <b>starting goalie's</b>
 goals saved above expected scales goals allowed, <b>back-to-backs</b> cut the tired team's scoring ~8% (opponent +6.5%), and
-<b>team skating speed</b> nudges fast teams up (+2% per step) and their opponents down (−1.7%).
-Data from the 2020-21 season onward only (MoneyPuck, NHL API, DailyFaceoff, Action Network). Runs on GitHub Actions: MoneyPuck stats once a day (8:00–11:10 AM ET, as soon as MoneyPuck posts last night’s games); odds, goalies, lineups and projections at 12:01 AM, every hour from 11:17 AM to 10:17 PM ET, and 15 minutes before each game.</p>
+<b>team skating speed</b> nudges fast teams up (+2% per step) and their opponents down (−1.7%). From about March, a team already
+<b>eliminated</b> from the playoffs allows ~4% more goals (and scores 1% fewer).
+Data from the 2020-21 season onward only (MoneyPuck, NHL API, DailyFaceoff, Action Network). Runs on GitHub Actions: MoneyPuck stats once a day (8:00–11:10 AM ET, as soon as MoneyPuck posts last night’s games), with a model run right after new data comes in; odds, goalies, lineups and projections at 12:01 AM, every hour from 11:17 AM to 10:17 PM ET, and 15 minutes before each game.</p>
 <dl>
 <div><dt>Projected goals bar</dt><dd>Each team's projected goals on a 0–4.5 scale. The tick marks the high-scoring cutoff; a solid bar means past it.</dd></div>
 <div><dt>P(7+)</dt><dd>Model's chance of 7+ total goals, from the projected total and how evenly matched the teams are (close games get more overtime, shootout and empty-net goals): wins an over 6.5 and an over 6 (exactly 6 pushes an over 6). NHL average ≈ 45%.</dd></div>
@@ -2224,7 +2237,7 @@ Data from the 2020-21 season onward only (MoneyPuck, NHL API, DailyFaceoff, Acti
 <div><dt>Goalie badges</dt><dd>✓ Confirmed / Likely / Projected starter, from DailyFaceoff, Rotowire and GoaliePost combined, refreshed every hourly run. "Changed" = different from the starter the projection used.</dd></div>
 <div><dt>B2B</dt><dd>Team played yesterday: its projected scoring is cut ~8% and its opponent's raised ~6.5%.</dd></div>
 <div><dt>Injuries &amp; lineups</dt><dd>ESPN's injury list plus DailyFaceoff's projected lineups checked against the official NHL roster. Players who are out, on IR, suspended, or missing from tonight's lineup (scratch) are replaced by a replacement-level skater. GF = change to his team's scoring, GA = change to goals against (shown for whichever is bigger; hover for both). Day-to-day players are shown but not adjusted.</dd></div>
-<div><dt>Breakdown</dt><dd>Each team's goals = (5-on-5 + power play + other situations) × opposing-goalie × back-to-back × team speed × injury adjustments. A + goalie number means the opposing goalie has been below average.</dd></div>
+<div><dt>Breakdown</dt><dd>Each team's goals = (5-on-5 + power play + other situations) × opposing-goalie × back-to-back × team speed × injury adjustments (× elimination, March–April). A + goalie number means the opposing goalie has been below average.</dd></div>
 <div><dt>Team speed (Spd)</dt><dd>How often a team's skaters hit 20+ mph (NHL EDGE), last season vs the league. Fast teams score a little more and allow a little less, so it shifts team projections but barely changes totals.</dd></div>
 </dl></div></section>"""
     os.makedirs(os.path.dirname(OUT), exist_ok=True)

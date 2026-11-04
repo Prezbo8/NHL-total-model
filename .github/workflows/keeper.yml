@@ -4,7 +4,7 @@ name: Keeper (runs the daily job on time)
 # workflow stays running and starts "Daily NHL run" at 12:01 AM and every hour at :17 from 11:17 AM to 10:17 PM
 # Eastern, plus 15 minutes before each game (times from .github/scripts/next_slot.py). GitHub stops a run after 6 hours, so before that it starts a fresh copy of itself.
 # At 8:00 AM Eastern it starts the once-a-day stats run instead (moneypuck.yml: checks MoneyPuck until 11:10 AM).
-# The last step (Summary) lists what this keeper started and how it ended (log + top of the run's page).
+# The last step (Summary) lists what this keeper started and how it ended (log + the run's page).
 # Only one keeper runs at a time (concurrency), so the chain can't duplicate. The schedule below just
 # restarts the chain if it ever breaks (when GitHub's scheduler does fire).
 on:
@@ -87,7 +87,7 @@ jobs:
           echo "✗ This keeper stopped early and a new one couldn't be started (the model runs and the 6-hour schedule restart it)" >> "$RUN_SUMMARY"
           echo "::error::couldn't restart the keeper; the daily run and the 6-hour schedule will restart it"
 
-      - name: Summary (what this keeper started and how it ended; also at the top of the run's page)
+      - name: Summary (what this keeper started and how it ended; also on the run's page)
         if: ${{ always() }}
         continue-on-error: true   # last step, after the restart step: the summary can never break the keeper chain
         env:

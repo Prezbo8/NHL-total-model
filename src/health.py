@@ -2,8 +2,9 @@
 
 attempt() retries a source with growing waits (15 s, 45 s, 1.5 min, 3 min) inside a 15-minute budget per
 run, so one dead site can't stall the run. If a source still fails, finish() writes data/.retry and the
-workflow starts another run 5 minutes later, again and again until every source works (not after 11 PM
-Eastern, when there are no games left to project). A source that fails 2 runs in a row opens a GitHub
+workflow starts another run 5 minutes later, again and again until every source works (only from 11 AM to
+11 PM Eastern, RETRY_HOURS: overnight a failure would mean a run every 5 minutes until morning, and the morning
+runs redo everything anyway). A source that fails 2 runs in a row opens a GitHub
 issue (you get GitHub's email / app notification); the issue closes itself when the source recovers.
 
   python3 src/health.py alert    # open / close the GitHub issues from data/source_health.json
@@ -28,6 +29,7 @@ ALERT_AFTER = 2           # consecutive failed runs before an alert
 STALE_AFTER = 2 * 3600    # run alert: this run failed and no run has finished for this long
 RUN_ALERT = "Model runs failing"
 NO_RETRY = {"Supabase", "Daily stats"}   # alerts, but rerunning the hourly job wouldn't fix them
+RETRY_HOURS = (11, 23)    # Eastern hours when a failing source starts a retry run (11 AM up to 11 PM)
 ET = ZoneInfo("America/New_York")
 _spent, _results = 0.0, {}
 
@@ -97,7 +99,7 @@ def finish():
     with open(LAST_STATUS, "w") as f:
         json.dump({"at": now, "failed": bad}, f)
     rerun = [b for b in bad if b not in NO_RETRY]
-    if rerun and datetime.now(ET).hour < 23:
+    if rerun and RETRY_HOURS[0] <= datetime.now(ET).hour < RETRY_HOURS[1]:
         open(RETRY_FLAG, "w").write(", ".join(rerun) + "\n")
         print(f"(sources still failing: {', '.join(rerun)} -> another run in 5 minutes)")
     elif os.path.exists(RETRY_FLAG):

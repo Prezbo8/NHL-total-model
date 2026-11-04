@@ -2,7 +2,7 @@
 
   python3 tests/check_model.py     # exits 1 if any check fails
 """
-import os, re, json, shutil, sys, datetime, tempfile
+import os, re, json, shutil, sys, datetime, tempfile, glob, contextlib
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "src"))
 import pandas as pd
 import paper, goalies, injuries, players, model as m, split_model as sm, odds, grade, dashboard
@@ -87,6 +87,13 @@ paper.urllib.request.urlopen, paper.odds.day_games = real_open, real_day
 s3 = paper.read_log().iloc[0]
 check("settle: missed closing line filled later, score + result kept, CLV scored",
       not crash and s3.close_total == 6.5 and s3.close_over == -130 and s3.final_total == 7 and s3.result == "W" and s3.clv == 1, crash or str(s3[["close_total", "clv"]].to_dict()))
+_log = paper.LOG  # on a copy: the Supabase checks below sync this log's settled game
+shutil.copy(_log, SP + "ppd_log.csv"); paper.LOG = SP + "ppd_log.csv"
+paper.remove_games(s3.date, {("XXX", "YYY")})
+kept = len(paper.read_log())
+paper.remove_games(s3.date, {("CLA", "CLH")})
+check("a game postponed after it was logged leaves the log (others stay)", kept == 1 and paper.read_log().empty)
+paper.LOG = _log
 c0 = {"total": 6.5, "over": -130, "under": 110}
 check("line-move: up a full line = toward over", paper.clv(6.0, -110, -110, {"total": 6.5, "over": 100, "under": -120}) == 1)
 check("line-move: same line, over got pricier = toward over", paper.clv(6.5, 100, -120, c0) == 1)
@@ -190,7 +197,7 @@ check("a dead source gives the fallback; empty counts as a failure when required
 bad = health.finish()
 st = json.load(open(health.STATE))
 check("failures saved across runs + retry run requested", sorted(bad) == ["Dead", "Empty"] and st["Dead"]["consecutive_failures"] == 1
-      and st["Flaky"]["consecutive_failures"] == 0 and (os.path.exists(health.RETRY_FLAG) or datetime.datetime.now().hour >= 23))
+      and st["Flaky"]["consecutive_failures"] == 0 and (os.path.exists(health.RETRY_FLAG) or not health.RETRY_HOURS[0] <= datetime.datetime.now(health.ET).hour < health.RETRY_HOURS[1]))
 health._results.clear(); health.attempt("Dead", lambda: 1 / 0, waits=[]); health.attempt("Empty", lambda: 5, waits=[]); health.finish()
 made, closed = [], []
 health._gh = lambda *a: (made.append(a[a.index("--title") + 1]) if a[:2] == ("issue", "create") else closed.append(a[2]) if a[:2] == ("issue", "close") else None,
@@ -388,6 +395,9 @@ check("header 'MoneyPuck data': ✓ + games through when current; ⚠ + reason w
       "runok" in ok_html and "games through Mon, Nov 2" in ok_html
       and "Not working: MoneyPuck stats" in mp_html(at=iso(1), failed=["MoneyPuck stats"])
       and "no update for 31 hours" in mp_html(at=iso(31.5)), ok_html[:80])
+posted_html = mp_html(at="2026-11-04T09:16-05:00", posted="2026-11-04T07:29-05:00")
+check("header 'MoneyPuck data' shows when MoneyPuck posted the data; the run's own time is 'checked'",
+      "Wed, Nov 4 · 7:29 AM EST" in posted_html and "checked 9:16 AM" in posted_html, posted_html[:160])
 
 print("morning MoneyPuck wait (simulated clock: nothing really waits)")
 from zoneinfo import ZoneInfo
@@ -439,6 +449,35 @@ text, md = summary.summary("Model run", env)
 ok = "✗ FAILED" in text and "Failed step: rebuild dashboard, save moneypuck copy (ignored)" in text and "a manual run (Prezbo8)" in text
 check("summary: a failed run names its failed steps (continue-on-error ones 'ignored'); a manual run says who",
       ok, "" if ok else text)
+
+print("paper record + network calls")
+cb = dashboard.closing_bets(real)
+check("record tiles cover every flagged pick (SLAM + 1U + PASS + AVOID = the record)",
+      {dashboard.call(r, True) for r in cb.itertuples()} <= set(dashboard.RECORD_CALLS), str(dashboard.RECORD_CALLS))
+shutil.copy(paths.data("paper_trades.csv"), SP + "real_log.csv")
+paper.LOG, os.environ["RUN_SUMMARY"] = SP + "real_log.csv", SP + "report_summary.txt"
+with contextlib.redirect_stdout(io.StringIO()):
+    paper.report()
+os.environ.pop("RUN_SUMMARY")
+rep = open(SP + "report_summary.txt", encoding="utf-8").read()
+want = f"{(cb.res == 'W').sum()}-{(cb.res == 'L').sum()}-{(cb.res == 'P').sum()}"
+check("the daily Report's paper record is the dashboard's (closing line), not the first-logged bets",
+      f"Paper record (closing line, as on the dashboard): {want} " in rep and f"{cb.units.sum():+.2f}u" in rep, rep.strip())
+def no_timeout(path):
+    """'file:line' of every urlopen( call whose arguments have no timeout= (it would wait forever on a stuck server)."""
+    s_, out, i = open(path, encoding="utf-8").read(), [], 0
+    while (i := s_.find("urlopen(", i)) >= 0:
+        j, depth = i + len("urlopen("), 1
+        while depth and j < len(s_):
+            depth += {"(": 1, ")": -1}.get(s_[j], 0)
+            j += 1
+        if "timeout" not in s_[i:j]:
+            out.append(f"{os.path.basename(path)}:{s_.count(chr(10), 0, i) + 1}")
+        i = j
+    return out
+_root = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
+hung = [x for f in sorted(glob.glob(_root + "/src/*.py") + glob.glob(_root + "/.github/scripts/*.py")) for x in no_timeout(f)]
+check("every network call has a timeout (one without can hang a run until GitHub stops it at 45 min)", not hung, ", ".join(hung))
 
 print(f"\n{sum(results)}/{len(results)} checks passed")
 sys.exit(0 if all(results) else 1)

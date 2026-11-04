@@ -25,7 +25,7 @@ import trends
 
 def backfill(day):
     d0 = date.fromisoformat(day)
-    J = lambda u: json.load(urllib.request.urlopen(m.fetch(u)))
+    J = lambda u: json.load(urllib.request.urlopen(m.fetch(u), timeout=30))
     games = sm.load_split()
     games = games[games.gameDate < int(day.replace("-", ""))]          # nothing from that day or later
     season = sm.season_of(d0)

@@ -131,14 +131,20 @@ def refresh_data(tries=3, budget=3 * 60):
     return False
 
 
-def posted(modified):
-    """MoneyPuck's Last-Modified header ("Wed, 04 Nov 2026 12:29:03 GMT") in Eastern time: "Wed, Nov 4 7:29 AM EST"."""
+def posted_at(modified):
+    """MoneyPuck's Last-Modified header ("Wed, 04 Nov 2026 12:29:03 GMT") as an Eastern-time datetime (None if missing)."""
     from email.utils import parsedate_to_datetime
     from zoneinfo import ZoneInfo
     try:
-        return parsedate_to_datetime(modified).astimezone(ZoneInfo("America/New_York")).strftime("%a, %b %-d %-I:%M %p %Z")
+        return parsedate_to_datetime(modified).astimezone(ZoneInfo("America/New_York"))
     except (TypeError, ValueError):
-        return "at an unknown time"
+        return None
+
+
+def posted(modified):
+    """The same, for log lines: "Wed, Nov 4 7:29 AM EST"."""
+    t = posted_at(modified)
+    return f"{t:%a, %b %-d %-I:%M %p %Z}" if t else "at an unknown time"
 
 
 def moneypuck_newer():
@@ -378,7 +384,7 @@ def squash_name(s):
 
 def dailyfaceoff(day):
     """Projected/confirmed starters: {normalized team name: (goalie name, status)}"""
-    html = urllib.request.urlopen(fetch(f"https://www.dailyfaceoff.com/starting-goalies/{day}")).read().decode()
+    html = urllib.request.urlopen(fetch(f"https://www.dailyfaceoff.com/starting-goalies/{day}"), timeout=30).read().decode()
     data = json.loads(re.search(r'__NEXT_DATA__" type="application/json">(.*?)</script>', html).group(1))
     out = {}
     for g in data["props"]["pageProps"]["data"]:
@@ -574,7 +580,9 @@ def daily_stats(day=None):
     for name in failed:
         health.note(f"✗ {name}: {health._results[name]}")
     with open(STATS_STATUS, "w") as f:
-        json.dump({"at": datetime.now().astimezone().isoformat(timespec="minutes"), "latest_game": latest, "failed": failed}, f)
+        mp = posted_at(mark())  # when MoneyPuck posted the file the model uses (the dashboard shows it, not just the check time)
+        json.dump({"at": datetime.now().astimezone().isoformat(timespec="minutes"), "latest_game": latest,
+                   "posted": mp.isoformat(timespec="minutes") if mp else None, "failed": failed}, f)
     print("(daily stats: all OK)" if not failed else f"(daily stats failed: {', '.join(failed)})")
     return failed
 
@@ -603,14 +611,17 @@ def today(day=None, preview=False):
     cutoff = np.quantile(np.r_[prev.lam_h, prev.lam_a], HIGH_Q)
 
     def schedule(d):
-        with urllib.request.urlopen(fetch(f"https://api-web.nhle.com/v1/schedule/{d}")) as f:
+        with urllib.request.urlopen(fetch(f"https://api-web.nhle.com/v1/schedule/{d}"), timeout=30) as f:
             return [g for wk in json.load(f)["gameWeek"] if wk["date"] == d for g in wk["games"]]
     sched = health.attempt("NHL schedule", lambda: schedule(day))
     if sched is None:
         if not preview:
             health.finish()
         raise RuntimeError("NHL schedule unavailable after retries")
-    todays = [g for g in sched if g["gameType"] == 2]
+    import paper
+    todays = [g for g in sched if g["gameType"] == 2 and g.get("gameScheduleState", "OK") not in paper.POSTPONED]
+    postponed = {(g["awayTeam"]["abbrev"], g["homeTeam"]["abbrev"]) for g in sched  # not played tonight: off the slate
+                 if g["gameType"] == 2 and g.get("gameScheduleState") in paper.POSTPONED}  # (and out of the log, below)
     yday = (date.fromisoformat(day) - timedelta(days=1)).isoformat()
     # back-to-back = played a real game yesterday (the effect was measured on regular-season games;
     # preseason and postponed games don't count)
@@ -624,6 +635,8 @@ def today(day=None, preview=False):
         if preview:
             save_preview(day, [])
             return
+        if postponed and day == date.today().isoformat():  # tonight's only games were postponed
+            paper.remove_games(day, postponed)
         health.finish()
         return
     dfo = health.attempt("DailyFaceoff goalies", lambda: dailyfaceoff(day), {}, must=True)
@@ -770,7 +783,7 @@ def today(day=None, preview=False):
     print("\n(goalie % = share of expected goals stopped beyond average; higher = better)")
     print("OVER FLAG = both teams high-scoring (marked +) and the line is 6 or 6.5. Overs only, never 5.5.")
     print("Always bet the 'best over' book: line shopping added ~+2 pts ROI in the backtest.")
-    print("Model uses 2020-21 onward only. Tested 2021-26: +1.3% ROI at open, +2.4% at close, 53-55% wins"
+    print("Model uses 2020-21 onward only. Tested 2021-26: +2.6% ROI at open, +3.0% at close, 54-55% wins"
           " (+2 pts more with line shopping). Small, unproven edge: judge it on live paper trading.")
     print("\nTODAY'S FLAGS: " + ("; ".join(flagged) if flagged else "none"))
     what = f"{health.plural(len(log_rows), 'game')} for {date.fromisoformat(day):%a, %b %-d}" if log_rows else f"no NHL games on {date.fromisoformat(day):%a, %b %-d}"
@@ -784,8 +797,9 @@ def today(day=None, preview=False):
     if day == date.today().isoformat():  # never log past dates: that would be hindsight
         with open(paths.data("last_run.txt"), "w") as f:  # shown on the dashboard
             f.write(pd.Timestamp.now(tz="America/New_York").strftime("%Y-%m-%d %H:%M %Z") + "\n")
-        import paper
         added, upgraded = paper.log_games(log_rows)
+        if postponed:  # postponed / cancelled after an earlier run logged it
+            paper.remove_games(day, postponed)
         import store  # run history in Supabase (skipped when not configured; never stops the run)
         store.record_run(day, log_rows, sources={"dailyfaceoff": bool(dfo), "lines": bool(lines), "sportsbooks": bool(shop),
                                                  "lineups": bool(lineup_info), "injuries": bool(inj)})
