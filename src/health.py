@@ -67,6 +67,15 @@ def failed():
     return [k for k, v in _results.items() if v]
 
 
+def note(line):
+    """One line for this run's summary: the last step of every workflow prints them with what the job is for and how it
+    ended (.github/scripts/summary.py). The workflow sets RUN_SUMMARY; without it (checks, a local run) nothing is written."""
+    path = os.environ.get("RUN_SUMMARY")
+    if path:
+        with open(path, "a", encoding="utf-8") as f:
+            f.write(line + "\n")
+
+
 def finish():
     """Save this run's outcomes into data/source_health.json; set the retry flag if anything failed."""
     state = json.load(open(STATE)) if os.path.exists(STATE) else {}
@@ -111,9 +120,11 @@ def alert():
                     f"sources meanwhile. This issue closes itself when {name} works again.")
             _gh("issue", "create", "--title", title, "--label", "source-alert", "--body", body)
             print(f"(alert opened: {title})")
+            note(f"⚠ Alert opened (GitHub issue): {title}")
         elif s.get("consecutive_failures", 0) == 0 and title in open_issues:
             _gh("issue", "close", str(open_issues[title]), "--comment", f"{name} is working again (since {s.get('last_ok')}).")
             print(f"(alert closed: {title})")
+            note(f"✓ Alert closed: {name} works again")
 
 
 def stale(job_status, now=None):
@@ -126,6 +137,7 @@ def stale(job_status, now=None):
         for n in open_issues:
             _gh("issue", "close", str(n), "--comment", "The model is finishing its runs again.")
             print("(run alert closed)")
+            note("✓ Run alert closed: the model is finishing its runs again")
         return
     if open_issues or not os.path.exists(LAST_STATUS):
         return
@@ -138,6 +150,7 @@ def stale(job_status, now=None):
         f"The model hasn't finished a run since **{last}**, and the latest run failed too ({job_status}): {run}\n\n"
         "Runs keep retrying on their own. This issue closes itself when one works.")
     print(f"(run alert opened: no finished run since {last})")
+    note(f"⚠ Run alert opened (GitHub issue): no finished run since {last}")
 
 
 if __name__ == "__main__":

@@ -3,7 +3,8 @@ name: Monthly model check
 # Re-checks the dashboard's fixed numbers (tier cutoffs, SLAM/1U/AVOID record, calibration, goalie
 # predictions) with this season's games and posts a report as a GitHub issue. Report only: nothing in
 # the model changes by itself. Runs on the 1st; GitHub's scheduler is unreliable here, so the daily run
-# also starts it whenever this month's report doesn't exist yet.
+# also starts it whenever this month's report doesn't exist yet. The last step (Summary) says what the run did and how it
+# ended, in the log and at the top of the run's page.
 on:
   schedule:
     - cron: "23 15 1 * *"
@@ -23,6 +24,7 @@ jobs:
     timeout-minutes: 45
     env:
       TZ: America/New_York
+      RUN_SUMMARY: /tmp/run_summary.txt   # each step adds what it did; the last step prints it (.github/scripts/summary.py)
     steps:
       - uses: actions/checkout@v7
 
@@ -30,6 +32,7 @@ jobs:
         id: need
         run: |
           if [ -f "data/monthly/$(date +%Y-%m).md" ]; then echo "run=false" >> "$GITHUB_OUTPUT"; echo "already done this month"
+            echo "– This month's report is already saved (data/monthly/$(date +%Y-%m).md): nothing to do" >> "$RUN_SUMMARY"
           else echo "run=true" >> "$GITHUB_OUTPUT"; fi
 
       - uses: actions/setup-python@v7
@@ -52,27 +55,41 @@ jobs:
           restore-keys: moneypuck-
 
       - name: Download game data (skipped when the cached copy is current)
+        id: download-data
         if: steps.need.outputs.run == 'true'
         run: python -c "import sys; sys.path.insert(0, 'src'); import model; assert model.refresh_data() or __import__('os').path.exists(model.DATA)"
 
       - name: Build the report and post it as an issue
+        id: build-report
         if: steps.need.outputs.run == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: python src/retune.py --issue
 
       - name: Save the report
+        id: save-report
         if: steps.need.outputs.run == 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898299+github-actions[bot]@users.noreply.github.com"
           git add data/monthly
-          if git diff --cached --quiet; then echo "nothing to save"; exit 0; fi
+          if git diff --cached --quiet; then echo "nothing to save"; echo "– Report unchanged: nothing to save" >> "$RUN_SUMMARY"; exit 0; fi
           git commit -m "monthly model check $(date +%Y-%m)"
           # must land: without the saved report, every daily run starts this check again (= a new issue each hour)
           for i in 1 2 3 4 5 6 7 8; do
-            if git pull --rebase && git push; then exit 0; fi
+            if git pull --rebase && git push; then echo "✓ Report saved (data/monthly/$(date +%Y-%m).md, $(git rev-parse --short HEAD))" >> "$RUN_SUMMARY"; exit 0; fi
             git rebase --abort 2>/dev/null || true
             echo "push failed (try $i of 8), retrying in $((i * 20)) s"; sleep $((i * 20))
           done
+          echo "✗ Couldn't save the report (8 tries): the next daily run starts this check again" >> "$RUN_SUMMARY"
           echo "::error::couldn't save the report (the issue is posted; the next daily run will start this check again)"; exit 1
+
+      - name: Summary (what this run did and how it ended; also at the top of the run's page)
+        if: ${{ always() }}
+        env:
+          STARTED_BY: ${{ github.event_name == 'schedule' && 'schedule' || (github.triggering_actor == 'github-actions[bot]' && 'monthly' || 'manual') }}
+          JOB_STATUS: ${{ job.status }}
+          STEPS: ${{ toJSON(steps) }}
+        run: |
+          python3 .github/scripts/summary.py "Monthly model check: re-checks the dashboard's fixed numbers against this season's games and posts a report as a GitHub issue (report only: nothing in the model changes)" \
+            || echo "Result: ${{ job.status }} (the summary script failed)"

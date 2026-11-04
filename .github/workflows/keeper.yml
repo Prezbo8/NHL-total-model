@@ -4,6 +4,7 @@ name: Keeper (runs the daily job on time)
 # workflow stays running and starts "Daily NHL run" at 12:01 AM and every hour at :17 from 11:17 AM to 10:17 PM
 # Eastern, plus 15 minutes before each game (times from .github/scripts/next_slot.py). GitHub stops a run after 6 hours, so before that it starts a fresh copy of itself.
 # At 8:00 AM Eastern it starts the once-a-day stats run instead (moneypuck.yml: checks MoneyPuck until 11:10 AM).
+# The last step (Summary) lists what this keeper started and how it ended (log + top of the run's page).
 # Only one keeper runs at a time (concurrency), so the chain can't duplicate. The schedule below just
 # restarts the chain if it ever breaks (when GitHub's scheduler does fire).
 on:
@@ -28,17 +29,21 @@ jobs:
   keep:
     runs-on: ubuntu-24.04   # pinned: ubuntu-latest moves to Ubuntu 26 on Oct 19, 2026
     timeout-minutes: 355
+    env:
+      RUN_SUMMARY: /tmp/run_summary.txt   # what this keeper started, printed by the last step (.github/scripts/summary.py)
     steps:
       - uses: actions/checkout@v7
         with:
           sparse-checkout: .github
       - name: Start the daily run at each slot, then hand off to a fresh keeper
+        id: keep-slots
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           START=$(date +%s); BUDGET=$((5 * 3600 + 30 * 60))   # hand off after 5.5 h (GitHub limit is 6 h)
           TEST="${{ inputs.test }}"; [ "$TEST" = "true" ] && BUDGET=240
           dispatch() { for i in $(seq 1 20); do gh workflow run "$@" -R "$GITHUB_REPOSITORY" && return 0; sleep 30; done; return 1; }   # keep trying ~10 min
+          note() { echo "$1 $(TZ=America/New_York date '+%-I:%M %p'): $2" >> "$RUN_SUMMARY"; }   # one line of this run's summary
           while true; do
             read WAIT WHEN <<< "$(python3 .github/scripts/next_slot.py)"
             if [ "$TEST" = "true" ]; then
@@ -48,13 +53,24 @@ jobs:
             if [ $((ELAPSED + WAIT)) -lt $BUDGET ]; then
               echo "next slot: $WHEN (in $((WAIT / 60)) min)"; sleep "$WAIT"
               case "$WHEN" in
-                *"MoneyPuck"*) echo "starting the MoneyPuck download ($(TZ=America/New_York date '+%-I:%M %p %Z'))"; dispatch moneypuck.yml || echo "::error::could not start the MoneyPuck download";;
-                *) echo "starting Daily NHL run ($(TZ=America/New_York date '+%-I:%M %p %Z'))"; case "$WHEN" in *"puck drop"*) KIND=pregame;; *) KIND=hourly;; esac; dispatch daily.yml -f trigger=$KIND || echo "::error::could not start daily run";;
+                *"MoneyPuck"*)
+                  echo "starting the MoneyPuck download ($(TZ=America/New_York date '+%-I:%M %p %Z'))"
+                  if dispatch moneypuck.yml -f trigger=morning; then note "✓" "started the once-a-day MoneyPuck run"
+                  else echo "::error::could not start the MoneyPuck download"; note "✗" "couldn't start the once-a-day MoneyPuck run"; fi
+                  ;;
+                *)
+                  echo "starting Daily NHL run ($(TZ=America/New_York date '+%-I:%M %p %Z'))"
+                  case "$WHEN" in *"puck drop"*) KIND=pregame;; *) KIND=hourly;; esac
+                  if dispatch daily.yml -f trigger=$KIND; then note "✓" "started the model run ($KIND slot)"
+                  else echo "::error::could not start daily run"; note "✗" "couldn't start the model run ($KIND slot)"; fi
+                  ;;
               esac
               sleep 90
             else
               REST=$(( BUDGET - ELAPSED )); [ $REST -gt 0 ] && { echo "next slot $WHEN is past this run's limit; handing off in $((REST / 60)) min"; sleep "$REST"; }
-              echo "handing off to a fresh keeper"; dispatch keeper.yml || echo "::error::could not restart keeper"   # successor runs in normal mode
+              echo "handing off to a fresh keeper"
+              if dispatch keeper.yml; then note "✓" "handed off to a fresh keeper (its first slot: $WHEN)"   # successor runs in normal mode
+              else echo "::error::could not restart keeper"; note "✗" "couldn't start the next keeper (the model runs and the 6-hour schedule restart it)"; fi
               exit 0
             fi
           done
@@ -64,5 +80,20 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          for i in $(seq 1 20); do gh workflow run keeper.yml -R "$GITHUB_REPOSITORY" && exit 0; sleep 30; done
+          for i in $(seq 1 20); do
+            gh workflow run keeper.yml -R "$GITHUB_REPOSITORY" && { echo "• This keeper stopped early (failed or cancelled): started a new one" >> "$RUN_SUMMARY"; exit 0; }
+            sleep 30
+          done
+          echo "✗ This keeper stopped early and a new one couldn't be started (the model runs and the 6-hour schedule restart it)" >> "$RUN_SUMMARY"
           echo "::error::couldn't restart the keeper; the daily run and the 6-hour schedule will restart it"
+
+      - name: Summary (what this keeper started and how it ended; also at the top of the run's page)
+        if: ${{ always() }}
+        continue-on-error: true   # last step, after the restart step: the summary can never break the keeper chain
+        env:
+          STARTED_BY: ${{ github.event_name == 'schedule' && 'schedule' || (github.triggering_actor == 'github-actions[bot]' && 'handoff' || 'manual') }}
+          JOB_STATUS: ${{ job.status }}
+          STEPS: ${{ toJSON(steps) }}
+        run: |
+          python3 .github/scripts/summary.py "Keeper: starts each model run on time (12:01 AM, every hour 11:17 AM-10:17 PM ET, 15 min before each game) and the 8:00 AM MoneyPuck run, then hands off to a fresh keeper before GitHub's 6-hour limit" \
+            || echo "Result: ${{ job.status }} (the summary script failed)"

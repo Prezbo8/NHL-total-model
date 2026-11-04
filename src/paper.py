@@ -15,6 +15,7 @@ import numpy as np
 import pandas as pd
 
 import grade
+import health
 from model import fetch
 import odds
 import paths
@@ -164,7 +165,7 @@ def settle():
     # also settled games still missing a closing line (the odds feed skipped them once): retried for CLOSE_RETRY_DAYS
     recent = pd.to_datetime(d.date) >= pd.Timestamp(date.today()) - pd.Timedelta(days=CLOSE_RETRY_DAYS)
     todo = d[past & (d.final_total.isna() | (d.close_total.isna() & recent))]
-    postponed = []
+    postponed, newly, bets = [], 0, []  # newly settled games / bets: for the run's summary
     for day in sorted(todo.date.unique()):
         try:  # a score / odds blip skips this day; the next run settles it
             with urllib.request.urlopen(fetch(f"https://api-web.nhle.com/v1/score/{day}")) as f:
@@ -174,6 +175,7 @@ def settle():
                 closing[(grade.ABBR.get(r["away"], r["away"]), grade.ABBR.get(r["home"], r["home"]))] = r
         except Exception as e:
             print(f"(couldn't settle {day} yet: {e})")
+            health.note(f"✗ Couldn't settle {day} yet ({type(e).__name__}): the next run tries again")
             continue
         for i in todo[todo.date == day].index:
             k = (d.at[i, "away"], d.at[i, "home"])
@@ -192,6 +194,7 @@ def settle():
                 continue
             a, h = g["awayTeam"]["score"], g["homeTeam"]["score"]  # NHL final score counts the shootout goal
             d.loc[i, ["away_score", "home_score", "final_total"]] = [a, h, a + h]
+            newly += 1
             if k in closing:
                 c = closing[k]
                 d.loc[i, ["close_total", "close_over", "close_under"]] = [c["total"], c["over"], c["under"]]
@@ -199,6 +202,7 @@ def settle():
                 bt, bo = d.at[i, "bet_total"], d.at[i, "bet_over"]
                 res = "W" if a + h > bt else "P" if a + h == bt else "L"
                 d.at[i, "result"] = res
+                bets.append(f"{k[0]}@{k[1]} {res}")
                 d.at[i, "profit"] = {"W": float(grade.payout(bo)), "P": 0.0, "L": -1.0}[res]
                 if k in closing and not pd.isna(d.at[i, "bet_under"]):
                     d.at[i, "clv"] = clv(bt, bo, d.at[i, "bet_under"], c)
@@ -215,6 +219,8 @@ def settle():
     import store  # mirror finals and paper results to Supabase (skipped when not configured)
     store.sync_log(read_log())
     print(f"settled through {todo.date.max() if len(todo) else 'n/a'}")
+    health.note(f"✓ Settled {newly} finished games" + (f"; bets: {', '.join(bets)}" if bets else "; no bets among them") if newly
+                else "– Settling: no newly finished games yet" if len(todo) else "✓ Settling: nothing new to settle")
 
 
 def clv(bet_total, bet_over, bet_under, c):
@@ -238,6 +244,8 @@ def report():
         dec = s[s.result != "P"]
         print(f"record {(s.result == 'W').sum()}-{(s.result == 'L').sum()}-{(s.result == 'P').sum()}"
               f"   win {(dec.result == 'W').mean():.1%}   profit {s.profit.sum():+.2f}u   ROI {s.profit.mean():+.1%}")
+        health.note(f"✓ Paper record: {(s.result == 'W').sum()}-{(s.result == 'L').sum()}-{(s.result == 'P').sum()} "
+                    f"({(dec.result == 'W').mean():.1%} wins), {s.profit.sum():+.2f}u, ROI {s.profit.mean():+.1%}")
         sb = s[s.profit_best.notna()]
         if len(sb):
             print(f"at the best sportsbook price: profit {sb.profit_best.sum():+.2f}u   ROI {sb.profit_best.mean():+.1%}"

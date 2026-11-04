@@ -1,6 +1,8 @@
 name: Daily NHL run
 
 # 12:01 AM and every hour from 11 AM to 10 PM Eastern, all year (hourly runs at :17), started by keeper.yml; this schedule is the backup.
+# The once-a-day stats run (moneypuck.yml) also starts one (trigger "stats") as soon as it brings in new data.
+# The last step (Summary) says what the run did and how it ended, in the log and at the top of the run's page.
 # - GitHub schedules in UTC only, so summer (EDT) and winter (EST) sets are both listed; the "gate"
 #   job runs whichever matches today's Eastern offset and skips the other.
 # - Not on the hour: GitHub drops/delays scheduled runs at the top of the hour under load (none of the
@@ -38,11 +40,17 @@ jobs:
       - name: Gate (run only the schedule that matches Eastern time today)
         id: gate
         run: |
-          if [ "${{ github.event_name }}" != "schedule" ]; then echo "run=true" >> "$GITHUB_OUTPUT"; exit 0; fi
-          if [ "$(date +%Z)" = "EDT" ]; then hours="15-23,0-2"; midnight="1 4 * * *"; else hours="16-23,0-3"; midnight="1 5 * * *"; fi
-          if [ "${{ github.event.schedule }}" = "17 $hours * * *" ] || [ "${{ github.event.schedule }}" = "$midnight" ]; then
+          say() { echo "$1"; echo "$1" >> "$GITHUB_STEP_SUMMARY"; }   # in the log + on the run's page
+          if [ "${{ github.event_name }}" != "schedule" ]; then
             echo "run=true" >> "$GITHUB_OUTPUT"
-          else echo "run=false" >> "$GITHUB_OUTPUT"; echo "other daylight-saving slot: skipping"; fi
+            say "Started with trigger '${{ inputs.trigger }}': the model runs (job 'run'; its Summary step says what it did)."
+            exit 0
+          fi
+          if [ "$(date +%Z)" = "EDT" ]; then hours="15-23,0-2"; midnight="1 4 * * *"; else hours="16-23,0-3"; midnight="1 5 * * *"; fi
+          fired="GitHub's backup schedule \`${{ github.event.schedule }}\` fired at $(date '+%-I:%M %p %Z') (GitHub's scheduler often runs late; the keeper normally starts these runs)"
+          if [ "${{ github.event.schedule }}" = "17 $hours * * *" ] || [ "${{ github.event.schedule }}" = "$midnight" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"; say "$fired. It's today's daylight-saving copy, so the model runs (job 'run'; its Summary step says what it did)."
+          else echo "run=false" >> "$GITHUB_OUTPUT"; say "$fired. It's the other daylight-saving copy (today is $(date +%Z)): nothing to do, skipped."; fi
 
   run:
     needs: gate
@@ -57,6 +65,7 @@ jobs:
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}   # run history (src/store.py); empty = skipped
       SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
       NHL_TRIGGER: ${{ inputs.trigger || github.event_name }}
+      RUN_SUMMARY: /tmp/run_summary.txt   # each step adds what it did; the last step prints it (.github/scripts/summary.py)
     steps:
       - uses: actions/checkout@v7
         with:
@@ -84,9 +93,11 @@ jobs:
       # each step runs even if an earlier one failed (e.g. settling hits an API outage),
       # so today's projections and the dashboard still get made; the run still shows red
       - name: Settle yesterday's paper trades
+        id: settle-bets
         run: python src/paper.py settle
 
       - name: Project today's games, flag, log
+        id: project-games
         if: ${{ !cancelled() }}
         run: python src/model.py today
 
@@ -95,27 +106,41 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if [ -f data/.moneypuck_behind ]; then
-            gh workflow run moneypuck.yml -R "${{ github.repository }}" && echo "started" || echo "couldn't start it (the next run will try again)"
-          else echo "not needed"; fi
+          if [ ! -f data/.moneypuck_behind ]; then echo "not needed"
+          elif [ "$NHL_TRIGGER" = "stats" ]; then   # a stats run started this run: never start one back (no loop of runs)
+            echo "MoneyPuck has newer data again: the next hourly run starts the stats run"
+            echo "– MoneyPuck has newer data again: the next hourly run starts the stats run (a stats run started this one)" >> "$RUN_SUMMARY"
+          elif gh workflow run moneypuck.yml -R "${{ github.repository }}" -f trigger=newer; then
+            echo "started"; echo "✓ MoneyPuck has newer data: started the once-a-day stats run (it starts a model run when it brings in new data)" >> "$RUN_SUMMARY"
+          else
+            echo "couldn't start it (the next run will try again)"
+            echo "✗ MoneyPuck has newer data, but the stats run couldn't be started (the next run tries again)" >> "$RUN_SUMMARY"
+          fi
 
       - name: Tomorrow preview (early look for the dashboard tab; never logged)
         if: ${{ !cancelled() }}
-        run: python src/model.py preview || echo "preview failed (the tab keeps the last one)"
+        run: |
+          python src/model.py preview || { echo "preview failed (the tab keeps the last one)"
+            echo "✗ Tomorrow preview failed (the dashboard tab keeps the last one)" >> "$RUN_SUMMARY"; }
 
       - name: Report
+        id: paper-report
         if: ${{ !cancelled() }}
         run: python src/paper.py report
 
       - name: SLAM rule check (runs once, when the paper log reaches 75 settled picks)
         if: ${{ !cancelled() }}
-        run: python src/rule_check.py || echo "rule check failed (will retry next run)"
+        run: |
+          python src/rule_check.py || { echo "rule check failed (will retry next run)"
+            echo "✗ SLAM rule check failed (the next run tries again)" >> "$RUN_SUMMARY"; }
 
       - name: Rebuild dashboard
+        id: rebuild-dashboard
         if: ${{ !cancelled() }}
         run: python src/dashboard.py
 
       - name: Commit and push results
+        id: commit-push
         if: ${{ !cancelled() }}
         run: |
           git config user.name "github-actions[bot]"
@@ -124,15 +149,16 @@ jobs:
           git add data
           git add docs
           if git diff --cached --quiet; then
-            echo "no changes to push"
+            echo "no changes to push"; echo "– Nothing changed since the last run: no new commit" >> "$RUN_SUMMARY"
           else
             git commit -m "daily update $(date '+%Y-%m-%d %H:%M %Z')"
             # GitHub sometimes rejects a push (500 Internal Server Error, Oct 14 2026): pull + push again until it lands
             for i in 1 2 3 4 5 6 7 8; do
-              if git pull --rebase && git push; then exit 0; fi
+              if git pull --rebase && git push; then echo "✓ Results and dashboard pushed ($(git rev-parse --short HEAD))" >> "$RUN_SUMMARY"; exit 0; fi
               git rebase --abort 2>/dev/null || true
               echo "push failed (try $i of 8), retrying in $((i * 20)) s"; sleep $((i * 20))
             done
+            echo "✗ Couldn't push the results (8 tries): the retry step starts a fresh run" >> "$RUN_SUMMARY"
             echo "::error::push failed 8 times (the retry step below starts a fresh run)"; exit 1
           fi
 
@@ -142,10 +168,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           for i in 1 2 3 4 5; do
-            gh api -X POST "repos/${{ github.repository }}/pages/builds" >/dev/null && { echo "pages build requested"; exit 0; }
+            gh api -X POST "repos/${{ github.repository }}/pages/builds" >/dev/null && {
+              echo "pages build requested"; echo "✓ Website rebuild requested (GitHub Pages: live in about a minute)" >> "$RUN_SUMMARY"; exit 0; }
             echo "pages build request failed (try $i of 5)"; sleep 30
           done
           echo "pages build request failed 5 times (site may still update on its own from the push)"
+          echo "✗ Website rebuild request failed 5 times (the push usually updates the site anyway)" >> "$RUN_SUMMARY"
 
       - name: Alert on data sources failing 2+ runs in a row (GitHub issue; closes itself on recovery)
         if: ${{ !cancelled() }}
@@ -159,7 +187,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           if [ ! -f "data/monthly/$(date +%Y-%m).md" ] && [ -z "$(gh run list -R "${{ github.repository }}" --workflow monthly.yml --status in_progress --json databaseId -q '.[].databaseId')" ]; then
-            gh workflow run monthly.yml -R "${{ github.repository }}" || echo "couldn't start the monthly check"
+            if gh workflow run monthly.yml -R "${{ github.repository }}"; then echo "• Started this month's model check (its report isn't saved yet)" >> "$RUN_SUMMARY"
+            else echo "couldn't start the monthly check"; fi
           fi
 
       - name: Restart the keeper if it isn't running (it starts these runs on time)
@@ -171,7 +200,9 @@ jobs:
               -q '[.[] | select(.status != "completed")] | length' || echo "?")
           if [ "$n" = "0" ]; then
             echo "keeper not running: restarting it"
-            for i in 1 2 3 4 5; do gh workflow run keeper.yml -R "${{ github.repository }}" && break; sleep 30; done
+            ok=""; for i in 1 2 3 4 5; do gh workflow run keeper.yml -R "${{ github.repository }}" && { ok=1; break; }; sleep 30; done
+            if [ -n "$ok" ]; then echo "• The keeper wasn't running: restarted it" >> "$RUN_SUMMARY"
+            else echo "✗ The keeper isn't running and couldn't be restarted (the next run tries again)" >> "$RUN_SUMMARY"; fi
           else
             echo "keeper running ($n)"
           fi
@@ -188,17 +219,28 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           if [ "${{ job.status }}" = "cancelled" ]; then
-            echo "run was cancelled: starting a fresh one"; WAIT=0
+            echo "run was cancelled: starting a fresh one"; WAIT=0; WHY="this run was cancelled"
           elif [ "${{ job.status }}" != "success" ]; then
-            echo "a step failed: starting a fresh run in 5 minutes"; WAIT=300
+            echo "a step failed: starting a fresh run in 5 minutes"; WAIT=300; WHY="a step failed"
           elif [ -f data/.retry ]; then
-            echo "still failing: $(cat data/.retry)"; WAIT=300
+            echo "still failing: $(cat data/.retry)"; WAIT=300; WHY="still failing: $(cat data/.retry)"
           else
             echo "all OK"; exit 0
           fi
           sleep $WAIT
           for i in 1 2 3 4 5 6 7 8 9 10; do
-            gh workflow run daily.yml -R "${{ github.repository }}" -f trigger=retry && exit 0
+            gh workflow run daily.yml -R "${{ github.repository }}" -f trigger=retry && { echo "• Started a retry run ($WHY)" >> "$RUN_SUMMARY"; exit 0; }
             echo "couldn't start the retry run (try $i of 10)"; sleep 30
           done
+          echo "✗ Couldn't start a retry run ($WHY): the next hourly run tries again" >> "$RUN_SUMMARY"
           echo "::error::couldn't start a retry run; the next hourly run will try again"
+
+      - name: Summary (what this run did and how it ended; also at the top of the run's page)
+        if: ${{ always() }}
+        env:
+          STARTED_BY: ${{ env.NHL_TRIGGER }}
+          JOB_STATUS: ${{ job.status }}
+          STEPS: ${{ toJSON(steps) }}
+        run: |
+          python3 .github/scripts/summary.py "Model run (odds, lineups & projections): settles finished games, gets today's odds, goalies, lineups and injuries, projects today's games, flags overs and updates the dashboard" \
+            || echo "Result: ${{ job.status }} (the summary script failed)"

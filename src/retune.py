@@ -142,6 +142,9 @@ def post_issue(md, today=None):
     r = subprocess.run(["gh", "issue", "create", "--title", f"Monthly model check: {today:%B %Y}", "--label", "monthly-check",
                         "--body", md], capture_output=True, text=True)
     print(r.stdout or r.stderr)
+    import health
+    health.note(f"✓ Report posted as a GitHub issue: {r.stdout.strip()}" if r.returncode == 0
+                else f"✗ Couldn't post the report as a GitHub issue: {r.stderr.strip()[:150]}")
     if r.returncode == 0:  # posted: close the earlier months' reports (they stay saved in data/monthly/)
         new = r.stdout.strip().rsplit("/", 1)[-1]
         old = subprocess.run(["gh", "issue", "list", "--label", "monthly-check", "--state", "open", "--json", "number",

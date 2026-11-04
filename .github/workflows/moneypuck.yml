@@ -4,15 +4,23 @@ name: Daily stats (once a day)
 # (python src/model.py stats): MoneyPuck's team game file (127 MB), goalie history (NHL starts + MoneyPuck goalie
 # files), MoneyPuck skater stats, team speed. Then the day's results go to Supabase (nhl_daily_* tables, replaced
 # every run). The keeper starts this at 8:00 AM Eastern (MoneyPuck posts ~7:30 AM): until 11:10 AM it checks every 10 min
-# until MoneyPuck's data includes last night's games, so the 11:17 AM run has them. An hourly run also starts it when
-# MoneyPuck has newer data than the saved copy. The hourly runs (daily.yml) never download from MoneyPuck: they use
-# the saved copy + the files committed here, and alert when data/stats_status.json shows no working run for 30 hours.
-# (Nov 3 2026: MoneyPuck served ~30 KB/s, a 70-min download, and every hourly run timed out waiting for it.)
+# until MoneyPuck's data includes last night's games. An hourly run also starts it when MoneyPuck has newer data than
+# the saved copy. When it brings in new data it starts a model run right away (daily.yml, trigger "stats"), so the
+# dashboard and projections use it within minutes instead of at the next hourly run (Nov 4 2026: the 7:52 AM download
+# didn't show on the dashboard until a manual run at 9:46). The hourly runs (daily.yml) never download from MoneyPuck:
+# they use the saved copy + the files committed here, and alert when data/stats_status.json shows no working run for
+# 30 hours. (Nov 3 2026: MoneyPuck served ~30 KB/s, a 70-min download, and every hourly run timed out waiting for it.)
+# The last step (Summary) says what the run did and how it ended, in the log and at the top of the run's page.
 on:
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      trigger:
+        description: "What started this run (morning = the keeper's 8:00 AM slot / newer = an hourly run saw newer data / manual)"
+        default: manual
 
 permissions:
   contents: write   # commits the refreshed goalie / skater / speed files + data/stats_status.json
+  actions: write    # starts a model run (daily.yml) when this run brought in new data
 
 concurrency:
   group: moneypuck
@@ -26,6 +34,7 @@ jobs:
       TZ: America/New_York
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}   # daily results (src/store.py save_daily); empty = skipped
       SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+      RUN_SUMMARY: /tmp/run_summary.txt   # each step adds what it did; the last step prints it (.github/scripts/summary.py)
     steps:
       - uses: actions/checkout@v7
         with:
@@ -49,9 +58,11 @@ jobs:
           restore-keys: moneypuck-
 
       - name: Daily stats (MoneyPuck up to 5 hours, goalie history, skater stats, team speed; results to Supabase)
+        id: daily-stats
         run: python src/model.py stats
 
       - name: Save the MoneyPuck copy for the hourly runs (only when this run downloaded a new version)
+        id: save-moneypuck-copy
         # the stamp holds MoneyPuck's Last-Modified, so a new download = a key the restored cache doesn't have
         if: ${{ !cancelled() && hashFiles('data/moneypuck_games.csv.modified') != '' && steps.mp.outputs.cache-matched-key != format('moneypuck-{0}', hashFiles('data/moneypuck_games.csv.modified')) }}
         continue-on-error: true   # a cache problem must not stop the files below from being saved
@@ -63,18 +74,59 @@ jobs:
           key: moneypuck-${{ hashFiles('data/moneypuck_games.csv.modified') }}
 
       - name: Commit the refreshed files (the hourly runs read them)
+        id: commit-files
         if: ${{ !cancelled() }}
+        env:
+          SAVED: ${{ steps.save-moneypuck-copy.outcome }}   # success = a new MoneyPuck file the model runs can use
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898299+github-actions[bot]@users.noreply.github.com"
           for f in data/goalie_starts.csv data/goalie_games.csv data/skater_seasons.csv data/team_speed.csv data/stats_status.json; do
             if [ -f "$f" ]; then git add "$f"; fi
           done
-          if git diff --cached --quiet; then echo "nothing new"; exit 0; fi
+          # new data = a new MoneyPuck file saved, or a data file changed (data/stats_status.json alone is just this run's time)
+          CHANGED=$(git diff --cached --name-only | grep -vx 'data/stats_status.json' | sed 's|.*/||' | paste -sd, - | sed 's/,/, /g')
+          if [ "$SAVED" = "success" ] || [ -n "$CHANGED" ]; then echo "new_data=true" >> "$GITHUB_OUTPUT"; else echo "new_data=false" >> "$GITHUB_OUTPUT"; fi
+          if [ "$SAVED" = "success" ]; then echo "✓ Saved the new MoneyPuck file for the model runs" >> "$RUN_SUMMARY"
+          elif [ "$SAVED" = "failure" ]; then echo "✗ Couldn't save the new MoneyPuck file for the model runs (they keep the previous copy)" >> "$RUN_SUMMARY"; fi
+          if git diff --cached --quiet; then echo "nothing new"; echo "– Nothing to commit" >> "$RUN_SUMMARY"; exit 0; fi
           git commit -m "daily stats $(date '+%Y-%m-%d %H:%M %Z')"
           for i in 1 2 3 4 5 6 7 8; do   # hourly runs push too: pull + push again until it lands
-            if git pull --rebase && git push; then exit 0; fi
+            if git pull --rebase && git push; then
+              echo "✓ Committed ${CHANGED:+$CHANGED and }the run's status ($(git rev-parse --short HEAD))" >> "$RUN_SUMMARY"; exit 0
+            fi
             git rebase --abort 2>/dev/null || true
             echo "push failed (try $i of 8), retrying in $((i * 20)) s"; sleep $((i * 20))
           done
+          echo "✗ Couldn't push the refreshed files (8 tries)" >> "$RUN_SUMMARY"
           echo "::error::push failed 8 times"; exit 1
+
+      - name: Start a model run when this run brought in new data (dashboard + projections update now, not at the next hourly run)
+        id: start-model-run
+        if: ${{ !cancelled() }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NEW_DATA: ${{ steps.commit-files.outputs.new_data }}
+        run: |
+          if [ "$NEW_DATA" != "true" ]; then
+            echo "no new data: no model run needed"; echo "– No new data: no model run needed" >> "$RUN_SUMMARY"; exit 0
+          fi
+          for i in 1 2 3 4 5; do   # the model run it starts never starts a stats run back (daily.yml: trigger "stats")
+            if out=$(gh workflow run daily.yml -R "$GITHUB_REPOSITORY" --ref "$GITHUB_REF_NAME" -f trigger=stats); then
+              echo "$out"; url=$(echo "$out" | grep -o 'https://[^ ]*' | tail -1)
+              echo "✓ New data: started a model run, so the dashboard and projections update now${url:+ ($url)}" >> "$RUN_SUMMARY"; exit 0
+            fi
+            echo "couldn't start the model run (try $i of 5)"; sleep 30
+          done
+          echo "✗ New data, but the model run couldn't be started (the next hourly run uses the new data)" >> "$RUN_SUMMARY"
+          echo "::warning::couldn't start the model run; the next hourly run uses the new data"
+
+      - name: Summary (what this run did and how it ended; also at the top of the run's page)
+        if: ${{ always() }}
+        env:
+          STARTED_BY: ${{ inputs.trigger }}
+          JOB_STATUS: ${{ job.status }}
+          STEPS: ${{ toJSON(steps) }}
+        run: |
+          python3 .github/scripts/summary.py "Once-a-day stats run: downloads MoneyPuck's team game file when MoneyPuck has posted new data, refreshes goalie history, skater stats and team speed, saves the day's results to Supabase, and starts a model run when anything changed" \
+            || echo "Result: ${{ job.status }} (the summary script failed)"
