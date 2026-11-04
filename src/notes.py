@@ -26,7 +26,7 @@ import pandas as pd
 
 import paths
 
-MODEL = os.environ.get("GEMINI_MODEL") or "gemini-2.5-flash"
+MODEL = os.environ.get("GEMINI_MODEL") or "gemini-flash-latest"  # alias = the current Flash (Nov 4 2026: 2.5-flash 404s for new keys)
 API = "https://generativelanguage.googleapis.com/v1beta/models/{}:generateContent"
 MAX_CALLS = 14   # per run: the free tier allows a limited number of requests a day (per Google project)
 PAUSE = 6        # seconds between requests (the free tier allows ~10 a minute)
@@ -361,8 +361,8 @@ def run(preview=False):
             except urllib.error.HTTPError as e:
                 msg = e.read().decode()[:200]
                 print(f"(game notes: Gemini answered {e.code}: {msg})")
-                if e.code in (429, 403):
-                    calls = MAX_CALLS  # out of free requests (or no access): the rest keep their note / the template
+                if e.code in (429, 403, 404):
+                    calls = MAX_CALLS  # out of free requests, no access or no such model: the rest keep their note / the template
                 failed.append(key)
                 continue
             except Exception as e:
