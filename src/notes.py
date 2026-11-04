@@ -10,7 +10,7 @@ template stays). A note is rewritten only when its game's facts change (signatur
 No GEMINI_API_KEY (GitHub secret), or Gemini failing / out of free requests = the template, as before.
 
   python3 src/notes.py             # today's games + debriefs of finished games (the hourly run, after projecting)
-  python3 src/notes.py --preview   # print today's notes, save nothing (Tests workflow, started by hand)
+  python3 src/notes.py --preview   # also print today's notes + their dashboard HTML (Tests workflow, started by hand)
 """
 import html
 import json
@@ -26,7 +26,10 @@ import pandas as pd
 
 import paths
 
-MODEL = os.environ.get("GEMINI_MODEL") or "gemini-flash-latest"  # alias = the current Flash (Nov 4 2026: 2.5-flash 404s for new keys)
+# tried in order: an overloaded / unavailable / out-of-free-requests model hands over to the next (each has its own free
+# allowance). Nov 4 2026: 2.5-flash 404s for new keys, and the newest Flash answered 503 "high demand" all afternoon.
+MODELS = list(dict.fromkeys(m for m in (os.environ.get("GEMINI_MODEL"), "gemini-flash-latest", "gemini-3.6-flash",
+                                        "gemini-flash-lite-latest") if m))
 API = "https://generativelanguage.googleapis.com/v1beta/models/{}:generateContent"
 MAX_CALLS = 14   # per run: the free tier allows a limited number of requests a day (per Google project)
 PAUSE = 6        # seconds between requests (the free tier allows ~10 a minute)
@@ -179,15 +182,29 @@ def lead_with(f):
 
 # ---- Gemini ----
 
-def gemini(system, prompt):
+def ask(model, system, prompt):
     key = os.environ.get("GEMINI_API_KEY")
     body = {"systemInstruction": {"parts": [{"text": system}]}, "contents": [{"role": "user", "parts": [{"text": prompt}]}],
             "generationConfig": {"temperature": 1.0, "maxOutputTokens": 2048}}
-    req = urllib.request.Request(API.format(MODEL), data=json.dumps(body).encode(), method="POST",
+    req = urllib.request.Request(API.format(model), data=json.dumps(body).encode(), method="POST",
                                  headers={"Content-Type": "application/json", "x-goog-api-key": key})  # key in a header, never the URL
     with urllib.request.urlopen(req, timeout=60) as f:
         out = json.load(f)
     return "".join(p.get("text", "") for p in out["candidates"][0]["content"]["parts"] if not p.get("thought")).strip()
+
+
+def gemini(system, prompt):
+    """(text, model) from the first model in MODELS that answers."""
+    last = None
+    for model in MODELS:
+        try:
+            return ask(model, system, prompt), model
+        except urllib.error.HTTPError as e:
+            if e.code not in (404, 429, 500, 503):
+                raise
+            print(f"  ({model}: {e.code}, trying the next model)")
+            last = e
+    raise last
 
 
 NUM = re.compile(r"(?<![\w.])[+\-−]?\d+(?:\.\d+)?(?:-\d+){0,2}%?")
@@ -233,17 +250,17 @@ def opening(text):
 
 
 def write_note(f, used):
-    """(text, '') or (None, why) after up to 2 tries."""
-    ask = (f"Facts:\n{json.dumps({**f, 'lead_with': lead_with(f), 'openings_used_today': used}, ensure_ascii=False)}\n\n"
-           "Write the note.")
-    why = ""
+    """(text, '', model) or (None, why, model) after up to 2 tries."""
+    prompt = (f"Facts:\n{json.dumps({**f, 'lead_with': lead_with(f), 'openings_used_today': used}, ensure_ascii=False)}\n\n"
+              "Write the note.")
+    why, model = "", None
     for _ in range(2):
-        text = gemini(SYSTEM, ask if not why else ask + f"\n\nYour last version can't be used: {why}. Rewrite it.")
+        text, model = gemini(SYSTEM, prompt if not why else prompt + f"\n\nYour last version can't be used: {why}. Rewrite it.")
         why = check(text, f)
         if not why:
-            return text, ""
+            return text, "", model
         time.sleep(PAUSE)
-    return None, why
+    return None, why, model
 
 
 # ---- colors (applied when the dashboard renders a note) ----
@@ -325,9 +342,10 @@ def run(preview=False):
         return
     if preview:
         try:
-            print("(models this key can use: " + ", ".join(m for m in models() if "flash" in m or "pro" in m) + f"; using {MODEL})")
+            print("(models this key can use: " + ", ".join(m for m in models() if "flash" in m or "pro" in m) + ")")
         except Exception as e:
             print(f"(couldn't list the models: {type(e).__name__}: {str(e)[:120]})")
+        print(f"(trying, in order: {', '.join(MODELS)})")
     today = date.today().isoformat()
     log = dashboard.current(paper.read_log())
     days = [d for d in ((date.today() - timedelta(days=1)).isoformat(), today) if (log.date == d).any()]
@@ -356,7 +374,7 @@ def run(preview=False):
             if calls >= MAX_CALLS:
                 break
             try:
-                text, why = write_note(f, used)
+                text, why, model = write_note(f, used)
                 calls += 1
             except urllib.error.HTTPError as e:
                 msg = e.read().decode()[:200]
@@ -373,16 +391,19 @@ def run(preview=False):
                 print(f"(game notes: {key} rejected twice ({why}): the template stays)")
                 failed.append(key)
                 continue
-            notes[key] = {"text": text, "colors": colors(f), "sig": sig, "model": MODEL,
+            notes[key] = {"text": text, "colors": colors(f), "sig": sig, "model": model,
                           "at": pd.Timestamp.now(tz="America/New_York").strftime("%-I:%M %p"), "kind": "debrief" if "result" in f else "preview"}
             used.append(opening(text))
             made += 1
             if preview:
                 print(f"\n=== {key} ({f['call']}, lead: {lead_with(f)}) ===\n{text}")
             time.sleep(PAUSE)
-        if not preview:
-            d.update(notes=notes, debrief=dbr)
-            save(day, d)
+        d.update(notes=notes, debrief=dbr)
+        save(day, d)  # (--preview runs in the Tests checkout, which is never committed)
+        if preview and day == today:  # exactly what the dashboard will show, for a look before it goes live
+            dashboard._NOTES.clear()
+            for r in g.itertuples():
+                print("PREVIEW_HTML " + json.dumps({"key": f"{r.away}@{r.home}", "html": dashboard.game_notes(r, dashboard._is(r.flag))}))
     print(f"(game notes: {made} written, {kept} unchanged, {len(failed)} kept the template, {calls} Gemini requests)")
     health.note(f"✓ Game notes (Gemini): {made} written, {kept} unchanged" + (f"; {len(failed)} kept the template ({', '.join(failed)})" if failed else ""))
 
