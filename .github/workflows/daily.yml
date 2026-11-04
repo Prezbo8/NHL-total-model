@@ -2,7 +2,7 @@ name: Daily NHL run
 
 # 12:01 AM and every hour from 11 AM to 10 PM Eastern, all year (hourly runs at :17), started by keeper.yml; this schedule is the backup.
 # The once-a-day stats run (moneypuck.yml) also starts one (trigger "stats") as soon as it brings in new data.
-# The last step (Summary) says what the run did and how it ended, in the log and at the top of the run's page.
+# The last step (Summary) says what the run did and how it ended, in the log and on the run's page.
 # - GitHub schedules in UTC only, so summer (EDT) and winter (EST) sets are both listed; the "gate"
 #   job runs whichever matches today's Eastern offset and skips the other.
 # - Not on the hour: GitHub drops/delays scheduled runs at the top of the hour under load (none of the
@@ -22,7 +22,6 @@ on:
 
 permissions:
   contents: write
-  pages: write
   issues: write    # source-failure alerts (src/health.py)
   actions: write   # start a retry run when a source is still failing
 
@@ -39,16 +38,20 @@ jobs:
     steps:
       - name: Gate (run only the schedule that matches Eastern time today)
         id: gate
+        env:   # inputs reach the script as variables, never pasted into its text
+          EVENT: ${{ github.event_name }}
+          TRIGGER: ${{ inputs.trigger }}
+          SCHEDULE: ${{ github.event.schedule }}
         run: |
           say() { echo "$1"; echo "$1" >> "$GITHUB_STEP_SUMMARY"; }   # in the log + on the run's page
-          if [ "${{ github.event_name }}" != "schedule" ]; then
+          if [ "$EVENT" != "schedule" ]; then
             echo "run=true" >> "$GITHUB_OUTPUT"
-            say "Started with trigger '${{ inputs.trigger }}': the model runs (job 'run'; its Summary step says what it did)."
+            say "Started with trigger '$TRIGGER': the model runs (job 'run'; its Summary step says what it did)."
             exit 0
           fi
           if [ "$(date +%Z)" = "EDT" ]; then hours="15-23,0-2"; midnight="1 4 * * *"; else hours="16-23,0-3"; midnight="1 5 * * *"; fi
-          fired="GitHub's backup schedule \`${{ github.event.schedule }}\` fired at $(date '+%-I:%M %p %Z') (GitHub's scheduler often runs late; the keeper normally starts these runs)"
-          if [ "${{ github.event.schedule }}" = "17 $hours * * *" ] || [ "${{ github.event.schedule }}" = "$midnight" ]; then
+          fired="GitHub's backup schedule \`$SCHEDULE\` fired at $(date '+%-I:%M %p %Z') (GitHub's scheduler often runs late; the keeper normally starts these runs)"
+          if [ "$SCHEDULE" = "17 $hours * * *" ] || [ "$SCHEDULE" = "$midnight" ]; then
             echo "run=true" >> "$GITHUB_OUTPUT"; say "$fired. It's today's daylight-saving copy, so the model runs (job 'run'; its Summary step says what it did)."
           else echo "run=false" >> "$GITHUB_OUTPUT"; say "$fired. It's the other daylight-saving copy (today is $(date +%Z)): nothing to do, skipped."; fi
 
@@ -154,26 +157,15 @@ jobs:
             git commit -m "daily update $(date '+%Y-%m-%d %H:%M %Z')"
             # GitHub sometimes rejects a push (500 Internal Server Error, Oct 14 2026): pull + push again until it lands
             for i in 1 2 3 4 5 6 7 8; do
-              if git pull --rebase && git push; then echo "✓ Results and dashboard pushed ($(git rev-parse --short HEAD))" >> "$RUN_SUMMARY"; exit 0; fi
+              if git pull --rebase && git push; then  # the push starts GitHub Pages' build: the site is live in about a minute
+                echo "✓ Results and dashboard pushed ($(git rev-parse --short HEAD)); the website updates in about a minute" >> "$RUN_SUMMARY"; exit 0
+              fi
               git rebase --abort 2>/dev/null || true
               echo "push failed (try $i of 8), retrying in $((i * 20)) s"; sleep $((i * 20))
             done
             echo "✗ Couldn't push the results (8 tries): the retry step starts a fresh run" >> "$RUN_SUMMARY"
             echo "::error::push failed 8 times (the retry step below starts a fresh run)"; exit 1
           fi
-
-      - name: Rebuild GitHub Pages
-        if: ${{ !cancelled() }}
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          for i in 1 2 3 4 5; do
-            gh api -X POST "repos/${{ github.repository }}/pages/builds" >/dev/null && {
-              echo "pages build requested"; echo "✓ Website rebuild requested (GitHub Pages: live in about a minute)" >> "$RUN_SUMMARY"; exit 0; }
-            echo "pages build request failed (try $i of 5)"; sleep 30
-          done
-          echo "pages build request failed 5 times (site may still update on its own from the push)"
-          echo "✗ Website rebuild request failed 5 times (the push usually updates the site anyway)" >> "$RUN_SUMMARY"
 
       - name: Alert on data sources failing 2+ runs in a row (GitHub issue; closes itself on recovery)
         if: ${{ !cancelled() }}
@@ -235,7 +227,7 @@ jobs:
           echo "✗ Couldn't start a retry run ($WHY): the next hourly run tries again" >> "$RUN_SUMMARY"
           echo "::error::couldn't start a retry run; the next hourly run will try again"
 
-      - name: Summary (what this run did and how it ended; also at the top of the run's page)
+      - name: Summary (what this run did and how it ended; also on the run's page)
         if: ${{ always() }}
         env:
           STARTED_BY: ${{ env.NHL_TRIGGER }}

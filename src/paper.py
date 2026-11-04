@@ -1,7 +1,8 @@
 """Paper-trading log for the OVER flag.
 
 src/model.py today  -> logs every game (flagged or not) with the line at the time;
-                   runs every 2 hours 11 AM-9 PM ET so games whose line moves to 6/6.5 later get caught
+                   runs at 12:01 AM, every hour 11:17 AM-10:17 PM ET and 15 min before each game, so games whose line
+                   moves to 6/6.5 later get caught
 python3 src/paper.py settle   -> fills in closing line + final score for finished games
 python3 src/paper.py report   -> how the flagged overs are doing
 """
@@ -112,6 +113,7 @@ def log_games(rows):
 
 
 STARTED = ("LIVE", "CRIT", "OFF", "FINAL")  # NHL game states once the puck has dropped
+POSTPONED = ("PPD", "CNCL")  # NHL gameScheduleState: not played on that date (a void bet; logged again on its new date)
 
 
 def record_actual_starters(d, days_back=7):
@@ -124,7 +126,7 @@ def record_actual_starters(d, days_back=7):
              & (d.date <= date.today().isoformat())]
     for day in sorted(need.date.unique()):
         try:
-            with urllib.request.urlopen(fetch(f"https://api-web.nhle.com/v1/score/{day}")) as f:
+            with urllib.request.urlopen(fetch(f"https://api-web.nhle.com/v1/score/{day}"), timeout=30) as f:
                 ids = {(g["awayTeam"]["abbrev"], g["homeTeam"]["abbrev"]): g["id"] for g in json.load(f)["games"]
                        if g.get("gameState") in STARTED}
         except Exception as e:
@@ -153,6 +155,18 @@ def update_actual_starters():
     print(f"(actual starters: {after - before} new)")
 
 
+def remove_games(day, keys):
+    """Drop `day`'s games {(away, home)} from the log: postponed / cancelled after the morning run logged them, so the
+    dashboard stops showing them as tonight's picks (settle() does the same for past days)."""
+    d = read_log()
+    gone = d[(d.date == day) & pd.Series([(a, h) in keys for a, h in zip(d.away, d.home)], index=d.index, dtype=bool)]
+    if len(gone):
+        d.drop(index=gone.index).to_csv(LOG, index=False)
+        names = ", ".join(f"{a}@{h}" for a, h in zip(gone.away, gone.home))
+        print(f"(postponed / cancelled, removed from the log: {names})")
+        health.note(f"• Postponed / cancelled, removed from today's slate: {names}")
+
+
 CLOSE_RETRY_DAYS = 3  # how long a settled game missing its closing line keeps getting re-checked
 
 
@@ -168,7 +182,7 @@ def settle():
     postponed, newly, bets = [], 0, []  # newly settled games / bets: for the run's summary
     for day in sorted(todo.date.unique()):
         try:  # a score / odds blip skips this day; the next run settles it
-            with urllib.request.urlopen(fetch(f"https://api-web.nhle.com/v1/score/{day}")) as f:
+            with urllib.request.urlopen(fetch(f"https://api-web.nhle.com/v1/score/{day}"), timeout=30) as f:
                 scores = {(g["awayTeam"]["abbrev"], g["homeTeam"]["abbrev"]): g for g in json.load(f)["games"]}
             closing = {}
             for r in odds.day_games(date.fromisoformat(day), 15):
@@ -187,7 +201,7 @@ def settle():
                     if not pd.isna(d.at[i, "result"]) and not pd.isna(d.at[i, "bet_under"]):
                         d.at[i, "clv"] = clv(d.at[i, "bet_total"], d.at[i, "bet_over"], d.at[i, "bet_under"], c)
                 continue
-            if g and g.get("gameScheduleState") in ("PPD", "CNCL"):  # never played on this date: a void bet
+            if g and g.get("gameScheduleState") in POSTPONED:  # never played on this date: a void bet
                 postponed.append(i)
                 continue
             if not g or g["gameState"] not in ("OFF", "FINAL"):
@@ -236,16 +250,23 @@ def report():
         print("no log yet")
         return
     d = read_log()
+    import dashboard  # THE paper record, as the dashboard shows it: closing information only (dashboard.closing_bets)
+    cb = dashboard.closing_bets(d)
+    if len(cb):
+        cd = cb[cb.res != "P"]
+        rec = (f"{(cb.res == 'W').sum()}-{(cb.res == 'L').sum()}-{(cb.res == 'P').sum()} ({(cd.res == 'W').mean():.1%} wins), "
+               f"{cb.units.sum():+.2f}u, ROI {cb.units.mean():+.1%}, {len(cb)} settled")
+        print(f"paper record (closing line, as on the dashboard): {rec}\n")
+        health.note(f"✓ Paper record (closing line, as on the dashboard): {rec}")
     d = d[~d.logged_at.astype(str).str.contains("retroactively")]  # backfilled days don't count
     f = d[d.flag]
     s = f[f.result.notna()]
-    print(f"games logged: {len(d)}   flagged overs: {len(f)}   settled: {len(s)}")
+    print(f"first-logged bets (the line when a game was first flagged; not the paper record):\n"
+          f"games logged: {len(d)}   flagged overs: {len(f)}   settled: {len(s)}")
     if len(s):
         dec = s[s.result != "P"]
         print(f"record {(s.result == 'W').sum()}-{(s.result == 'L').sum()}-{(s.result == 'P').sum()}"
               f"   win {(dec.result == 'W').mean():.1%}   profit {s.profit.sum():+.2f}u   ROI {s.profit.mean():+.1%}")
-        health.note(f"✓ Paper record: {(s.result == 'W').sum()}-{(s.result == 'L').sum()}-{(s.result == 'P').sum()} "
-                    f"({(dec.result == 'W').mean():.1%} wins), {s.profit.sum():+.2f}u, ROI {s.profit.mean():+.1%}")
         sb = s[s.profit_best.notna()]
         if len(sb):
             print(f"at the best sportsbook price: profit {sb.profit_best.sum():+.2f}u   ROI {sb.profit_best.mean():+.1%}"
@@ -253,7 +274,7 @@ def report():
         c = s.clv.dropna()
         if len(c):
             print(f"line moved toward our over by close: {(c > 0).mean():.0%} of {len(c)} (backtest: ~75%+ is good)")
-        print("\nbacktest expectation (2020+ data): 53-55% wins, about break-even to +2% ROI, ~+2 pts more at the best book. Judge after ~50-75 flagged picks, not before.")
+        print("\nbacktest (2021-26, 2020+ data): 53.7% wins / +2.6% ROI at the opening line, 55.1% / +3.0% at the close, ~+2 pts more at the best book. Judge after ~50-75 flagged picks, not before.")
         print(s[["date", "away", "home", "bet_total", "bet_over", "best_book", "best_total", "best_over", "close_total",
                  "final_total", "result", "profit", "profit_best", "clv"]]
               .tail(15).to_string(index=False))

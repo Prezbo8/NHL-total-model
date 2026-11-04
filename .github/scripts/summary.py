@@ -1,5 +1,5 @@
-"""The last step of every workflow job: what the job is for, what it did and how it ended, in the log and at the top
-of the run's page on the Actions tab (GitHub's job summary).
+"""The last step of every workflow job: what the job is for, what it did and how it ended, in the log and on the run's page
+on the Actions tab (GitHub's job summary, under the job diagram).
 
   python3 .github/scripts/summary.py "<what this job does>"
 

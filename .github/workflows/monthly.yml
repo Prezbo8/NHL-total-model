@@ -4,7 +4,7 @@ name: Monthly model check
 # predictions) with this season's games and posts a report as a GitHub issue. Report only: nothing in
 # the model changes by itself. Runs on the 1st; GitHub's scheduler is unreliable here, so the daily run
 # also starts it whenever this month's report doesn't exist yet. The last step (Summary) says what the run did and how it
-# ended, in the log and at the top of the run's page.
+# ended, in the log and on the run's page.
 on:
   schedule:
     - cron: "23 15 1 * *"
@@ -84,7 +84,7 @@ jobs:
           echo "✗ Couldn't save the report (8 tries): the next daily run starts this check again" >> "$RUN_SUMMARY"
           echo "::error::couldn't save the report (the issue is posted; the next daily run will start this check again)"; exit 1
 
-      - name: Summary (what this run did and how it ended; also at the top of the run's page)
+      - name: Summary (what this run did and how it ended; also on the run's page)
         if: ${{ always() }}
         env:
           STARTED_BY: ${{ github.event_name == 'schedule' && 'schedule' || (github.triggering_actor == 'github-actions[bot]' && 'monthly' || 'manual') }}

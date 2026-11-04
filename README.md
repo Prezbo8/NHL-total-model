@@ -41,6 +41,7 @@ then adjusted for:
 - **Back-to-backs**: tired team −8% scoring, its opponent +6.5%
 - **Team skating speed** (NHL EDGE, last season's 20+ mph bursts): +2% own scoring and −1.7% to the opponent per step above average
 - **Injuries and lineups**: injured, suspended or scratched regulars replaced by a replacement-level player (effect sized 1.15×, from the backtest on who dressed)
+- **Eliminated teams** (from about March): a team already out of the playoffs allows ~4% more goals and scores 1% fewer
 
 Only data from the 2020-21 season onward is used.
 
@@ -109,7 +110,7 @@ data/                         CSV data
   key_players/  moves/          per-day key players and projection-move snapshots (dashboard)
 docs/                         the website (GitHub Pages)
 supabase/schema.sql           Supabase tables (nhl_*): run history + once-a-day results; paste once into the SQL Editor
-tests/check_model.py          79 component checks (paper log, settling, goalies, model, injuries, odds, dashboard, projection moves, daily stats, run summaries)
+tests/check_model.py          84 component checks (paper log, settling, goalies, model, injuries, odds, dashboard, projection moves, daily stats, run summaries)
 ```
 
 ## Schedule: two kinds of runs
@@ -134,8 +135,8 @@ projections** (the hourly run), each with ✓ or ⚠.
   When it brings in new data it **starts a model run right away**, so the dashboard and projections use the
   new data within minutes instead of at the next hourly run (that model run never starts a stats run back).
 - **Every run ends with a Summary step**: what the job is for, what it did (✓ done, ✗ failed, – nothing
-  to do) and the final result. It's the last step in the log and is also shown at the top of the run's page
-  on the Actions tab. Steps add their lines with `health.note()` (Python) or `echo ... >> "$RUN_SUMMARY"`;
+  to do) and the final result. It's the last step in the log and is also shown on the run's page on the
+  Actions tab (under the job diagram). Steps add their lines with `health.note()` (Python) or `echo ... >> "$RUN_SUMMARY"`;
   `.github/scripts/summary.py` prints them.
 - `.github/workflows/keeper.yml` stays running on GitHub and starts both on time. GitHub stops any run
   after 6 hours, so the keeper starts a fresh copy of itself every 5.5 hours; only one keeper runs at a time.
@@ -144,7 +145,7 @@ projections** (the hourly run), each with ✓ or ⚠.
 - **Alerts** (GitHub issues, which email you, and close themselves on recovery): a data source failing 2
   runs in a row; "Daily stats" when the once-a-day run failed or hasn't worked for 30 hours; "Model runs
   failing" when a run fails and none has finished for 2 hours. A source failing re-runs the hourly job
-  every 5 minutes (not during the 11 PM hour); a site answering 403 (refusing us) isn't retried within a run.
+  every 5 minutes, only between 11 AM and 11 PM Eastern; a site answering 403 (refusing us) isn't retried within a run.
 
 Run it now: **Actions** tab → **Daily NHL run** (or **Daily stats (once a day)**) → **Run workflow**
 (`gh workflow run daily.yml` / `gh workflow run moneypuck.yml`). If the keeper ever stops (no "Keeper"
@@ -153,7 +154,7 @@ run in progress on the Actions tab), restart it with **Keeper** → **Run workfl
 ## Checks and commands
 
 Checks run on GitHub, not on a local machine: every push runs the **Tests** workflow (pyflakes, a syntax
-check of every workflow's shell scripts, the 79 component checks, a projection run for tomorrow, a dashboard
+check of every workflow's shell scripts, the 84 component checks, a projection run for tomorrow, a dashboard
 build, and a check that the backtest is unchanged). Change code on a branch, open a pull request, and merge once Tests pass.
 
 What the workflows run:
@@ -164,7 +165,7 @@ python3 src/model.py stats                # once a day: MoneyPuck, goalie histor
 python3 src/model.py today [YYYY-MM-DD]   # hourly: projections + flags (only today's date is logged)
 python3 src/paper.py report               # paper-trading record
 python3 src/dashboard.py                  # rebuild the website
-python3 tests/check_model.py              # 79 component checks (Tests workflow)
+python3 tests/check_model.py              # 84 component checks (Tests workflow)
 python3 research/lib/history.py           # backtest the overs rule
 python3 research/studies/<name>.py        # any study (see research/README.md)
 ```

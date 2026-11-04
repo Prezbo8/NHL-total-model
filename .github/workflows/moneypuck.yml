@@ -10,7 +10,7 @@ name: Daily stats (once a day)
 # didn't show on the dashboard until a manual run at 9:46). The hourly runs (daily.yml) never download from MoneyPuck:
 # they use the saved copy + the files committed here, and alert when data/stats_status.json shows no working run for
 # 30 hours. (Nov 3 2026: MoneyPuck served ~30 KB/s, a 70-min download, and every hourly run timed out waiting for it.)
-# The last step (Summary) says what the run did and how it ended, in the log and at the top of the run's page.
+# The last step (Summary) says what the run did and how it ended, in the log and on the run's page.
 on:
   workflow_dispatch:
     inputs:
@@ -121,7 +121,7 @@ jobs:
           echo "✗ New data, but the model run couldn't be started (the next hourly run uses the new data)" >> "$RUN_SUMMARY"
           echo "::warning::couldn't start the model run; the next hourly run uses the new data"
 
-      - name: Summary (what this run did and how it ended; also at the top of the run's page)
+      - name: Summary (what this run did and how it ended; also on the run's page)
         if: ${{ always() }}
         env:
           STARTED_BY: ${{ inputs.trigger }}
