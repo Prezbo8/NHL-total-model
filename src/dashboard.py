@@ -2093,7 +2093,9 @@ def shell(title, body, root=""):
 <body><div class="wrap">{body}
 {SCRIPT}
 <footer>Paper trading only, not betting advice · Team logos © NHL and its teams ·
-<a href="https://github.com/Prezbo8/NHL-total-model">github.com/Prezbo8/NHL-total-model</a></footer>
+<a href="https://github.com/Prezbo8/NHL-total-model">github.com/Prezbo8/NHL-total-model</a><br>
+Stats: <a href="https://moneypuck.com">MoneyPuck.com</a> · Schedule, scores &amp; rosters: NHL · Odds: Action Network ·
+Goalies &amp; lineups: DailyFaceoff, Rotowire, GoaliePost · Injuries: ESPN, Rotowire</footer>
 </div></body></html>"""
 
 
@@ -2214,12 +2216,12 @@ def build():
 <b>power play</b> (PP and PK efficiency × penalties drawn and taken), plus other situations. The opposing <b>starting goalie's</b>
 goals saved above expected scales goals allowed, <b>back-to-backs</b> cut the tired team's scoring ~8% (opponent +6.5%), and
 <b>team skating speed</b> nudges fast teams up (+2% per step) and their opponents down (−1.7%).
-Data from the 2020-21 season onward only (MoneyPuck, NHL API, DailyFaceoff, Action Network). Runs on GitHub Actions at 12:01 AM, every hour from 11:17 AM to 10:17 PM ET, and 15 minutes before each game.</p>
+Data from the 2020-21 season onward only (MoneyPuck, NHL API, DailyFaceoff, Action Network). Runs on GitHub Actions: MoneyPuck stats once a day at 8:30 AM ET; odds, goalies, lineups and projections at 12:01 AM, every hour from 11:17 AM to 10:17 PM ET, and 15 minutes before each game.</p>
 <dl>
 <div><dt>Projected goals bar</dt><dd>Each team's projected goals on a 0–4.5 scale. The tick marks the high-scoring cutoff; a solid bar means past it.</dd></div>
 <div><dt>P(7+)</dt><dd>Model's chance of 7+ total goals, from the projected total and how evenly matched the teams are (close games get more overtime, shootout and empty-net goals): wins an over 6.5 and an over 6 (exactly 6 pushes an over 6). NHL average ≈ 45%.</dd></div>
 <div><dt>OVER FLAG</dt><dd>Both teams past the cutoff and the line is 6 or 6.5. These are the picks that count in the record.</dd></div>
-<div><dt>Goalie badges</dt><dd>✓ Confirmed / Likely / Projected starter, from DailyFaceoff, refreshed every run. "Changed" = different from the starter the projection used.</dd></div>
+<div><dt>Goalie badges</dt><dd>✓ Confirmed / Likely / Projected starter, from DailyFaceoff, Rotowire and GoaliePost combined, refreshed every hourly run. "Changed" = different from the starter the projection used.</dd></div>
 <div><dt>B2B</dt><dd>Team played yesterday: its projected scoring is cut ~8% and its opponent's raised ~6.5%.</dd></div>
 <div><dt>Injuries &amp; lineups</dt><dd>ESPN's injury list plus DailyFaceoff's projected lineups checked against the official NHL roster. Players who are out, on IR, suspended, or missing from tonight's lineup (scratch) are replaced by a replacement-level skater. GF = change to his team's scoring, GA = change to goals against (shown for whichever is bigger; hover for both). Day-to-day players are shown but not adjusted.</dd></div>
 <div><dt>Breakdown</dt><dd>Each team's goals = (5-on-5 + power play + other situations) × opposing-goalie × back-to-back × team speed × injury adjustments. A + goalie number means the opposing goalie has been below average.</dd></div>
