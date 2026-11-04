@@ -2187,7 +2187,7 @@ def build():
     d = paper.read_log()
     lr, mp = last_run(), stats_status()
     stamp = ("<div class='lastrun'>"
-             + (f"<div class='lrgrp'>{tip('MoneyPuck data', 'When the once-a-day run last updated MoneyPuck data (team stats, goalie history, skater stats) and the Supabase daily tables. It runs at 8:30 AM Eastern, after MoneyPuck posts last night games, and again whenever an hourly run sees MoneyPuck has newer data. Games through = the newest game in that data.', 'tr down')}{mp}</div>" if mp else "")
+             + (f"<div class='lrgrp'>{tip('MoneyPuck data', 'When the once-a-day run last updated MoneyPuck data (team stats, goalie history, skater stats) and the Supabase daily tables. It runs at 8:30 AM Eastern, after MoneyPuck posts last night’s games, and again whenever an hourly run sees MoneyPuck has newer data. Games through = the newest game in that data.', 'tr down')}{mp}</div>" if mp else "")
              + f"<div class='lrgrp'>{tip('Odds, lineups & projections', 'When the hourly run last re-checked odds, goalies, lineups and injuries, and re-projected every game that had not started. It runs at 12:01 AM, every hour from 11:17 AM to 10:17 PM Eastern, and 15 minutes before each game.', 'tr down')}"
              f"<b>{e(lr)}{run_status()}</b></div>{checkpoints(d)}</div>") if lr else ""
     rk = rankings(d)
