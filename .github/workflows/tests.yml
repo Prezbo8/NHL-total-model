@@ -49,7 +49,7 @@ jobs:
         run: |
           python -m pyflakes src/*.py research/lib/*.py research/studies/*.py tests/*.py .github/scripts/*.py
           echo "✓ Static check (pyflakes): no problems" >> "$RUN_SUMMARY"
-      - name: Workflow scripts parse (bash -n on every run block: a typo must never reach the keeper)
+      - name: Workflow files and scripts parse (YAML + bash -n on every run block, so a typo never reaches the keeper)
         id: workflow-scripts
         run: |
           python - <<'PY'
