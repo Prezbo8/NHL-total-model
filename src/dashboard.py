@@ -2040,7 +2040,7 @@ table.gt{font-size:12.5px;border-collapse:separate;border-spacing:0;width:100%;t
 .gt tr.sec th{font-size:10.5px;font-weight:800;letter-spacing:.08em;color:var(--ink);text-align:left;padding:7px 8px 5px;
   border-bottom:1px solid var(--line);background:color-mix(in srgb,var(--ice) 60%,var(--card))}
 .gt tr.sec th:first-child{border-top-left-radius:12px}.gt tr.sec th:last-child{border-top-right-radius:12px}
-.gt td[rowspan]{vertical-align:middle;font-weight:600}.gt td.p7{font-weight:800}
+.gt td[rowspan]{vertical-align:middle;font-weight:600}.gt td.p7{font-weight:800;font-size:clamp(12.5px,1.4vw,21px)}   /* P(7+) fills its box: 21px on a full-width page, never under 12.5px (fits down to the 760px phone switch) */
 .gt td.big-total{font-size:18px;font-weight:800}
 .gt td.tot .big-total{display:inline-block;width:2.1ch;text-align:right;font-size:18px;margin-right:6px;vertical-align:-2px}
 .gt .score-cell{font-size:15px;font-weight:800}
