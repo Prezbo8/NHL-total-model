@@ -427,15 +427,17 @@ summary = importlib.util.module_from_spec(_spec); _spec.loader.exec_module(summa
 env = {"RUN_SUMMARY": notes, "JOB_STATUS": "success", "STARTED_BY": "hourly",
        "STEPS": json.dumps({"rebuild-dashboard": {"outcome": "success", "conclusion": "success"}})}
 text, md = summary.summary("Model run", env)
+ok = ("Job:        Model run" in text and "the keeper (hourly slot)" in text and "  ✓ one" in text and "  ✗ two" in text
+      and "FINISHED, WITH PROBLEMS" in text and "- ✗ two" in md and "FINISHED, WITH PROBLEMS" in md)
 check("summary: the job, what started it, every line, and the result (a ✗ line -> finished, with problems)",
-      "Job:        Model run" in text and "the keeper (hourly slot)" in text and "  ✓ one" in text and "  ✗ two" in text
-      and "FINISHED, WITH PROBLEMS" in text and "- ✗ two" in md and "FINISHED, WITH PROBLEMS" in md, text)
+      ok, "" if ok else text)  # the sample summary only when the check fails: it must never look like this run's own result
 env.update(JOB_STATUS="failure", STARTED_BY="manual", GITHUB_TRIGGERING_ACTOR="Prezbo8", STEPS=json.dumps({
     "rebuild-dashboard": {"outcome": "failure", "conclusion": "failure"},
     "save-moneypuck-copy": {"outcome": "failure", "conclusion": "success"}, "settle-bets": {"outcome": "skipped", "conclusion": "skipped"}}))
 text, md = summary.summary("Model run", env)
+ok = "✗ FAILED" in text and "Failed step: rebuild dashboard, save moneypuck copy (ignored)" in text and "a manual run (Prezbo8)" in text
 check("summary: a failed run names its failed steps (continue-on-error ones 'ignored'); a manual run says who",
-      "✗ FAILED" in text and "Failed step: rebuild dashboard, save moneypuck copy (ignored)" in text and "a manual run (Prezbo8)" in text, text)
+      ok, "" if ok else text)
 
 print(f"\n{sum(results)}/{len(results)} checks passed")
 sys.exit(0 if all(results) else 1)

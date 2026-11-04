@@ -54,16 +54,17 @@ jobs:
         run: |
           python - <<'PY'
           import glob, os, re, subprocess, yaml
-          n = 0
-          for path in sorted(glob.glob(".github/workflows/*.yml")):
+          n, files = 0, sorted(glob.glob(".github/workflows/*.yml"))
+          for path in files:
               for name, job in yaml.safe_load(open(path))["jobs"].items():
                   for step in job["steps"]:
                       if "run" in step:   # GitHub fills in its expressions before bash sees the script: stand-in X
                           r = subprocess.run(["bash", "-n"], input=re.sub(r"\$\{\{.*?\}\}", "X", step["run"]), text=True, capture_output=True)
                           assert r.returncode == 0, f"{path} {name} '{step.get('name')}': {r.stderr}"
                           n += 1
-          print(f"all {n} run blocks parse")
-          open(os.environ["RUN_SUMMARY"], "a", encoding="utf-8").write(f"✓ Workflow scripts: all {n} run blocks parse (bash -n)\n")
+          print(f"all {len(files)} workflow files and {n} run blocks parse")
+          open(os.environ["RUN_SUMMARY"], "a", encoding="utf-8").write(
+              f"✓ Workflow files: all {len(files)} parse (YAML) and all {n} run blocks pass a bash syntax check\n")
           PY
       - name: Component checks
         id: component-checks
