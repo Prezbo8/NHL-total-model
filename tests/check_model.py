@@ -192,6 +192,15 @@ health.alert()
 check("alert after 2 failed runs in a row; closes when the source recovers",
       made == ["Data source failing: Dead"] and closed == ["7"])
 health._results.clear()
+import urllib.error
+n403 = {"n": 0}
+def forbidden():
+    n403["n"] += 1
+    raise urllib.error.HTTPError("https://example.com", 403, "Forbidden", {}, None)
+check("a 403 (site refusing us) is tried once, not retried, and still counts as a failure",
+      health.attempt("Blocked", forbidden, "fallback", waits=[0.01] * 4) == "fallback" and n403["n"] == 1
+      and "403" in (health._results.get("Blocked") or ""), f"{n403['n']} tries")
+health._results.clear()
 made, closed, open_alert = [], [], []
 health._gh = lambda *a: (made.append(a[a.index("--title") + 1]) if a[:2] == ("issue", "create") else closed.append(a[2]) if a[:2] == ("issue", "close") else None,
                          type("R", (), {"returncode": 0, "stdout": json.dumps(open_alert) if a[:2] == ("issue", "list") else ""})())[1]
