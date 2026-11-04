@@ -10,7 +10,7 @@ create table if not exists nhl_runs (
   run_id        uuid primary key,
   run_at        timestamptz not null,
   game_date     date not null,
-  trigger       text,              -- hourly / pregame / manual / schedule
+  trigger       text,              -- hourly / pregame / manual / schedule / retry / stats
   commit_sha    text,
   gh_run_url    text,
   n_games       int,

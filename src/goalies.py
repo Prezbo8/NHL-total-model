@@ -31,7 +31,8 @@ def get(url, tries=4):
 
 def refresh(seasons):
     """Re-download starts for `seasons`, then MoneyPuck files only for goalies
-    who have played a game we don't have yet."""
+    who have played a game we don't have yet. Returns (goalies re-downloaded, goalies still missing a game:
+    MoneyPuck posts some goalie files minutes after its team file, Nov 4 2026)."""
     old = pd.read_csv(STARTS) if os.path.exists(STARTS) else pd.DataFrame()
     rows = []
     for s in seasons:
@@ -60,4 +61,7 @@ def refresh(seasons):
             parts.append(have[have.playerId == pid])  # a failed download must never erase what we had
     if need:
         print()
-    pd.concat(parts).to_csv(GOALIE_GAMES, index=False)
+    out = pd.concat(parts)
+    out.to_csv(GOALIE_GAMES, index=False)
+    now_have = set(zip(out.playerId, out.gameId)) if "gameId" in out else set()  # no file yet + every download failed
+    return len(need), len({p for p, g in zip(cur.playerId, cur.gameId) if (p, g) not in now_have})

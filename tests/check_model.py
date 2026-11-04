@@ -6,6 +6,7 @@ import os, re, json, shutil, sys, datetime, tempfile
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "src"))
 import pandas as pd
 import paper, goalies, injuries, players, model as m, split_model as sm, odds, grade, dashboard
+os.environ.pop("RUN_SUMMARY", None)  # the model code these checks call must not write into the Tests run's own summary
 SP = tempfile.mkdtemp(prefix="nhl-check-") + "/"
 results = []
 def check(name, ok, detail=""):
@@ -41,10 +42,14 @@ oct1 = real[real.date == "2026-10-01"].copy()
 for c in ("away_score", "home_score", "final_total", "close_total", "close_over", "close_under", "result", "profit", "clv", "result_best", "profit_best"):
     oct1[c] = None
 oct1.to_csv(paper.LOG, index=False)
+os.environ["RUN_SUMMARY"] = SP + "settle_summary.txt"
 paper.settle()
+os.environ.pop("RUN_SUMMARY")
 s = paper.read_log()
 fs = s[s.flag].iloc[0]
 check("Oct 1 re-settles: all 8 finals", s.final_total.notna().sum() == 8)
+settle_note = open(SP + "settle_summary.txt", encoding="utf-8").read().strip()
+check("settle: the run's summary says what it settled", settle_note == "✓ Settled 8 finished games; bets: FLA@SJS W", settle_note)
 check("Oct 1 totals match the real scores", list(s.final_total.astype(int)) == list(real[real.date == "2026-10-01"].final_total.astype(int)))
 check("flagged FLA@SJS: W +1.02 at consensus, best-book scored too", fs.result == "W" and abs(fs.profit - 1.02) < 1e-9 and not pd.isna(fs.profit_best))
 check("unflagged games not scored as bets", s[~s.flag].result.isna().all())
@@ -96,8 +101,10 @@ gg[~((gg.playerId == shes) & (gg.gameId == last))].to_csv(goalies.GOALIE_GAMES, 
 real_get = goalies.get
 goalies.get = lambda url, *a, **k: (_ for _ in ()).throw(OSError("outage")) if "moneypuck" in url else real_get(url, *a, **k)
 goalies.time.sleep = lambda s: None
-goalies.refresh([2026])
+got = goalies.refresh([2026])
 check("MoneyPuck outage keeps goalie history", (pd.read_csv(goalies.GOALIE_GAMES).playerId == shes).sum() == n0 - 1)
+check("goalie refresh reports goalies re-downloaded + still missing a game (outage: all still missing)",
+      got[0] >= 1 and got[1] == got[0], str(got))
 goalies.get = real_get
 
 print("model pieces")
@@ -402,6 +409,33 @@ check("morning run: MoneyPuck never posts -> last check at 11:10, then keeps the
       got == datetime.date(2026, 11, 2) and seen[-1] == "11:10" and len(seen) == 20, f"{len(seen)} checks, last {seen[-1]}")
 got = mp_run(None, want=None)
 check("morning run: no games last night -> one check, no waiting", seen == ["08:00"])
+check("MoneyPuck's Last-Modified shown in Eastern time (the download's log line)",
+      m.posted("Wed, 04 Nov 2026 12:29:03 GMT") == "Wed, Nov 4 7:29 AM EST" and m.posted(None) == "at an unknown time",
+      m.posted("Wed, 04 Nov 2026 12:29:03 GMT"))
+
+print("run summaries (the last step of every workflow)")
+import importlib.util
+notes = SP + "run_summary.txt"
+os.environ["RUN_SUMMARY"] = notes
+health.note("✓ one")
+health.note("✗ two")
+os.environ.pop("RUN_SUMMARY")
+health.note("not written")
+check("notes go to $RUN_SUMMARY, only when the workflow sets it", open(notes, encoding="utf-8").read() == "✓ one\n✗ two\n")
+_spec = importlib.util.spec_from_file_location("summary", os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".github", "scripts", "summary.py"))
+summary = importlib.util.module_from_spec(_spec); _spec.loader.exec_module(summary)
+env = {"RUN_SUMMARY": notes, "JOB_STATUS": "success", "STARTED_BY": "hourly",
+       "STEPS": json.dumps({"rebuild-dashboard": {"outcome": "success", "conclusion": "success"}})}
+text, md = summary.summary("Model run", env)
+check("summary: the job, what started it, every line, and the result (a ✗ line -> finished, with problems)",
+      "Job:        Model run" in text and "the keeper (hourly slot)" in text and "  ✓ one" in text and "  ✗ two" in text
+      and "FINISHED, WITH PROBLEMS" in text and "- ✗ two" in md and "FINISHED, WITH PROBLEMS" in md, text)
+env.update(JOB_STATUS="failure", STARTED_BY="manual", GITHUB_TRIGGERING_ACTOR="Prezbo8", STEPS=json.dumps({
+    "rebuild-dashboard": {"outcome": "failure", "conclusion": "failure"},
+    "save-moneypuck-copy": {"outcome": "failure", "conclusion": "success"}, "settle-bets": {"outcome": "skipped", "conclusion": "skipped"}}))
+text, md = summary.summary("Model run", env)
+check("summary: a failed run names its failed steps (continue-on-error ones 'ignored'); a manual run says who",
+      "✗ FAILED" in text and "Failed step: rebuild dashboard, save moneypuck copy (ignored)" in text and "a manual run (Prezbo8)" in text, text)
 
 print(f"\n{sum(results)}/{len(results)} checks passed")
 sys.exit(0 if all(results) else 1)

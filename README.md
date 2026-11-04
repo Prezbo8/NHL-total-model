@@ -76,6 +76,7 @@ Every idea tested so far (adopted, kept or rejected, with the numbers) is listed
 ```
 .github/workflows/            daily.yml (hourly run) + moneypuck.yml (once-a-day MoneyPuck data) + keeper.yml (starts both on time)
                               + tests.yml (checks) + monthly.yml (check-up)
+.github/scripts/              next_slot.py (the keeper's next slot) + summary.py (every run's last step: Summary)
 src/                          everything the daily run uses
   model.py                      entry points: `today` projects, flags and logs (hourly); `stats` = the once-a-day run; also the original model
   split_model.py                the 5v5 / power-play model used daily
@@ -108,7 +109,7 @@ data/                         CSV data
   key_players/  moves/          per-day key players and projection-move snapshots (dashboard)
 docs/                         the website (GitHub Pages)
 supabase/schema.sql           Supabase tables (nhl_*): run history + once-a-day results; paste once into the SQL Editor
-tests/check_model.py          70 component checks (paper log, settling, goalies, model, injuries, odds, dashboard, projection moves, daily stats)
+tests/check_model.py          79 component checks (paper log, settling, goalies, model, injuries, odds, dashboard, projection moves, daily stats, run summaries)
 ```
 
 ## Schedule: two kinds of runs
@@ -130,6 +131,12 @@ projections** (the hourly run), each with ✓ or ⚠.
   in GitHub's Actions cache), refreshes goalie history, skater stats and team speed, commits them with
   `data/stats_status.json`, and **replaces** the Supabase daily tables (`nhl_daily_teams`, `_goalies`,
   `_skaters`, `_meta`). (Nov 3, 2026: MoneyPuck served ~30 KB/s and every run that downloaded it timed out.)
+  When it brings in new data it **starts a model run right away**, so the dashboard and projections use the
+  new data within minutes instead of at the next hourly run (that model run never starts a stats run back).
+- **Every run ends with a Summary step**: what the job is for, what it did (✓ done, ✗ failed, – nothing
+  to do) and the final result. It's the last step in the log and is also shown at the top of the run's page
+  on the Actions tab. Steps add their lines with `health.note()` (Python) or `echo ... >> "$RUN_SUMMARY"`;
+  `.github/scripts/summary.py` prints them.
 - `.github/workflows/keeper.yml` stays running on GitHub and starts both on time. GitHub stops any run
   after 6 hours, so the keeper starts a fresh copy of itself every 5.5 hours; only one keeper runs at a time.
   (GitHub's own scheduler was too unreliable for this repo: on Oct 2, 2026 seven slots in a row never
@@ -145,9 +152,9 @@ run in progress on the Actions tab), restart it with **Keeper** → **Run workfl
 
 ## Checks and commands
 
-Checks run on GitHub, not on a local machine: every push runs the **Tests** workflow (pyflakes, the
-70 component checks, a projection run for tomorrow, a dashboard build, and a check that the backtest is
-unchanged). Change code on a branch, open a pull request, and merge once Tests pass.
+Checks run on GitHub, not on a local machine: every push runs the **Tests** workflow (pyflakes, a syntax
+check of every workflow's shell scripts, the 79 component checks, a projection run for tomorrow, a dashboard
+build, and a check that the backtest is unchanged). Change code on a branch, open a pull request, and merge once Tests pass.
 
 What the workflows run:
 
@@ -157,7 +164,7 @@ python3 src/model.py stats                # once a day: MoneyPuck, goalie histor
 python3 src/model.py today [YYYY-MM-DD]   # hourly: projections + flags (only today's date is logged)
 python3 src/paper.py report               # paper-trading record
 python3 src/dashboard.py                  # rebuild the website
-python3 tests/check_model.py              # 70 component checks (Tests workflow)
+python3 tests/check_model.py              # 79 component checks (Tests workflow)
 python3 research/lib/history.py           # backtest the overs rule
 python3 research/studies/<name>.py        # any study (see research/README.md)
 ```

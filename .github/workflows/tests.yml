@@ -2,10 +2,11 @@ name: Tests
 
 # Runs the model's checks on the same Python / pandas / numpy as the daily run, whenever model code
 # changes (and on demand). Nothing is committed: projections are for tomorrow, so nothing is logged.
+# The last step (Summary) says what passed and how the run ended, in the log and at the top of the run's page.
 on:
   workflow_dispatch: {}
   push:
-    paths: ["src/**", "research/**", "tests/**", ".github/workflows/**"]
+    paths: ["src/**", "research/**", "tests/**", ".github/workflows/**", ".github/scripts/**"]
 concurrency:   # a newer push to the same branch replaces a test run still going
   group: tests-${{ github.ref }}
   cancel-in-progress: true
@@ -15,13 +16,14 @@ jobs:
     timeout-minutes: 30   # default is 6 h (a stuck download would hold a runner all day)
     env:
       TZ: America/New_York
+      RUN_SUMMARY: /tmp/run_summary.txt   # each step adds what passed; the last step prints it (.github/scripts/summary.py)
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
         with:
           python-version: "3.14"
       - name: Install (same versions as the daily run)
-        run: pip install "pandas==3.0.6" "numpy==2.5.3" pyflakes && python -c "import sys, pandas, numpy; print('python', sys.version.split()[0], '| pandas', pandas.__version__, '| numpy', numpy.__version__)"
+        run: pip install "pandas==3.0.6" "numpy==2.5.3" pyflakes pyyaml && python -c "import sys, pandas, numpy; print('python', sys.version.split()[0], '| pandas', pandas.__version__, '| numpy', numpy.__version__)"
       - name: Restore MoneyPuck data (cached by the daily run)
         id: mp
         uses: actions/cache/restore@v6
@@ -43,21 +45,56 @@ jobs:
             data/moneypuck_games.csv.modified
           key: moneypuck-${{ hashFiles('data/moneypuck_games.csv.modified') }}
       - name: Static check
-        run: python -m pyflakes src/*.py research/lib/*.py research/studies/*.py tests/*.py
-      - name: Component checks
-        run: python tests/check_model.py
-      - name: Projection run for tomorrow (never logged)
-        run: python src/model.py today "$(date -d tomorrow +%F)" | tail -8
-      - name: Dashboard build + settle on a copy
-        run: python src/dashboard.py && python src/paper.py report
-      - name: Backtest unchanged
+        id: static-check
+        run: python -m pyflakes src/*.py research/lib/*.py research/studies/*.py tests/*.py .github/scripts/*.py && echo "✓ Static check (pyflakes): no problems" >> "$RUN_SUMMARY"
+      - name: Workflow scripts parse (bash -n on every run block: a typo must never reach the keeper)
+        id: workflow-scripts
         run: |
           python - <<'PY'
-          import sys; sys.path[:0] = ["src", "research/lib"]
+          import glob, os, re, subprocess, yaml
+          n = 0
+          for path in sorted(glob.glob(".github/workflows/*.yml")):
+              for name, job in yaml.safe_load(open(path))["jobs"].items():
+                  for step in job["steps"]:
+                      if "run" in step:   # GitHub fills in its expressions before bash sees the script: stand-in X
+                          r = subprocess.run(["bash", "-n"], input=re.sub(r"\$\{\{.*?\}\}", "X", step["run"]), text=True, capture_output=True)
+                          assert r.returncode == 0, f"{path} {name} '{step.get('name')}': {r.stderr}"
+                          n += 1
+          print(f"all {n} run blocks parse")
+          open(os.environ["RUN_SUMMARY"], "a", encoding="utf-8").write(f"✓ Workflow scripts: all {n} run blocks parse (bash -n)\n")
+          PY
+      - name: Component checks
+        id: component-checks
+        run: |
+          set -o pipefail
+          python tests/check_model.py | tee /tmp/checks.txt || { grep -a '  FAIL' /tmp/checks.txt | sed 's/^ *FAIL */✗ Check failed: /' >> "$RUN_SUMMARY"; exit 1; }
+          echo "✓ Component checks: $(tail -1 /tmp/checks.txt)" >> "$RUN_SUMMARY"
+      - name: Projection run for tomorrow (never logged)
+        id: projection-run
+        run: |
+          set -o pipefail   # without it a crash here would still pass (tail succeeds)
+          python src/model.py today "$(date -d tomorrow +%F)" | tail -8
+      - name: Dashboard build + settle on a copy
+        id: dashboard-build
+        run: python src/dashboard.py && python src/paper.py report && echo "✓ Dashboard builds" >> "$RUN_SUMMARY"
+      - name: Backtest unchanged
+        id: backtest
+        run: |
+          python - <<'PY'
+          import os, sys; sys.path[:0] = ["src", "research/lib"]
           import split_model as sm, history
           p = sm.walk_split(sm.load_split(), known_starters=False)
           d = history.flagged(p).merge(history.lines()[lambda x: x.gameDate >= 20200801], on=["gameDate", "home", "away"])
           for w, want in (("open", 2.6), ("close", 3.0)):
               b = history.bet_results(d, w); roi = b.prof.mean() * 100
               print(f"{w}: {len(b)} bets ROI {roi:+.1f}% (expected {want:+.1f}%)"); assert abs(roi - want) < 0.06
+              open(os.environ["RUN_SUMMARY"], "a", encoding="utf-8").write(f"✓ Backtest unchanged ({w} line): {len(b)} bets, ROI {roi:+.1f}%\n")
           PY
+      - name: Summary (what passed and how the run ended; also at the top of the run's page)
+        if: ${{ always() }}
+        env:
+          JOB_STATUS: ${{ job.status }}
+          STEPS: ${{ toJSON(steps) }}
+        run: |
+          python3 .github/scripts/summary.py "Tests: checks the model code before it runs for real (static check, workflow scripts, component checks, a projection run for tomorrow, a dashboard build, backtest unchanged)" \
+            || echo "Result: ${{ job.status }} (the summary script failed)"

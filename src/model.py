@@ -118,6 +118,7 @@ def refresh_data(tries=3, budget=3 * 60):
                 os.replace(tmp, DATA)
                 if modified:
                     open(stamp, "w").write(modified)
+                print(f"(downloaded new MoneyPuck data: {os.path.getsize(DATA) / 1e6:.0f} MB, MoneyPuck posted it {posted(modified)})")
                 return True
             print(f"(MoneyPuck download looked incomplete, attempt {i + 1}/{tries})")
         except Exception as e:
@@ -128,6 +129,16 @@ def refresh_data(tries=3, budget=3 * 60):
     print("(using the previously downloaded MoneyPuck data)" if os.path.exists(DATA) else
           "(no saved MoneyPuck data yet: .github/workflows/moneypuck.yml downloads it in the background)")
     return False
+
+
+def posted(modified):
+    """MoneyPuck's Last-Modified header ("Wed, 04 Nov 2026 12:29:03 GMT") in Eastern time: "Wed, Nov 4 7:29 AM EST"."""
+    from email.utils import parsedate_to_datetime
+    from zoneinfo import ZoneInfo
+    try:
+        return parsedate_to_datetime(modified).astimezone(ZoneInfo("America/New_York")).strftime("%a, %b %-d %-I:%M %p %Z")
+    except (TypeError, ValueError):
+        return "at an unknown time"
 
 
 def moneypuck_newer():
@@ -410,7 +421,10 @@ def check_daily_stats(health):
             print("(MoneyPuck has newer data than the saved copy: starting the once-a-day stats run; this run uses the saved copy)")
     except Exception as e:  # MoneyPuck slow / down: the hourly run doesn't need it
         print(f"(couldn't check MoneyPuck for newer data: {type(e).__name__}: {e})")
-    health.attempt("Daily stats", stats_ok, waits=[])
+    if health.attempt("Daily stats", stats_ok, waits=[]):  # a failure shows in the "Data sources" summary line
+        s = json.load(open(STATS_STATUS))
+        thru = f"{date.fromisoformat(s['latest_game']):%a, %b %-d}" if s.get("latest_game") else "unknown"
+        health.note(f"✓ MoneyPuck stats: games through {thru} (last checked {datetime.fromisoformat(s['at']):%a %-I:%M %p})")
 
 
 def stats_ok():
@@ -514,15 +528,26 @@ def daily_stats(day=None):
     (h0, m0), (h1, m1) = MP_MORNING
     end = start.replace(hour=h1, minute=m1, second=0, microsecond=0)
     until = end if start.replace(hour=h0, minute=m0, second=0, microsecond=0) <= start < end else start  # outside: one check
+    stamp = DATA + ".modified"  # MoneyPuck's Last-Modified for the saved copy: changes when a new file is downloaded
+    mark = lambda: open(stamp).read().strip() if os.path.exists(stamp) else None
+    before = mark()
 
     def check():  # refresh_data retries on its own, within the job's time
         health.attempt("MoneyPuck stats", lambda: refresh_data(tries=10, budget=max(600, job_end - time.time()))
                        or (_ for _ in ()).throw(RuntimeError("download failed")), False, waits=[])
         return newest_game()
     newest = wait_for_moneypuck(want, until, check, lambda: datetime.now(et), time.sleep)
+    if not health._results.get("MoneyPuck stats"):  # (every failure is listed at the end)
+        health.note("✓ MoneyPuck team file: " + (f"downloaded new data (MoneyPuck posted it {posted(mark())})" if mark() != before
+                    else f"no newer data at MoneyPuck (the saved copy was posted {posted(mark())})"))
     if want and (newest is None or newest < want):
         health._results[f"MoneyPuck hasn't posted {want:%b %-d} games yet"] = f"data through {newest}"
-    health.attempt("Goalie data", lambda: goalies.refresh([season]) or True)
+    elif newest:
+        health.note(f"✓ Games through {newest:%a, %b %-d}" + (" (last night's games are in)" if want else " (no games last night)"))
+    got = health.attempt("Goalie data", lambda: goalies.refresh([season]))
+    if got:
+        health.note("✓ Goalie history: " + (f"{got[0]} goalies updated" if got[0] else "up to date")
+                    + (f" ({got[1]} still missing a recent game)" if got[1] else ""))
     latest = None  # newest game in MoneyPuck's data (the dashboard shows "games through ...")
     if os.path.exists(DATA):
         games = sm.load_split()
@@ -530,6 +555,11 @@ def daily_stats(day=None):
         if (games.season == season).any():  # skater totals this season (injury adjustment + key players); none before opening night
             health.attempt("MoneyPuck skaters", lambda: players.refresh_skaters([season]) or True)
         health.attempt("NHL EDGE speed", lambda: speed.refresh(season - 1) or True)  # last season's speed: fetched once per season
+        worked = lambda name: name in health._results and not health._results[name]
+        if worked("MoneyPuck skaters"):
+            health.note("✓ Skater stats refreshed (MoneyPuck)")
+        if worked("NHL EDGE speed"):
+            health.note("✓ Team speed up to date (NHL EDGE, last season's)")
         try:
             rows = daily_results(games, season)
         except Exception as e:
@@ -538,7 +568,11 @@ def daily_stats(day=None):
         else:
             store.save_daily(*rows)
             print(f"(daily results: {len(rows[0])} teams, {len(rows[1])} goalies, {len(rows[2])} skaters)")
+            if store.enabled() and not health._results.get("Supabase"):
+                health.note(f"✓ Supabase daily tables replaced: {len(rows[0])} teams, {len(rows[1])} goalies, {len(rows[2])} skaters")
     failed = health.failed()
+    for name in failed:
+        health.note(f"✗ {name}: {health._results[name]}")
     with open(STATS_STATUS, "w") as f:
         json.dump({"at": datetime.now().astimezone().isoformat(timespec="minutes"), "latest_game": latest, "failed": failed}, f)
     print("(daily stats: all OK)" if not failed else f"(daily stats failed: {', '.join(failed)})")
@@ -739,9 +773,14 @@ def today(day=None, preview=False):
     print("Model uses 2020-21 onward only. Tested 2021-26: +1.3% ROI at open, +2.4% at close, 53-55% wins"
           " (+2 pts more with line shopping). Small, unproven edge: judge it on live paper trading.")
     print("\nTODAY'S FLAGS: " + ("; ".join(flagged) if flagged else "none"))
+    what = f"{len(log_rows)} games for {date.fromisoformat(day):%a, %b %-d}" if log_rows else f"no NHL games on {date.fromisoformat(day):%a, %b %-d}"
+    what += ("; flags: " + "; ".join(flagged)) if flagged else "; no flags" if log_rows else ""
     if preview:
         save_preview(day, log_rows)
+        late = [k for k, v in health._results.items() if v]  # tomorrow's lines often aren't posted yet overnight
+        health.note(f"✓ Tomorrow preview: {what}" + (f" (no data yet from {', '.join(late)})" if late else ""))
         return
+    logged = ""
     if day == date.today().isoformat():  # never log past dates: that would be hindsight
         with open(paths.data("last_run.txt"), "w") as f:  # shown on the dashboard
             f.write(pd.Timestamp.now(tz="America/New_York").strftime("%Y-%m-%d %H:%M %Z") + "\n")
@@ -794,8 +833,12 @@ def today(day=None, preview=False):
             print(f"(couldn't record actual starters: {e})")
         store.sync_log(paper.read_log())
         print(f"(paper log: {added} new games, {upgraded} newly flagged, in {paper.LOG})")
+        logged = (f"; logged {added} new games" if added else "") + (f"; {upgraded} newly flagged" if upgraded else "")
+    health.note(f"✓ Projected {what}{logged}")
     bad = health.finish()
     print("(all data sources OK)" if not bad else f"(still failing after retries: {', '.join(bad)})")
+    health.note("✓ Data sources: all OK" if not bad else
+                "✗ Data sources still failing after retries: " + "; ".join(f"{b} ({health._results[b]})" for b in bad))
 
 
 if __name__ == "__main__":
