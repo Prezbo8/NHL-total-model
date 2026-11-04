@@ -48,7 +48,7 @@ Only data from the 2020-21 season onward is used.
 
 | What | Source |
 |---|---|
-| Game stats (xG, goals, ice time by situation) | MoneyPuck |
+| Game stats (xG, goals, ice time by situation) | MoneyPuck (downloaded once a day) |
 | Goalie and skater stats | MoneyPuck, NHL stats API |
 | Starting goalies | DailyFaceoff + Rotowire + GoaliePost, combined (Confirmed / Likely / Conflict); actual starters from the NHL box score |
 | Injuries | ESPN + Rotowire |
@@ -74,9 +74,10 @@ Every idea tested so far (adopted, kept or rejected, with the numbers) is listed
 ## Repo layout
 
 ```
-.github/workflows/            daily.yml (the run) + keeper.yml (starts it on time) + tests.yml (checks) + monthly.yml (check-up)
+.github/workflows/            daily.yml (hourly run) + moneypuck.yml (once-a-day MoneyPuck data) + keeper.yml (starts both on time)
+                              + tests.yml (checks) + monthly.yml (check-up)
 src/                          everything the daily run uses
-  model.py                      daily entry point: `today` projects, flags and logs; also the original model
+  model.py                      entry points: `today` projects, flags and logs (hourly); `stats` = the once-a-day run; also the original model
   split_model.py                the 5v5 / power-play model used daily
   goalies.py  players.py        goalie and skater data + ratings
   speed.py                      team skating speed (NHL EDGE)
@@ -84,9 +85,9 @@ src/                          everything the daily run uses
   confirm.py                    starting goalies from DailyFaceoff + Rotowire + GoaliePost combined; Rotowire injuries; actual starters (NHL box score)
   odds.py  books.py  grade.py   betting lines (consensus, opening, every sportsbook) and line math
   paper.py                      paper-trading log: log, settle, report
-  health.py                     retries every data source until it works, re-runs in 5 min if one still fails, GitHub issue alerts
+  health.py                     retries every data source (not a 403), re-runs in 5 min if one still fails, GitHub issue alerts
   retune.py                     monthly check-up: tier cutoffs, call record, calibration, goalie predictions (GitHub issue)
-  store.py                      run history in Supabase (every run's projections; skipped without the key)
+  store.py                      Supabase: every run's projections (history) + the once-a-day results (replaced daily); skipped without the key
   rule_check.py                 one-time SLAM rule check at 75 settled picks (data/rule_check.json)
   trends.py                     last-10 and head-to-head context shown on the dashboard
   moves.py                      how each game's projection moved during the day, and why (data/moves/)
@@ -103,44 +104,63 @@ data/                         CSV data
   odds_*.csv  sbr_odds.csv      historical lines
   game_starts.csv  referees.csv research inputs (start times, referees)
   monthly/                      monthly check-up reports
+  stats_status.json             outcome of the once-a-day run (dashboard header + hourly "Daily stats" alert)
   key_players/  moves/          per-day key players and projection-move snapshots (dashboard)
 docs/                         the website (GitHub Pages)
-supabase/schema.sql           Supabase tables (nhl_*) for the run history: paste once into the SQL Editor
-tests/check_model.py          57 component checks (paper log, settling, goalies, model, injuries, odds, dashboard, projection moves)
+supabase/schema.sql           Supabase tables (nhl_*): run history + once-a-day results; paste once into the SQL Editor
+tests/check_model.py          70 component checks (paper log, settling, goalies, model, injuries, odds, dashboard, projection moves, daily stats)
 ```
 
-## Schedule
+## Schedule: two kinds of runs
 
-Runs **at 12:01 AM and every hour from 11:17 AM to 10:17 PM Eastern, plus 15 minutes before each game**, all year (daylight saving handled). The time of the last run is shown in the top-right corner of the dashboard.
+Everything runs on GitHub Actions; nothing runs on a local machine. The dashboard's top-right corner shows
+both: **MoneyPuck data** (the once-a-day run, with the newest game in the data) and **Odds, lineups &
+projections** (the hourly run), each with ✓ or ⚠.
 
-- `.github/workflows/keeper.yml` stays running on GitHub and starts **Daily NHL run** at each slot.
-  GitHub stops any run after 6 hours, so the keeper starts a fresh copy of itself every 5.5 hours;
-  only one keeper runs at a time. (GitHub's own scheduler was too unreliable for this repo: on
-  Oct 2, 2026 seven slots in a row never fired.)
-- `.github/workflows/daily.yml` does the work: settles yesterday's games, re-downloads stats,
-  goalies, injuries, lineups and lines, projects today's games, logs them, rebuilds the dashboard
-  and commits everything back. Its own hourly :17 schedule stays as a fallback.
-- Nothing runs on a local machine.
+- **Hourly: odds, lineups & projections** (`.github/workflows/daily.yml`): **12:01 AM and every hour from
+  11:17 AM to 10:17 PM Eastern, plus 15 minutes before each game** (a pre-game slot within 5 minutes of a
+  :17 run is covered by it), all year, daylight saving handled. Settles finished games, re-checks
+  starting goalies, lineups, injuries and lines, re-projects every game that hasn't started, logs, rebuilds
+  the dashboard and commits everything back. It never downloads from MoneyPuck: it uses the saved copy and
+  the files the once-a-day run commits, and only asks MoneyPuck whether it has newer data (one request).
+- **Once a day: MoneyPuck data** (`.github/workflows/moneypuck.yml`, `python3 src/model.py stats`):
+  **8:30 AM Eastern** (MoneyPuck posts last night's games around 7:30 AM), and again whenever an hourly run
+  sees MoneyPuck has newer data. Downloads MoneyPuck's game file (up to 5 hours if MoneyPuck is slow; kept
+  in GitHub's Actions cache), refreshes goalie history, skater stats and team speed, commits them with
+  `data/stats_status.json`, and **replaces** the Supabase daily tables (`nhl_daily_teams`, `_goalies`,
+  `_skaters`, `_meta`). (Nov 3, 2026: MoneyPuck served ~30 KB/s and every run that downloaded it timed out.)
+- `.github/workflows/keeper.yml` stays running on GitHub and starts both on time. GitHub stops any run
+  after 6 hours, so the keeper starts a fresh copy of itself every 5.5 hours; only one keeper runs at a time.
+  (GitHub's own scheduler was too unreliable for this repo: on Oct 2, 2026 seven slots in a row never
+  fired.) The hourly run's own :17 schedule stays as a fallback.
+- **Alerts** (GitHub issues, which email you, and close themselves on recovery): a data source failing 2
+  runs in a row; "Daily stats" when the once-a-day run failed or hasn't worked for 30 hours; "Model runs
+  failing" when a run fails and none has finished for 2 hours. A source failing re-runs the hourly job
+  every 5 minutes (not during the 11 PM hour); a site answering 403 (refusing us) isn't retried within a run.
 
-Run it now: **Actions** tab → **Daily NHL run** → **Run workflow** (or `gh workflow run daily.yml`).
-If the keeper ever stops (no "Keeper" run in progress on the Actions tab), restart it with
-**Keeper** → **Run workflow** (or `gh workflow run keeper.yml`).
+Run it now: **Actions** tab → **Daily NHL run** (or **Daily stats (once a day)**) → **Run workflow**
+(`gh workflow run daily.yml` / `gh workflow run moneypuck.yml`). If the keeper ever stops (no "Keeper"
+run in progress on the Actions tab), restart it with **Keeper** → **Run workflow** (`gh workflow run keeper.yml`).
 
-## Running locally
+## Checks and commands
 
-Before pushing: `python3 -m pyflakes src/*.py research/lib/*.py research/studies/*.py tests/*.py` and
-`python3 tests/check_model.py` (the Tests workflow runs both, plus a check that the backtest is unchanged).
+Checks run on GitHub, not on a local machine: every push runs the **Tests** workflow (pyflakes, the
+70 component checks, a projection run for tomorrow, a dashboard build, and a check that the backtest is
+unchanged). Change code on a branch, open a pull request, and merge once Tests pass.
+
+What the workflows run:
 
 ```
 pip install pandas==3.0.6 numpy==2.5.3   # Python 3.14
-python3 src/model.py today [YYYY-MM-DD]   # projections + flags (only today's date is logged)
+python3 src/model.py stats                # once a day: MoneyPuck, goalie history, skater stats, speed, Supabase daily tables
+python3 src/model.py today [YYYY-MM-DD]   # hourly: projections + flags (only today's date is logged)
 python3 src/paper.py report               # paper-trading record
 python3 src/dashboard.py                  # rebuild the website
+python3 tests/check_model.py              # 70 component checks (Tests workflow)
 python3 research/lib/history.py           # backtest the overs rule
 python3 research/studies/<name>.py        # any study (see research/README.md)
-python3 tests/check_model.py              # 57 component checks (also run on GitHub: Tests workflow)
 ```
 
-The first run downloads MoneyPuck's game file (~126 MB, not stored in the repo).
+MoneyPuck's game file (~127 MB) isn't stored in the repo: the once-a-day run keeps it in GitHub's Actions cache.
 
 *Paper trading only, not betting advice.*
