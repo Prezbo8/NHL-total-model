@@ -14,7 +14,7 @@ import os
 import re
 import sys
 import urllib.request
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 import numpy as np
 import pandas as pd
@@ -25,6 +25,8 @@ import paths
 
 DATA = paths.data("moneypuck_games.csv")
 DATA_URL = "https://moneypuck.com/moneypuck/playerData/careers/gameByGame/all_teams.csv"
+STATS_STATUS = paths.data("stats_status.json")  # outcome of the once-a-day stats run (daily_stats)
+STATS_MAX_AGE = 30 * 3600  # hourly runs alert when the stats run hasn't worked for this long
 
 K = 15          # games of "last season" weight before this season's games take over
 K_PP = 25       # same for the power-play / penalty-kill ratings: small samples, so last season counts longer (research/studies/pp_shrink.py)
@@ -126,6 +128,24 @@ def refresh_data(tries=3, budget=3 * 60):
     print("(using the previously downloaded MoneyPuck data)" if os.path.exists(DATA) else
           "(no saved MoneyPuck data yet: .github/workflows/moneypuck.yml downloads it in the background)")
     return False
+
+
+def moneypuck_newer():
+    """True when MoneyPuck has posted a newer game file than the saved copy, or there's no copy. One request,
+    nothing downloaded: the once-a-day stats run (daily_stats) does the downloading."""
+    import urllib.error
+    stamp = DATA + ".modified"
+    if not (os.path.exists(DATA) and os.path.exists(stamp)):
+        return True
+    req = fetch(DATA_URL)
+    req.add_header("If-Modified-Since", open(stamp).read().strip())
+    try:
+        urllib.request.urlopen(req, timeout=20).close()  # 200 = a newer file (left unread)
+        return True
+    except urllib.error.HTTPError as e:
+        if e.code == 304:
+            return False
+        raise
 
 
 def load_games(refresh=False, xg="xGoals"):
@@ -381,6 +401,100 @@ def save_preview(day, rows):
 HIGH_Q = 0.60  # "high-scoring" = team's projected goals in the top 40% of last season's team projections
 
 
+def check_daily_stats(health):
+    """Hourly runs: peek whether MoneyPuck has newer data than the saved copy (daily.yml then starts the stats run),
+    and report "Daily stats" to health: alerts (GitHub issue) when the stats run hasn't worked for 30 hours."""
+    try:
+        if moneypuck_newer():
+            open(paths.data(".moneypuck_behind"), "w").close()  # daily.yml starts moneypuck.yml
+            print("(MoneyPuck has newer data than the saved copy: starting the once-a-day stats run; this run uses the saved copy)")
+    except Exception as e:  # MoneyPuck slow / down: the hourly run doesn't need it
+        print(f"(couldn't check MoneyPuck for newer data: {type(e).__name__}: {e})")
+    health.attempt("Daily stats", stats_ok, waits=[])
+
+
+def stats_ok():
+    """Raise unless the once-a-day stats run worked within STATS_MAX_AGE (its outcome: data/stats_status.json)."""
+    s = json.load(open(STATS_STATUS))
+    if s.get("failed"):
+        raise RuntimeError(f"stats run at {s['at']} failed: {', '.join(s['failed'])}")
+    if (datetime.now().astimezone() - datetime.fromisoformat(s["at"])).total_seconds() > STATS_MAX_AGE:
+        raise RuntimeError(f"no stats run since {s['at']}")
+    return True
+
+
+def daily_results(games, season):
+    """The once-a-day results as readable tables (Supabase nhl_daily_*): every team vs a league-average opponent (the
+    dashboard's rankings), every recent goalie's skill, every skater's effect when he's out (exactly what an hourly
+    run applies), and the season settings. Returns (teams, goalies, skaters, meta) as lists of dicts."""
+    import injuries
+    import split_model as sm
+    plain = lambda v: None if v is None or (not isinstance(v, str) and pd.isna(v)) else v.item() if hasattr(v, "item") else v
+    proj, project = sm.walk_split(games, known_starters=False, with_projector=True, live_season=season)
+    prev = proj[proj.season == season - 1]
+    cutoff = float(np.quantile(np.r_[prev.lam_h, prev.lam_a], HIGH_Q))
+    rk = sm.team_rankings(project, set(games[games.season >= season - 1].home), season, games)
+    main = ["gf", "gf_ev", "gf_pp", "ga", "ga_ev", "ga_pp", "games"]
+    teams = [{"team": r["team"], "season": season, **{c: plain(r[c]) for c in main},
+              "details": {c: plain(v) for c, v in r.items() if c not in main + ["team"]}} for r in rk.to_dict("records")]
+    st = pd.read_csv(goalies.STARTS)
+    st = st[st.season >= season - 1].sort_values("gameId")
+    starts = st[(st.season == season) & (st.started == 1)].groupby("playerId").size()
+    gl = [{"player_id": int(p), "name": r["name"], "team": r["team"], "starts_this_season": int(starts.get(p, 0)),
+           "skill": round(float(project.goalie_skill(p)), 4)} for p, r in st.groupby("playerId").tail(1).set_index("playerId").iterrows()]
+    n = injuries.team_games_this_season(games, season)
+    sk = []
+    for _, p in players.player_table(season).iterrows():
+        team = p.team_cur if p.gp_cur > 0 else p.team_last
+        if not isinstance(team, str):
+            continue
+        off, dfn = injuries._effect(p, team, n.get(team, 0))
+        if abs(off) + abs(dfn) < 0.002:  # depth player / long gone: the hourly run skips him too
+            continue
+        sk.append({"player_id": int(p.playerId), "name": p["name"], "team": team, "position": p.position,
+                   "gf_if_out": round(-injuries.SCALE * off, 4), "ga_if_out": round(injuries.SCALE * dfn, 4)})
+    stamp = DATA + ".modified"
+    meta = {"id": 1, "season": season, "high_scoring_cutoff": round(cutoff, 4),
+            "latest_game": pd.to_datetime(str(int(games.gameDate.max()))).date().isoformat(),
+            "moneypuck_updated": open(stamp).read().strip() if os.path.exists(stamp) else None}
+    return teams, gl, sk, meta
+
+
+def daily_stats(day=None):
+    """Once a day (python src/model.py stats = .github/workflows/moneypuck.yml; the keeper starts it at 8:30 AM Eastern,
+    an hourly run starts it when MoneyPuck has newer data): everything that only changes after games are played.
+    MoneyPuck's team game file (up to 5 h: Nov 3 2026 it served ~30 KB/s), goalie history (NHL starts + MoneyPuck
+    goalie files), skater stats and team speed; then the day's results to Supabase (nhl_daily_* tables, replaced
+    every run) and the outcome to data/stats_status.json. Returns what failed ([] = everything worked)."""
+    import health
+    import speed
+    import split_model as sm
+    import store
+    day = day or date.today().isoformat()
+    season = sm.season_of(date.fromisoformat(day))
+    health.attempt("MoneyPuck stats", lambda: refresh_data(tries=10, budget=5 * 3600) or (_ for _ in ()).throw(RuntimeError("download failed")),
+                   False, waits=[])  # refresh_data retries on its own, within its 5 hours
+    health.attempt("Goalie data", lambda: goalies.refresh([season]) or True)
+    if os.path.exists(DATA):
+        games = sm.load_split()
+        if (games.season == season).any():  # skater totals this season (injury adjustment + key players); none before opening night
+            health.attempt("MoneyPuck skaters", lambda: players.refresh_skaters([season]) or True)
+        health.attempt("NHL EDGE speed", lambda: speed.refresh(season - 1) or True)  # last season's speed: fetched once per season
+        try:
+            rows = daily_results(games, season)
+        except Exception as e:
+            print(f"::warning::daily results not computed: {type(e).__name__}: {e}")
+            health._results["Daily results"] = f"{type(e).__name__}: {str(e)[:150]}"
+        else:
+            store.save_daily(*rows)
+            print(f"(daily results: {len(rows[0])} teams, {len(rows[1])} goalies, {len(rows[2])} skaters)")
+    failed = health.failed()
+    with open(STATS_STATUS, "w") as f:
+        json.dump({"at": datetime.now().astimezone().isoformat(timespec="minutes"), "failed": failed}, f)
+    print("(daily stats: all OK)" if not failed else f"(daily stats failed: {', '.join(failed)})")
+    return failed
+
+
 def today(day=None, preview=False):
     """Daily projections from the 5v5 / power-play split model (2020-21 onward data only), with the
     overs flag: OVER only, line 6 or 6.5, both teams high-scoring.
@@ -394,22 +508,11 @@ def today(day=None, preview=False):
     day = day or date.today().isoformat()
     if preview:  # runs right after today's run: its data is fresh, and an early look shouldn't wait on retries
         health.WAITS = []
-    elif os.environ.get("MONEYPUCK_BACKGROUND"):  # set by daily.yml while moneypuck.yml is getting the new file
-        print("(MoneyPuck's new file is downloading in the background (moneypuck.yml): this run uses the saved copy)")
-    elif not health.attempt("MoneyPuck stats", lambda: refresh_data() or (_ for _ in ()).throw(RuntimeError("download failed")),
-                            False, waits=[]):  # refresh_data retries on its own, within its 3 minutes
-        # too slow for a model run: daily.yml now starts moneypuck.yml, which has hours to get it; this run uses the
-        # saved copy (Nov 3 2026: MoneyPuck at ~30 KB/s made every run time out)
-        open(paths.data(".moneypuck_behind"), "w").close()
+    else:  # MoneyPuck, goalie history, skater stats, team speed: the once-a-day stats run (daily_stats) refreshes them
+        check_daily_stats(health)
     load_games()
     games = sm.load_split()
     season = sm.season_of(date.fromisoformat(day))  # from the date, not the data (opening day has no games yet)
-    if not preview:
-        health.attempt("Goalie data", lambda: goalies.refresh([season]) or True)
-        if (games.season == season).any():  # skater totals this season (injury adjustment + key players); none before opening night
-            health.attempt("MoneyPuck skaters", lambda: players.refresh_skaters([season]) or True)
-        import speed  # team skating speed: this season uses LAST season's numbers (fetched once per season)
-        health.attempt("NHL EDGE speed", lambda: speed.refresh(season - 1) or True)
     proj, project = sm.walk_split(games, known_starters=False, with_projector=True, live_season=season)
     cal = fit_calibration(proj[proj.season.between(2022, season - 1)])
     prev = proj[proj.season == season - 1]
@@ -649,5 +752,7 @@ if __name__ == "__main__":
     cmd = sys.argv[1] if len(sys.argv) > 1 else "today"
     if cmd == "preview":  # tomorrow (Eastern), for the dashboard's Tomorrow preview tab
         today((date.today() + timedelta(days=1)).isoformat(), preview=True)
+    elif cmd == "stats":  # once a day: MoneyPuck + goalie history + skater stats + team speed (moneypuck.yml)
+        sys.exit(1 if daily_stats() else 0)
     else:
         backtest() if cmd == "backtest" else today(sys.argv[2] if len(sys.argv) > 2 else None)

@@ -101,3 +101,60 @@ group by 1, 2;
 
 revoke all on nhl_runs, nhl_projections, nhl_games, nhl_paper_bets,
               nhl_latest_projection, nhl_pregame_call, nhl_call_by_lead_time from anon, authenticated;
+
+-- ---------------------------------------------------------------------------------------------------------------
+-- Once-a-day results (python src/model.py stats = .github/workflows/moneypuck.yml, ~8:30 AM Eastern): the latest
+-- day's ratings, REPLACED by every daily stats run (no history). The hourly runs compute the same numbers.
+-- Added Nov 3 2026. Same security as above: RLS on, no policies -> only the service key can read/write.
+
+-- every team vs a league-average opponent (the dashboard's Rankings tab)
+create table if not exists nhl_daily_teams (
+  team          text primary key,
+  season        int not null,
+  gf            real,      -- projected goals FOR per game vs a league-average opponent
+  gf_ev         real,      --   ... at 5-on-5
+  gf_pp         real,      --   ... on the power play
+  ga            real,      -- projected goals AGAINST per game
+  ga_ev         real,
+  ga_pp         real,
+  games         int,       -- games played this season
+  details       jsonb,     -- the rest of data/team_rankings.csv (actual goals, xG, shots, schedule faced, ...)
+  computed_at   timestamptz not null
+);
+
+-- every goalie with a start this season or last: the skill the model uses (from MoneyPuck goals vs xG)
+create table if not exists nhl_daily_goalies (
+  player_id          bigint primary key,   -- NHL id
+  name               text,
+  team               text,                 -- team of his latest start
+  starts_this_season int,
+  skill              real,                 -- share of expected goals stopped beyond average: +0.074 = +7.4%
+  computed_at        timestamptz not null
+);
+
+-- every skater who matters when out: exactly what an hourly run applies when he's injured / scratched
+create table if not exists nhl_daily_skaters (
+  player_id     bigint primary key,   -- NHL id
+  name          text,
+  team          text,
+  position      text,
+  gf_if_out     real,      -- his team's goals if he's out: -0.042 = 4.2% fewer
+  ga_if_out     real,      -- the opponent's goals if he's out: +0.011 = 1.1% more
+  computed_at   timestamptz not null
+);
+
+-- one row: the season settings of the latest run
+create table if not exists nhl_daily_meta (
+  id                  int primary key default 1 check (id = 1),
+  season              int,
+  high_scoring_cutoff real,   -- a team projected at or above this counts as high-scoring (the overs flag)
+  latest_game         date,   -- newest game in MoneyPuck's data
+  moneypuck_updated   text,   -- MoneyPuck's Last-Modified for that data
+  computed_at         timestamptz not null
+);
+
+alter table nhl_daily_teams   enable row level security;
+alter table nhl_daily_goalies enable row level security;
+alter table nhl_daily_skaters enable row level security;
+alter table nhl_daily_meta    enable row level security;
+revoke all on nhl_daily_teams, nhl_daily_goalies, nhl_daily_skaters, nhl_daily_meta from anon, authenticated;

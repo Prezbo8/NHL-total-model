@@ -27,7 +27,7 @@ BUDGET = 15 * 60          # total seconds per run of retry waiting + time spent 
 ALERT_AFTER = 2           # consecutive failed runs before an alert
 STALE_AFTER = 2 * 3600    # run alert: this run failed and no run has finished for this long
 RUN_ALERT = "Model runs failing"
-NO_RETRY = {"Supabase"}   # a write target, not a data source: alerts, but a rerun wouldn't fix it
+NO_RETRY = {"Supabase", "Daily stats"}   # alerts, but rerunning the hourly job wouldn't fix them
 ET = ZoneInfo("America/New_York")
 _spent, _results = 0.0, {}
 
