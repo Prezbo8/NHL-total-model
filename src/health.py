@@ -54,6 +54,10 @@ def attempt(name, fn, default=None, must=False, waits=None):
         except Exception as e:
             err = f"{type(e).__name__}: {str(e)[:150]}"
             _spent += time.time() - t0   # a try that hangs before failing uses up the budget too
+            if getattr(e, "code", None) == 403:  # the site is refusing us: retrying within minutes won't change that
+                # (Nov 3 2026: DailyFaceoff 403s took 11 min of retries per run; the 5-min rerun still tries again)
+                print(f"  ({name}: 403 Forbidden, the site is refusing requests: no more tries this run)", flush=True)
+                break
     _results[name] = err or "retry budget used up"
     print(f"::warning::{name} failed after retries: {_results[name]}")
     return default
