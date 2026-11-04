@@ -460,20 +460,68 @@ def daily_results(games, season):
     return teams, gl, sk, meta
 
 
+MP_MORNING = ((8, 0), (11, 10))  # morning stats run: keep checking for MoneyPuck's update from 8:00 until 11:10 AM ET
+
+
+def nhl_games_on(day):
+    """Regular-season / playoff games actually played on `day` (NHL API schedule; postponed ones left out)."""
+    with urllib.request.urlopen(fetch(f"https://api-web.nhle.com/v1/schedule/{day}"), timeout=30) as f:
+        return [g for wk in json.load(f)["gameWeek"] if wk["date"] == day for g in wk["games"]
+                if g["gameType"] in (2, 3) and g.get("gameScheduleState", "OK") == "OK"]
+
+
+def newest_game():
+    """Newest game date in the saved MoneyPuck file (None without one)."""
+    if not os.path.exists(DATA):
+        return None
+    return pd.to_datetime(str(int(pd.read_csv(DATA, usecols=["gameDate"]).gameDate.max()))).date()
+
+
+def wait_for_moneypuck(want, until, check, now, sleep, every=600):
+    """Morning stats run: check() (= download MoneyPuck's file if it's newer, return the newest game date in the data)
+    until the data includes `want` (last night's games), every `every` seconds, up to `until` (11:10 AM ET).
+    want None = nothing to wait for (no games last night). Returns the newest game date in the data."""
+    while True:
+        latest = check()
+        if want is None or (latest is not None and latest >= want) or now() >= until:
+            return latest
+        print(f"(MoneyPuck hasn't posted {want:%b %-d} games yet: data through {latest}; checking again in "
+              f"{every // 60} min, until {until:%-I:%M %p})", flush=True)
+        sleep(max(0, min(every, (until - now()).total_seconds())))
+
+
 def daily_stats(day=None):
-    """Once a day (python src/model.py stats = .github/workflows/moneypuck.yml; the keeper starts it at 8:30 AM Eastern,
-    an hourly run starts it when MoneyPuck has newer data): everything that only changes after games are played.
+    """Once a day (python src/model.py stats = .github/workflows/moneypuck.yml; the keeper starts it at 8:00 AM Eastern
+    and it checks every 10 min until MoneyPuck's data includes last night's games, until 11:10 AM, so the 11:17 AM run
+    has it; an hourly run also starts it when MoneyPuck has newer data): everything that only changes after games.
     MoneyPuck's team game file (up to 5 h: Nov 3 2026 it served ~30 KB/s), goalie history (NHL starts + MoneyPuck
     goalie files), skater stats and team speed; then the day's results to Supabase (nhl_daily_* tables, replaced
     every run) and the outcome to data/stats_status.json. Returns what failed ([] = everything worked)."""
+    import time
+    from zoneinfo import ZoneInfo
     import health
     import speed
     import split_model as sm
     import store
+    et = ZoneInfo("America/New_York")
+    job_end = time.time() + 5.25 * 3600  # moneypuck.yml stops the job at 5.5 h: leave time for the steps after this one
     day = day or date.today().isoformat()
     season = sm.season_of(date.fromisoformat(day))
-    health.attempt("MoneyPuck stats", lambda: refresh_data(tries=10, budget=5 * 3600) or (_ for _ in ()).throw(RuntimeError("download failed")),
-                   False, waits=[])  # refresh_data retries on its own, within its 5 hours
+    yday = (date.fromisoformat(day) - timedelta(days=1)).isoformat()
+    played = health.attempt("NHL schedule (yesterday)", lambda: nhl_games_on(yday))
+    want = date.fromisoformat(yday) if played is None or played else None  # schedule unavailable: assume there were games
+    start = datetime.now(et)
+    (h0, m0), (h1, m1) = MP_MORNING
+    end = start.replace(hour=h1, minute=m1, second=0, microsecond=0)
+    until = end if start.replace(hour=h0, minute=m0, second=0, microsecond=0) <= start < end else start  # outside: one check
+
+    def check():  # refresh_data retries on its own, within the job's time
+        health.attempt("MoneyPuck stats", lambda: refresh_data(tries=10, budget=max(600, job_end - time.time()))
+                       or (_ for _ in ()).throw(RuntimeError("download failed")), False, waits=[])
+        return newest_game()
+    newest = wait_for_moneypuck(want, until, check, lambda: datetime.now(et), time.sleep)
+    if want and (newest is None or newest < want):
+        health._results[f"MoneyPuck hasn't posted {want:%b %-d} games yet"] = f"data through {newest}"
     health.attempt("Goalie data", lambda: goalies.refresh([season]) or True)
     latest = None  # newest game in MoneyPuck's data (the dashboard shows "games through ...")
     if os.path.exists(DATA):

@@ -124,8 +124,9 @@ projections** (the hourly run), each with ✓ or ⚠.
   the dashboard and commits everything back. It never downloads from MoneyPuck: it uses the saved copy and
   the files the once-a-day run commits, and only asks MoneyPuck whether it has newer data (one request).
 - **Once a day: MoneyPuck data** (`.github/workflows/moneypuck.yml`, `python3 src/model.py stats`):
-  **8:30 AM Eastern** (MoneyPuck posts last night's games around 7:30 AM), and again whenever an hourly run
-  sees MoneyPuck has newer data. Downloads MoneyPuck's game file (up to 5 hours if MoneyPuck is slow; kept
+  **8:00 AM Eastern**, then every 10 minutes until MoneyPuck's data includes last night's games (MoneyPuck posts
+  around 7:30 AM), up to 11:10 AM so the 11:17 AM run has them; and again whenever an hourly run sees MoneyPuck
+  has newer data. Downloads MoneyPuck's game file (up to 5 hours if MoneyPuck is slow; kept
   in GitHub's Actions cache), refreshes goalie history, skater stats and team speed, commits them with
   `data/stats_status.json`, and **replaces** the Supabase daily tables (`nhl_daily_teams`, `_goalies`,
   `_skaters`, `_meta`). (Nov 3, 2026: MoneyPuck served ~30 KB/s and every run that downloaded it timed out.)

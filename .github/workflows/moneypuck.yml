@@ -3,7 +3,8 @@ name: Daily stats (once a day)
 # Everything that only changes after games are played, done once a day instead of in every hourly run
 # (python src/model.py stats): MoneyPuck's team game file (127 MB), goalie history (NHL starts + MoneyPuck goalie
 # files), MoneyPuck skater stats, team speed. Then the day's results go to Supabase (nhl_daily_* tables, replaced
-# every run). The keeper starts this at 8:30 AM Eastern (MoneyPuck posts ~7:30 AM); an hourly run also starts it when
+# every run). The keeper starts this at 8:00 AM Eastern (MoneyPuck posts ~7:30 AM): until 11:10 AM it checks every 10 min
+# until MoneyPuck's data includes last night's games, so the 11:17 AM run has them. An hourly run also starts it when
 # MoneyPuck has newer data than the saved copy. The hourly runs (daily.yml) never download from MoneyPuck: they use
 # the saved copy + the files committed here, and alert when data/stats_status.json shows no working run for 30 hours.
 # (Nov 3 2026: MoneyPuck served ~30 KB/s, a 70-min download, and every hourly run timed out waiting for it.)

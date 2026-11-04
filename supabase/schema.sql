@@ -103,7 +103,7 @@ revoke all on nhl_runs, nhl_projections, nhl_games, nhl_paper_bets,
               nhl_latest_projection, nhl_pregame_call, nhl_call_by_lead_time from anon, authenticated;
 
 -- ---------------------------------------------------------------------------------------------------------------
--- Once-a-day results (python src/model.py stats = .github/workflows/moneypuck.yml, ~8:30 AM Eastern): the latest
+-- Once-a-day results (python src/model.py stats = .github/workflows/moneypuck.yml, 8:00-11:10 AM Eastern): the latest
 -- day's ratings, REPLACED by every daily stats run (no history). The hourly runs compute the same numbers.
 -- Added Nov 3 2026. Same security as above: RLS on, no policies -> only the service key can read/write.
 
