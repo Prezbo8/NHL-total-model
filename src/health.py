@@ -67,6 +67,11 @@ def failed():
     return [k for k, v in _results.items() if v]
 
 
+def plural(n, word):
+    """'1 goalie' / '31 goalies': counts in the run's summary lines."""
+    return f"{n} {word}{'' if n == 1 else 's'}"
+
+
 def note(line):
     """One line for this run's summary: the last step of every workflow prints them with what the job is for and how it
     ended (.github/scripts/summary.py). The workflow sets RUN_SUMMARY; without it (checks, a local run) nothing is written."""

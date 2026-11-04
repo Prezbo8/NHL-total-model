@@ -546,7 +546,7 @@ def daily_stats(day=None):
         health.note(f"✓ Games through {newest:%a, %b %-d}" + (" (last night's games are in)" if want else " (no games last night)"))
     got = health.attempt("Goalie data", lambda: goalies.refresh([season]))
     if got:
-        health.note("✓ Goalie history: " + (f"{got[0]} goalies updated" if got[0] else "up to date")
+        health.note("✓ Goalie history: " + (f"{health.plural(got[0], 'goalie')} updated" if got[0] else "up to date")
                     + (f" ({got[1]} still missing a recent game)" if got[1] else ""))
     latest = None  # newest game in MoneyPuck's data (the dashboard shows "games through ...")
     if os.path.exists(DATA):
@@ -773,7 +773,7 @@ def today(day=None, preview=False):
     print("Model uses 2020-21 onward only. Tested 2021-26: +1.3% ROI at open, +2.4% at close, 53-55% wins"
           " (+2 pts more with line shopping). Small, unproven edge: judge it on live paper trading.")
     print("\nTODAY'S FLAGS: " + ("; ".join(flagged) if flagged else "none"))
-    what = f"{len(log_rows)} games for {date.fromisoformat(day):%a, %b %-d}" if log_rows else f"no NHL games on {date.fromisoformat(day):%a, %b %-d}"
+    what = f"{health.plural(len(log_rows), 'game')} for {date.fromisoformat(day):%a, %b %-d}" if log_rows else f"no NHL games on {date.fromisoformat(day):%a, %b %-d}"
     what += ("; flags: " + "; ".join(flagged)) if flagged else "; no flags" if log_rows else ""
     if preview:
         save_preview(day, log_rows)
@@ -833,7 +833,7 @@ def today(day=None, preview=False):
             print(f"(couldn't record actual starters: {e})")
         store.sync_log(paper.read_log())
         print(f"(paper log: {added} new games, {upgraded} newly flagged, in {paper.LOG})")
-        logged = (f"; logged {added} new games" if added else "") + (f"; {upgraded} newly flagged" if upgraded else "")
+        logged = (f"; logged {health.plural(added, 'new game')}" if added else "") + (f"; {upgraded} newly flagged" if upgraded else "")
     health.note(f"✓ Projected {what}{logged}")
     bad = health.finish()
     print("(all data sources OK)" if not bad else f"(still failing after retries: {', '.join(bad)})")
