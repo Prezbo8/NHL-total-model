@@ -3,7 +3,7 @@ name: Keeper (runs the daily job on time)
 # GitHub's own schedule is unreliable for this repo (scheduled runs fire late or not at all), so this
 # workflow stays running and starts "Daily NHL run" at 12:01 AM and every hour at :17 from 11:17 AM to 10:17 PM
 # Eastern, plus 15 minutes before each game (times from .github/scripts/next_slot.py). GitHub stops a run after 6 hours, so before that it starts a fresh copy of itself.
-# At 8:30 AM Eastern it starts the once-a-day stats run instead (moneypuck.yml: MoneyPuck, goalie history, skater stats).
+# At 8:00 AM Eastern it starts the once-a-day stats run instead (moneypuck.yml: checks MoneyPuck until 11:10 AM).
 # Only one keeper runs at a time (concurrency), so the chain can't duplicate. The schedule below just
 # restarts the chain if it ever breaks (when GitHub's scheduler does fire).
 on:

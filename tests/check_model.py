@@ -382,5 +382,26 @@ check("header 'MoneyPuck data': ✓ + games through when current; ⚠ + reason w
       and "Not working: MoneyPuck stats" in mp_html(at=iso(1), failed=["MoneyPuck stats"])
       and "no update for 31 hours" in mp_html(at=iso(31.5)), ok_html[:80])
 
+print("morning MoneyPuck wait (simulated clock: nothing really waits)")
+from zoneinfo import ZoneInfo
+ET_ = ZoneInfo("America/New_York")
+clock, seen = {}, []
+def mp_sleep(sec):
+    clock["t"] += datetime.timedelta(seconds=sec)
+def mp_run(posts_at, want=datetime.date(2026, 11, 3)):
+    clock["t"], seen[:] = datetime.datetime(2026, 11, 4, 8, 0, tzinfo=ET_), []
+    def mp_check():
+        seen.append(clock["t"].strftime("%H:%M"))
+        return want if posts_at and clock["t"] >= posts_at else datetime.date(2026, 11, 2)
+    return m.wait_for_moneypuck(want, datetime.datetime(2026, 11, 4, 11, 10, tzinfo=ET_), mp_check, lambda: clock["t"], mp_sleep)
+got = mp_run(datetime.datetime(2026, 11, 4, 8, 25, tzinfo=ET_))
+check("morning run: checks every 10 min until MoneyPuck has last night's games (posted 8:25 -> got them at 8:30)",
+      got == datetime.date(2026, 11, 3) and seen == ["08:00", "08:10", "08:20", "08:30"], str(seen))
+got = mp_run(None)
+check("morning run: MoneyPuck never posts -> last check at 11:10, then keeps the old data (20 checks)",
+      got == datetime.date(2026, 11, 2) and seen[-1] == "11:10" and len(seen) == 20, f"{len(seen)} checks, last {seen[-1]}")
+got = mp_run(None, want=None)
+check("morning run: no games last night -> one check, no waiting", seen == ["08:00"])
+
 print(f"\n{sum(results)}/{len(results)} checks passed")
 sys.exit(0 if all(results) else 1)

@@ -1,6 +1,6 @@
 """Seconds until the next run slot (DST-aware), printed as "<seconds> <label>":
 12:01 AM Eastern, every hour at :17 from 11:17 AM to 10:17 PM, plus 15 minutes before each game's start
-(from the NHL schedule; if it can't be read, the hourly slots alone are used), plus the 8:30 AM MoneyPuck
+(from the NHL schedule; if it can't be read, the hourly slots alone are used), plus the 8:00 AM MoneyPuck
 download (label "MoneyPuck download": the keeper starts moneypuck.yml then, not the daily run)."""
 import json
 import urllib.request
@@ -11,7 +11,7 @@ ET = ZoneInfo("America/New_York")
 SLOTS = [(0, 1)] + [(h, 17) for h in range(11, 23)]  # 12:01 AM, then 11:17 AM ... 10:17 PM
 PREGAME = timedelta(minutes=15)
 MERGE = timedelta(minutes=5)  # a pre-game slot this close to another slot is dropped (no back-to-back runs)
-MONEYPUCK = (8, 30)  # MoneyPuck posts its new game file ~7:45 AM: download it before the 11:17 AM run
+MONEYPUCK = (8, 0)  # MoneyPuck posts its new game file ~7:30 AM: the stats run keeps checking until 11:10 AM (before 11:17)
 
 
 def pregame_slots(now):

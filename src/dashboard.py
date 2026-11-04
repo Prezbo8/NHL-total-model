@@ -2137,7 +2137,7 @@ def run_status():
     plus a line naming the failing sources. data-at feeds the browser check for runs that stopped altogether."""
     try:
         st = json.load(open(paths.data("last_run_status.json")))
-        at, bad = st["at"], st["failed"]
+        at, bad = st["at"], [b for b in st["failed"] if b != "Daily stats"]  # that one shows on the MoneyPuck line
     except (OSError, ValueError, KeyError):
         return ""
     t, z = at.rsplit(" ", 1)
@@ -2189,7 +2189,7 @@ def build():
     d = paper.read_log()
     lr, mp = last_run(), stats_status()
     stamp = ("<div class='lastrun'>"
-             + (f"<div class='lrgrp'>{tip('MoneyPuck data', 'When the once-a-day run last updated MoneyPuck data (team stats, goalie history, skater stats) and the Supabase daily tables. It runs at 8:30 AM Eastern, after MoneyPuck posts last night’s games, and again whenever an hourly run sees MoneyPuck has newer data. Games through = the newest game in that data.', 'tr down')}{mp}</div>" if mp else "")
+             + (f"<div class='lrgrp'>{tip('MoneyPuck data', 'When the once-a-day run last updated MoneyPuck data (team stats, goalie history, skater stats) and the Supabase daily tables. It runs from 8:00 AM Eastern and checks every 10 minutes until MoneyPuck has posted last night’s games (by 11:10 AM, before the 11:17 AM run), and again whenever an hourly run sees MoneyPuck has newer data. Games through = the newest game in that data.', 'tr down')}{mp}</div>" if mp else "")
              + f"<div class='lrgrp'>{tip('Odds, lineups & projections', 'When the hourly run last re-checked odds, goalies, lineups and injuries, and re-projected every game that had not started. It runs at 12:01 AM, every hour from 11:17 AM to 10:17 PM Eastern, and 15 minutes before each game.', 'tr down')}"
              f"<b>{e(lr)}{run_status()}</b></div>{checkpoints(d)}</div>") if lr else ""
     rk = rankings(d)
@@ -2216,7 +2216,7 @@ def build():
 <b>power play</b> (PP and PK efficiency × penalties drawn and taken), plus other situations. The opposing <b>starting goalie's</b>
 goals saved above expected scales goals allowed, <b>back-to-backs</b> cut the tired team's scoring ~8% (opponent +6.5%), and
 <b>team skating speed</b> nudges fast teams up (+2% per step) and their opponents down (−1.7%).
-Data from the 2020-21 season onward only (MoneyPuck, NHL API, DailyFaceoff, Action Network). Runs on GitHub Actions: MoneyPuck stats once a day at 8:30 AM ET; odds, goalies, lineups and projections at 12:01 AM, every hour from 11:17 AM to 10:17 PM ET, and 15 minutes before each game.</p>
+Data from the 2020-21 season onward only (MoneyPuck, NHL API, DailyFaceoff, Action Network). Runs on GitHub Actions: MoneyPuck stats once a day (8:00–11:10 AM ET, as soon as MoneyPuck posts last night’s games); odds, goalies, lineups and projections at 12:01 AM, every hour from 11:17 AM to 10:17 PM ET, and 15 minutes before each game.</p>
 <dl>
 <div><dt>Projected goals bar</dt><dd>Each team's projected goals on a 0–4.5 scale. The tick marks the high-scoring cutoff; a solid bar means past it.</dd></div>
 <div><dt>P(7+)</dt><dd>Model's chance of 7+ total goals, from the projected total and how evenly matched the teams are (close games get more overtime, shootout and empty-net goals): wins an over 6.5 and an over 6 (exactly 6 pushes an over 6). NHL average ≈ 45%.</dd></div>
