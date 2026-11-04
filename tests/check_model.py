@@ -255,7 +255,7 @@ for t, r in sent:
 check("run saved: 1 run, only not-started games projected", len(by.get("nhl_runs", [])) == 1 and
       [p["away"] for p in by.get("nhl_projections", [])] == ["AAA"] and by["nhl_projections"][0]["run_id"] == rid)
 unknown = {f"{t}.{k}" for t, rows in by.items() for r in rows for k in r if k not in cols.get(t, set())}
-check("every field sent exists in supabase/schema.sql", not unknown and len(cols) == 4, ", ".join(sorted(unknown)))
+check("every field sent exists in supabase/schema.sql", not unknown and len(cols) == 8, ", ".join(sorted(unknown)))
 check("call saved with each projection, no NaN sent", by["nhl_projections"][0]["call"] in ("SLAM", "1U", "PASS", "AVOID")
       and "NaN" not in json.dumps([r for _, r in sent]))
 store._send = lambda *a, **k: (_ for _ in ()).throw(RuntimeError("supabase down"))
@@ -329,6 +329,38 @@ check("reasoning builds for every game and edge case", not crash, crash or f"{le
 check("reasoning never shows nan / None / raw HTML", not any(re.search(r"\bnan\b|\bNone\b|<b>Amour", t) for t in texts))
 check("reasoning matches the call", all(t.split(":")[0].replace("🔨 ", "") == dashboard.call(r, dashboard._is(r.flag))
                                         for t, r in zip(texts, rows)))
+
+print("once-a-day stats (offline: the saved MoneyPuck copy + committed files)")
+m.STATS_STATUS = SP + "stats_status.json"
+now = datetime.datetime.now().astimezone()
+def stats_err(at, failed=()):
+    json.dump({"at": at.isoformat(timespec="minutes"), "failed": list(failed)}, open(m.STATS_STATUS, "w"))
+    try:
+        return m.stats_ok() and None
+    except Exception as e:
+        return str(e)
+check("daily stats: a run 5 h ago is fine; a failed run or none for 30+ h is a failure (hourly runs alert)",
+      stats_err(now - datetime.timedelta(hours=5)) is None and "failed: MoneyPuck stats" in (stats_err(now, ["MoneyPuck stats"]) or "")
+      and "no stats run since" in (stats_err(now - datetime.timedelta(hours=31)) or ""))
+season_now = sm.season_of(datetime.date.today())
+d_teams, d_goalies, d_skaters, d_meta = m.daily_results(g, season_now)
+import store
+check("daily results: every team, the recent goalies and the skaters who matter, in Supabase-ready JSON",
+      len(d_teams) >= 32 and len(d_goalies) >= 60 and len(d_skaters) >= 300 and d_meta["season"] == season_now
+      and json.dumps([store.clean(r) for r in d_teams + d_goalies + d_skaters + [d_meta]], allow_nan=False) is not None,
+      f"{len(d_teams)} teams, {len(d_goalies)} goalies, {len(d_skaters)} skaters")
+top = max(d_skaters, key=lambda r: -r["gf_if_out"])
+check("daily results: the top skater's 'goals if out' is a 5-12% cost (McDavid test range) and goalie skills stay within +-15%",
+      -0.12 <= top["gf_if_out"] <= -0.05 and all(abs(r["skill"]) <= 0.15 for r in d_goalies), f"{top['name']} {top['gf_if_out']:+.3f}")
+sent.clear()
+store.URL, store.KEY = "https://fake.supabase.co", "fake"  # the fake database again (earlier checks switch it off / break it)
+store._send = lambda table, rows, on_conflict=None, tries=3: sent.extend((table, store.clean(r)) for r in rows)
+store._go = lambda req, table, tries: None  # the replace step's DELETE: nothing is sent
+store.save_daily(d_teams, d_goalies, d_skaters, d_meta)
+unknown_d = {f"{t}.{k}" for t, r in sent for k in r if k not in cols.get(t, set())}
+check("daily results: every field sent exists in supabase/schema.sql (all 4 nhl_daily_* tables written)",
+      not unknown_d and {t for t, _ in sent} == {"nhl_daily_teams", "nhl_daily_goalies", "nhl_daily_skaters", "nhl_daily_meta"},
+      ", ".join(sorted(unknown_d)))
 
 print(f"\n{sum(results)}/{len(results)} checks passed")
 sys.exit(0 if all(results) else 1)

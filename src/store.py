@@ -14,6 +14,7 @@ import math
 import os
 import sys
 import time
+import urllib.parse
 import urllib.request
 import uuid
 from types import SimpleNamespace
@@ -46,16 +47,23 @@ def clean(row):
     return out
 
 
+def _headers(**extra):
+    return {"apikey": KEY, **({"Authorization": f"Bearer {KEY}"} if KEY.startswith("eyJ") else {}), **extra}  # new sb_secret_ keys: apikey only
+
+
 def _send(table, rows, on_conflict=None, tries=3):
     """POST rows to a table (upsert when on_conflict is given). Raises after the last failed try."""
     if not rows:
         return
     q = f"?on_conflict={on_conflict}" if on_conflict else ""
     body = json.dumps([clean(r) for r in rows]).encode()
-    req = urllib.request.Request(f"{URL}/rest/v1/{table}{q}", data=body, method="POST", headers={
-        "apikey": KEY, **({"Authorization": f"Bearer {KEY}"} if KEY.startswith("eyJ") else {}),  # new sb_secret_ keys: apikey only
+    req = urllib.request.Request(f"{URL}/rest/v1/{table}{q}", data=body, method="POST", headers=_headers(**{
         "Content-Type": "application/json",
-        "Prefer": ("resolution=merge-duplicates," if on_conflict else "") + "return=minimal"})
+        "Prefer": ("resolution=merge-duplicates," if on_conflict else "") + "return=minimal"}))
+    _go(req, table, tries)
+
+
+def _go(req, table, tries):
     for i in range(tries):
         try:
             with urllib.request.urlopen(req, timeout=30):
@@ -104,6 +112,18 @@ def projection_rows(run_id, rows, now=None):
                     "line_total": r.get("bet_total"), "line_over": r.get("bet_over"), "line_under": r.get("bet_under"),
                     **{k: r.get(k) for k in BREAKDOWN}})
     return out
+
+
+@safe
+def save_daily(teams, goalies, skaters, meta):
+    """The once-a-day results (model.daily_results), REPLACING the previous run's: upsert every row, then delete the
+    rows this run didn't write (a goalie or skater no longer in the data). Tables: supabase/schema.sql (nhl_daily_*)."""
+    now = pd.Timestamp.now(tz="UTC").isoformat()
+    for table, rows, key in (("nhl_daily_teams", teams, "team"), ("nhl_daily_goalies", goalies, "player_id"),
+                             ("nhl_daily_skaters", skaters, "player_id"), ("nhl_daily_meta", [meta], "id")):
+        _send(table, [{**r, "computed_at": now} for r in rows], on_conflict=key)
+        _go(urllib.request.Request(f"{URL}/rest/v1/{table}?computed_at=lt.{urllib.parse.quote(now, safe='')}",
+                                   method="DELETE", headers=_headers(Prefer="return=minimal")), table, 3)
 
 
 @safe

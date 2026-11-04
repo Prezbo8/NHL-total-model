@@ -1,28 +1,34 @@
-name: MoneyPuck data (once-a-day download)
+name: Daily stats (once a day)
 
-# MoneyPuck updates its game file (127 MB) once a day, ~7:45 AM Eastern. The keeper starts this workflow at 8:30 AM,
-# so the 11:17 AM run already has the new file. Model runs keep a saved copy (Actions cache) and only ask MoneyPuck
-# "changed?" (0.6 s); a run that can't get a new file within 3 minutes also starts this workflow, which has hours
-# to download it and saves it for the next runs. Until then the runs use the previous copy.
-# (Nov 3 2026: MoneyPuck served ~30 KB/s = a 70-min download, and every model run timed out waiting.)
+# Everything that only changes after games are played, done once a day instead of in every hourly run
+# (python src/model.py stats): MoneyPuck's team game file (127 MB), goalie history (NHL starts + MoneyPuck goalie
+# files), MoneyPuck skater stats, team speed. Then the day's results go to Supabase (nhl_daily_* tables, replaced
+# every run). The keeper starts this at 8:30 AM Eastern (MoneyPuck posts ~7:30 AM); an hourly run also starts it when
+# MoneyPuck has newer data than the saved copy. The hourly runs (daily.yml) never download from MoneyPuck: they use
+# the saved copy + the files committed here, and alert when data/stats_status.json shows no working run for 30 hours.
+# (Nov 3 2026: MoneyPuck served ~30 KB/s, a 70-min download, and every hourly run timed out waiting for it.)
 on:
   workflow_dispatch: {}
 
 permissions:
-  contents: read
+  contents: write   # commits the refreshed goalie / skater / speed files + data/stats_status.json
 
 concurrency:
   group: moneypuck
   cancel-in-progress: false
 
 jobs:
-  download:
+  stats:
     runs-on: ubuntu-24.04
     timeout-minutes: 330
+    env:
+      TZ: America/New_York
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}   # daily results (src/store.py save_daily); empty = skipped
+      SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: main
+          ref: ${{ github.ref_name }}   # the branch's newest commit when the job starts (main for the keeper)
 
       - uses: actions/setup-python@v7
         with:
@@ -31,7 +37,7 @@ jobs:
       - name: Install
         run: pip install "pandas==3.0.6" "numpy==2.5.3"
 
-      - name: Restore the saved copy
+      - name: Restore the saved MoneyPuck copy
         id: mp
         uses: actions/cache/restore@v6
         with:
@@ -41,14 +47,33 @@ jobs:
           key: moneypuck-${{ github.run_id }}
           restore-keys: moneypuck-
 
-      - name: Download MoneyPuck's new file (up to 5 hours; done in a second if the saved copy is current)
-        run: python -c "import sys; sys.path.insert(0, 'src'); import model; assert model.refresh_data(tries=10, budget=5 * 3600)"
+      - name: Daily stats (MoneyPuck up to 5 hours, goalie history, skater stats, team speed; results to Supabase)
+        run: python src/model.py stats
 
-      - name: Save it for the model runs
-        if: ${{ steps.mp.outputs.cache-matched-key != format('moneypuck-{0}', hashFiles('data/moneypuck_games.csv.modified')) }}
+      - name: Save the MoneyPuck copy for the hourly runs (only when this run downloaded a new version)
+        # the stamp holds MoneyPuck's Last-Modified, so a new download = a key the restored cache doesn't have
+        if: ${{ !cancelled() && hashFiles('data/moneypuck_games.csv.modified') != '' && steps.mp.outputs.cache-matched-key != format('moneypuck-{0}', hashFiles('data/moneypuck_games.csv.modified')) }}
+        continue-on-error: true   # a cache problem must not stop the files below from being saved
         uses: actions/cache/save@v6
         with:
           path: |
             data/moneypuck_games.csv
             data/moneypuck_games.csv.modified
           key: moneypuck-${{ hashFiles('data/moneypuck_games.csv.modified') }}
+
+      - name: Commit the refreshed files (the hourly runs read them)
+        if: ${{ !cancelled() }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898299+github-actions[bot]@users.noreply.github.com"
+          for f in data/goalie_starts.csv data/goalie_games.csv data/skater_seasons.csv data/team_speed.csv data/stats_status.json; do
+            if [ -f "$f" ]; then git add "$f"; fi
+          done
+          if git diff --cached --quiet; then echo "nothing new"; exit 0; fi
+          git commit -m "daily stats $(date '+%Y-%m-%d %H:%M %Z')"
+          for i in 1 2 3 4 5 6 7 8; do   # hourly runs push too: pull + push again until it lands
+            if git pull --rebase && git push; then exit 0; fi
+            git rebase --abort 2>/dev/null || true
+            echo "push failed (try $i of 8), retrying in $((i * 20)) s"; sleep $((i * 20))
+          done
+          echo "::error::push failed 8 times"; exit 1

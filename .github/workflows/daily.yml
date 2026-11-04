@@ -69,11 +69,10 @@ jobs:
       - name: Install
         run: pip install "pandas==3.0.6" "numpy==2.5.3"   # same versions tests/check_model.py passes on (Tests workflow)
 
-      # MoneyPuck's game file (127 MB, too big for the repo): keep it between runs. src/model.py downloads it
-      # again only when MoneyPuck has updated it (once a day), and gives up after 3 min: then moneypuck.yml gets it
-      # in the background (Nov 3 2026 it served ~30 KB/s = 70 min; every run timed out)
+      # MoneyPuck's game file (127 MB, too big for the repo), saved by the once-a-day stats run (moneypuck.yml).
+      # Hourly runs never download from MoneyPuck (Nov 3 2026 it served ~30 KB/s and every run timed out): they use
+      # this copy + the goalie / skater / speed files that run commits.
       - name: Restore MoneyPuck data
-        id: mp
         uses: actions/cache/restore@v6
         with:
           path: |
@@ -81,14 +80,6 @@ jobs:
             data/moneypuck_games.csv.modified
           key: moneypuck-${{ github.run_id }}
           restore-keys: moneypuck-
-
-      - name: Is MoneyPuck's new file downloading in the background? (then this run uses the saved copy)
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          n=$(gh run list -R "${{ github.repository }}" --workflow moneypuck.yml --limit 5 --json status \
-              -q '[.[] | select(.status != "completed")] | length' || echo 0)
-          if [ -n "$n" ] && [ "$n" != "0" ]; then echo "MONEYPUCK_BACKGROUND=1" >> "$GITHUB_ENV"; echo "yes: this run uses the saved copy"; else echo "no"; fi
 
       # each step runs even if an earlier one failed (e.g. settling hits an API outage),
       # so today's projections and the dashboard still get made; the run still shows red
@@ -99,18 +90,7 @@ jobs:
         if: ${{ !cancelled() }}
         run: python src/model.py today
 
-      - name: Save MoneyPuck data (only when this run downloaded a new version)
-        # the stamp holds MoneyPuck's Last-Modified, so a new download = a key the restored cache doesn't have
-        if: ${{ !cancelled() && hashFiles('data/moneypuck_games.csv.modified') != '' && steps.mp.outputs.cache-matched-key != format('moneypuck-{0}', hashFiles('data/moneypuck_games.csv.modified')) }}
-        continue-on-error: true   # a cache problem must not fail the run
-        uses: actions/cache/save@v6
-        with:
-          path: |
-            data/moneypuck_games.csv
-            data/moneypuck_games.csv.modified
-          key: moneypuck-${{ hashFiles('data/moneypuck_games.csv.modified') }}
-
-      - name: Start the background MoneyPuck download (this run couldn't get the new file within 3 minutes)
+      - name: Start the once-a-day stats run (MoneyPuck has newer data than the saved copy, or there's no copy)
         if: ${{ !cancelled() }}
         env:
           GH_TOKEN: ${{ github.token }}
