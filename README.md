@@ -110,7 +110,7 @@ data/                         CSV data
   key_players/  moves/          per-day key players and projection-move snapshots (dashboard)
 docs/                         the website (GitHub Pages)
 supabase/schema.sql           Supabase tables (nhl_*): run history + once-a-day results; paste once into the SQL Editor
-tests/check_model.py          93 component checks (paper log, settling, goalies, model, injuries, odds, dashboard, projection moves, daily stats, run summaries, game notes)
+tests/check_model.py          94 component checks (paper log, settling, goalies, model, injuries, odds, dashboard, projection moves, daily stats, run summaries, game notes)
 ```
 
 ## Schedule: two kinds of runs
@@ -168,7 +168,7 @@ run in progress on the Actions tab), restart it with **Keeper** → **Run workfl
 ## Checks and commands
 
 Checks run on GitHub, not on a local machine: every push runs the **Tests** workflow (pyflakes, a syntax
-check of every workflow's shell scripts, the 93 component checks, a projection run for tomorrow, a dashboard
+check of every workflow's shell scripts, the 94 component checks, a projection run for tomorrow, a dashboard
 build, and a check that the backtest is unchanged). Change code on a branch, open a pull request, and merge once Tests pass.
 
 What the workflows run:
@@ -179,7 +179,7 @@ python3 src/model.py stats                # once a day: MoneyPuck, goalie histor
 python3 src/model.py today [YYYY-MM-DD]   # hourly: projections + flags (only today's date is logged)
 python3 src/paper.py report               # paper-trading record
 python3 src/dashboard.py                  # rebuild the website
-python3 tests/check_model.py              # 93 component checks (Tests workflow)
+python3 tests/check_model.py              # 94 component checks (Tests workflow)
 python3 research/lib/history.py           # backtest the overs rule
 python3 research/studies/<name>.py        # any study (see research/README.md)
 ```
