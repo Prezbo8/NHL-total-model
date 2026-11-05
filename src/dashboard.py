@@ -198,9 +198,10 @@ def rank_lookup(day):
     return _RANKS[day]
 
 
-def team_story(r, s_, x, o_, opp, rk, v):
-    """Plain-English reasons behind one team's projected goals: how far from an average team, then what
-    pushes it up and what holds it back (matchups and adjustments, in goals), biggest first."""
+def team_reasons(r, s_, x, o_, opp, rk, v):
+    """The model's reasons behind one team's projected goals: (projected goals, an average team's goals or None,
+    pushing it up, holding it back), each reason (goals effect, label, why), biggest first. Used by the game summary
+    (team_story) and the AI game notes' fact sheet (src/notes.py)."""
     proj = r.proj_away if s_ == "away" else r.proj_home
     ev, pp, oth = v(s_, "ev"), v(s_, "pp"), v(s_, "oth")
     have = x in rk and opp in rk and "r_gf_ev" in rk[x]
@@ -230,13 +231,20 @@ def team_story(r, s_, x, o_, opp, rk, v):
             why = (f"{x} and {opp} are both eliminated" if 0 < pct < 0.04
                    else f"{opp} is eliminated, and out teams allow more" if pct > 0 else f"{x} is eliminated")
         reasons.append((eff, label, f"{why}, {pct * 100:+.1f}%"))
-    fmt = lambda z: f"{z[1]} <b>{z[0]:+.2f}</b> ({z[2]})"
     up = sorted([z for z in reasons if z[0] >= 0.01], key=lambda z: -z[0])
     down = sorted([z for z in reasons if z[0] <= -0.01], key=lambda z: z[0])
-    if have:
-        diff = proj - rk["_lg"]["gf"]
+    return proj, (rk["_lg"]["gf"] if have else None), up, down
+
+
+def team_story(r, s_, x, o_, opp, rk, v):
+    """Plain-English reasons behind one team's projected goals: how far from an average team, then what
+    pushes it up and what holds it back (matchups and adjustments, in goals), biggest first."""
+    proj, avg, up, down = team_reasons(r, s_, x, o_, opp, rk, v)
+    fmt = lambda z: f"{z[1]} <b>{z[0]:+.2f}</b> ({z[2]})"
+    if avg is not None:
+        diff = proj - avg
         head = (f"<b>{x} {proj:.2f}</b>: {abs(diff):.2f} goals {'above' if diff >= 0 else 'below'} what an average team "
-                f"would score ({rk['_lg']['gf']:.2f}).")
+                f"would score ({avg:.2f}).")
     else:
         head = f"<b>{x} {proj:.2f}</b>."
     parts = [head]
