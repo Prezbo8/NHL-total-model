@@ -634,5 +634,19 @@ check("game notes: rewritten when the facts change (call), not for a hundredth o
       notes.signature(nf) == notes.signature(moved) and notes.signature(nf) != notes.signature({**nf, "call": "1U"})
       and "streak (W4)" in max(notes.leads(nf))[2], max(notes.leads(nf))[2])
 
+print("team rankings page (Overview, Offense, Defense, Form)")
+rk_html = dashboard.rankings(real)
+misaligned = []
+for t in re.findall(r"<table class='gt rk-t[^']*'.*?</table>", rk_html, re.S):  # sorting reads the last header row
+    names = re.findall(r"<tr[^>]*>(.*?)</tr>", t.split("</thead>")[0], re.S)[-1]
+    body = re.search(r"<tr class='rk-row'[^>]*>(.*?)</tr>", t, re.S)
+    if body and names.count("<th") != body.group(1).count("<td"):
+        misaligned.append(f"{names.count('<th')} column names vs {body.group(1).count('<td')} cells")
+views = re.findall(r"data-show='(\w+)'", rk_html)
+check("rankings page: Overview first, then Offense / Defense / Form; each table's column names line up with its rows (sorting); "
+      "Form has group labels, the 'Right now' box and one-line schedule cells (no Chg columns)",
+      views[:3] == ["overview", "offense", "defense"] and not misaligned and "class='rk-g'" in rk_html and "fm-now" in rk_html
+      and "fm-dc" not in rk_html and "fm-stack" not in rk_html, f"{views} {misaligned[:2]}")
+
 print(f"\n{sum(results)}/{len(results)} checks passed")
 sys.exit(0 if all(results) else 1)
