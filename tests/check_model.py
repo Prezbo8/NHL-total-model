@@ -550,19 +550,33 @@ left = [p for p in plain_r if re.search(r"cutoff|high-scoring|\bslam\b", p)]
 check("game notes: the model's reason reaches the AI in plain words (no 'cutoff' / 'high-scoring'), same numbers, every logged game",
       not left and all(notes.numbers(a) == notes.numbers(b) for a, b in zip(reasons, plain_r)),
       left[0] if left else f"{len(reasons)} games: " + ", ".join(f"{c} {n}" for c, n in sorted(Counter(x.split(':')[0] for x in reasons).items())))
-def shows_ai(**x):  # a real game with a saved note written from its own facts (in memory only; nothing is written)
+def shown(call_then=None, **x):  # a real game with a saved AI note (in memory only; nothing is written): (HTML, its call now)
     r = next(pd.DataFrame([{**row0, **x}]).itertuples())
     fl = dashboard._is(r.flag)
+    c = dashboard.call(r, fl)
     dashboard._NOTES.clear()
-    dashboard._NOTES[r.date] = {"notes": {f"{r.away}@{r.home}": {"text": "A test note.", "sig": notes.signature(notes.facts(r, fl, {}))}}}
-    return "ai-note" in dashboard.game_notes(r, fl)
+    dashboard._NOTES[r.date] = {"notes": {f"{r.away}@{r.home}": {"text": "A test note.", "call": call_then or c, "run": "12:17 PM", "at": "12:21 PM"}}}
+    return dashboard.game_notes(r, fl), c
 today_s = datetime.date.today().isoformat()
-ai_shown = {"today": shows_ai(date=today_s, final_total=nan),
-            "past day": shows_ai(date=(datetime.date.today() - datetime.timedelta(days=1)).isoformat(), final_total=nan),
-            "today, final": shows_ai(date=today_s, final_total=6.0, away_score=3.0, home_score=3.0)}
+ai_shown = {"today": "ai-note" in shown(date=today_s, final_total=nan)[0],
+            "past day": "ai-note" in shown(date=(datetime.date.today() - datetime.timedelta(days=1)).isoformat(), final_total=nan)[0],
+            "today, final": "ai-note" in shown(date=today_s, final_total=6.0, away_score=3.0, home_score=3.0)[0]}
+same, now_call = shown(date=today_s, final_total=nan)
+old_call = next(c for c in notes.CALLS if c != now_call)
+changed = shown(old_call, date=today_s, final_total=nan)[0]
 dashboard._NOTES.clear()
-check("game notes: the AI note shows only for today's games until they're final (past days and finished games: the template)",
-      ai_shown == {"today": True, "past day": False, "today, final": False}, str(ai_shown))
+check("game notes: the last AI note stays up for today's games until they're final, with a notice when the call has changed "
+      "since (past days and finished games: the template)",
+      ai_shown == {"today": True, "past day": False, "today, final": False} and "AI · 12:17 PM" in changed
+      and f"Written at 12:17 PM when the call was {old_call}; it's now {now_call}." in changed and "it's now" not in same,
+      f"{ai_shown} | {changed[:240]}")
+et = lambda h, m: pd.Timestamp(f"2026-11-05 {h:02d}:{m:02d}", tz="America/New_York")
+ai_runs = {f"{h}:{m:02d} {t}": notes.ai_run(et(h, m), t) for h, m, t in
+           ((12, 20, "hourly"), (15, 24, "schedule"), (18, 40, "retry"), (20, 18, "hourly"), (13, 20, "hourly"),
+            (11, 20, "hourly"), (0, 3, "hourly"), (18, 45, "pregame"), (12, 25, "stats"), (15, 30, "manual"))}
+check("game notes: only the 12:17, 3:17, 6:17 and 8:17 PM runs (or a retry of one) write new notes; pre-game, stats-started, "
+      "12:01 AM, manual and the other hourly runs keep the last ones",
+      list(ai_runs.values()) == ["12:17 PM", "3:17 PM", "6:17 PM", "8:17 PM", None, None, None, None, None, None], str(ai_runs))
 fx_crash, fx_n = "", 0
 for r in dashboard.current(real).itertuples():
     try:

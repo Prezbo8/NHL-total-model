@@ -110,7 +110,7 @@ data/                         CSV data
   key_players/  moves/          per-day key players and projection-move snapshots (dashboard)
 docs/                         the website (GitHub Pages)
 supabase/schema.sql           Supabase tables (nhl_*): run history + once-a-day results; paste once into the SQL Editor
-tests/check_model.py          91 component checks (paper log, settling, goalies, model, injuries, odds, dashboard, projection moves, daily stats, run summaries, game notes)
+tests/check_model.py          92 component checks (paper log, settling, goalies, model, injuries, odds, dashboard, projection moves, daily stats, run summaries, game notes)
 ```
 
 ## Schedule: two kinds of runs
@@ -142,10 +142,12 @@ projections** (the hourly run), each with ✓ or ⚠.
   the season and the last 30 / 14 / 7 days, and the model's call and reasons. Each note opens on a different angle, so
   they don't all read alike. Today's slate only: the Tomorrow preview tab, finished games and past days show the fixed
   template. A check rejects any note that leaves out a team's record, last-10 record or projected goals or the total,
-  uses a number not in the facts, names a different call, says "cutoff" or copies the topic it was given to open on,
-  and a note is rewritten only when its game's facts change. Numbers are colored as the dashboard colors them
-  (breakdown tiers, matchup ranks, Form numbers; last 10 records and streaks hot / cold). Without the key, or when
-  Gemini fails, the fixed template shows, as before.
+  uses a number not in the facts, names a different call, says "cutoff" or copies the topic it was given to open on.
+  New paragraphs come only from the 12:17, 3:17, 6:17 and 8:17 PM runs (or a retry of one), and there only for games
+  whose numbers changed since their last one; in between, the last paragraph stays up (marked with the run it's from)
+  until the game is final, with a one-line notice if the call has changed since. Numbers are colored as the dashboard
+  colors them (breakdown tiers, matchup ranks, Form numbers; last 10 records and streaks hot / cold). Without the key,
+  or when Gemini fails, the fixed template shows, as before.
 - **Every run ends with a Summary step**: what the job is for, what it did (✓ done, ✗ failed, – nothing
   to do) and the final result. It's the last step in the log and is also shown on the run's page on the
   Actions tab (under the job diagram). Steps add their lines with `health.note()` (Python) or `echo ... >> "$RUN_SUMMARY"`;
@@ -166,7 +168,7 @@ run in progress on the Actions tab), restart it with **Keeper** → **Run workfl
 ## Checks and commands
 
 Checks run on GitHub, not on a local machine: every push runs the **Tests** workflow (pyflakes, a syntax
-check of every workflow's shell scripts, the 91 component checks, a projection run for tomorrow, a dashboard
+check of every workflow's shell scripts, the 92 component checks, a projection run for tomorrow, a dashboard
 build, and a check that the backtest is unchanged). Change code on a branch, open a pull request, and merge once Tests pass.
 
 What the workflows run:
@@ -177,7 +179,7 @@ python3 src/model.py stats                # once a day: MoneyPuck, goalie histor
 python3 src/model.py today [YYYY-MM-DD]   # hourly: projections + flags (only today's date is logged)
 python3 src/paper.py report               # paper-trading record
 python3 src/dashboard.py                  # rebuild the website
-python3 tests/check_model.py              # 91 component checks (Tests workflow)
+python3 tests/check_model.py              # 92 component checks (Tests workflow)
 python3 research/lib/history.py           # backtest the overs rule
 python3 research/studies/<name>.py        # any study (see research/README.md)
 ```

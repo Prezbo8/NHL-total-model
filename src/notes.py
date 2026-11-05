@@ -12,11 +12,13 @@ over the season and the last 30 / 14 / 7 days (form_windows), with a legend (REA
 both teams; each game on a slate opens on a different kind of topic (leads(), assigned in run()). A check rejects a note
 that leaves out a team's record, last-10 record or projected goals or the projected total, uses a number not in the
 facts, names another call, leaves out the call, stops mid-sentence, says 'cutoff', copies its opening topic's wording or
-leaks the fact sheet's field names (one retry, then the template stays). A note is rewritten only when its game's facts
-change (signature()); saved in data/notes/<day>.json. No GEMINI_API_KEY (GitHub secret), or Gemini failing / out of
-free requests = the template, as before.
+leaks the fact sheet's field names (one retry, then the template stays). New notes only at the 12:17, 3:17, 6:17 and
+8:17 PM runs (ai_run), and there only for games whose facts changed since their last note (signature()); in between,
+the last note stays up until the game is final, with a one-line notice when the call has changed since
+(dashboard.game_notes). Saved in data/notes/<day>.json. No GEMINI_API_KEY (GitHub secret), or Gemini failing / out
+of free requests = the template, as before.
 
-  python3 src/notes.py             # today's games that haven't started (the hourly run, after projecting)
+  python3 src/notes.py             # after projecting: writes only at the 12:17 / 3:17 / 6:17 / 8:17 PM runs
   python3 src/notes.py --preview   # also print today's notes + their dashboard HTML (Preview game notes workflow)
 """
 import html
@@ -41,9 +43,11 @@ MODELS = list(dict.fromkeys(m for m in (os.environ.get("GEMINI_MODEL"), "gemini-
                                         "gemini-3.7-flash", "gemini-3.6-flash", "gemini-3.5-flash", "gemini-flash-lite-latest",
                                         "gemini-3.5-flash-lite", "gemini-3.1-flash-lite") if m))
 API = "https://generativelanguage.googleapis.com/v1beta/models/{}:generateContent"
-MAX_CALLS = 14   # notes per run: the free tier allows a limited number of requests a day (per Google project)
+MAX_CALLS = 16   # notes per run (a full slate): the free tier allows a limited number of requests a day (per Google project)
 PAUSE = 6        # seconds between notes (the free tier allows ~10 requests a minute)
-BUDGET = 300     # seconds of writing per hourly run (~30 s a note), so the run's commit isn't held up: the rest next run
+BUDGET = 600     # seconds of writing per run (~30 s a note), so a slow Gemini can't hold the run's commit up for long
+NOTE_HOURS = (12, 15, 18, 20)                    # new notes only at the 12:17, 3:17, 6:17 and 8:17 PM runs (user's choice)
+NOTE_TRIGGERS = ("hourly", "schedule", "retry")  # the keeper's hourly slot, GitHub's backup schedule, or a retry of one
 WORDS = (120, 270)
 CALLS = ("SLAM", "1U", "PASS", "AVOID")
 WINDOWS = (("season", "season"), ("30", "last_30_days"), ("14", "last_14_days"), ("7", "last_7_days"))
@@ -517,12 +521,27 @@ def models():
                 if "generateContent" in m.get("supportedGenerationMethods", [])]
 
 
+def ai_run(now, trigger):
+    """'3:17 PM' when this run writes new notes (the hourly run in one of the NOTE_HOURS, or its retry), else None: in
+    between, the last notes stay up (pre-game, stats-started, 12:01 AM and manual runs never write). now = Eastern time;
+    trigger = what started the run (daily.yml's NHL_TRIGGER)."""
+    if now.hour in NOTE_HOURS and trigger in NOTE_TRIGGERS:
+        return f"{now.hour % 12 or 12}:17 {'PM' if now.hour >= 12 else 'AM'}"
+    return None
+
+
 def run(preview=False):
     import dashboard
     import health
     import paper
     if not os.environ.get("GEMINI_API_KEY"):
         print("(game notes: no GEMINI_API_KEY secret: the dashboard keeps the template)")
+        return
+    now_et = pd.Timestamp.now(tz="America/New_York")
+    slot = now_et.strftime("%-I:%M %p") if preview else ai_run(now_et, os.environ.get("NHL_TRIGGER", ""))
+    if slot is None:
+        print("(game notes: new ones only at the 12:17, 3:17, 6:17 and 8:17 PM runs; the last ones stay up until then)")
+        health.note("• Game notes: the last AI paragraphs stay up (new ones at the 12:17, 3:17, 6:17 and 8:17 PM runs)")
         return
     if preview:
         try:
@@ -555,7 +574,7 @@ def run(preview=False):
     t0 = time.time()
     for key, f, sig in todo:
         if calls >= MAX_CALLS or (not preview and time.time() - t0 > BUDGET):
-            print(f"(game notes: stopping here for this run; {len(todo) - made - len(failed)} left for the next one)")
+            print(f"(game notes: stopping here; {len(todo) - made - len(failed)} left for the next AI run)")
             break
         score, kind, topic = max(leads(f), key=lambda c: c[0] - 0.6 * kinds[c[1]])
         try:
@@ -576,8 +595,8 @@ def run(preview=False):
             failed.append(key)
             continue
         kinds[kind] += 1
-        notes[key] = {"text": text, "colors": colors(f), "sig": sig, "model": model, "lead_kind": kind,
-                      "at": pd.Timestamp.now(tz="America/New_York").strftime("%-I:%M %p")}
+        notes[key] = {"text": text, "colors": colors(f), "sig": sig, "model": model, "lead_kind": kind, "call": f["call"],
+                      "run": slot, "at": pd.Timestamp.now(tz="America/New_York").strftime("%-I:%M %p")}
         used.append(opening(text))
         made += 1
         if preview:
