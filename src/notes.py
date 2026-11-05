@@ -35,12 +35,15 @@ import pandas as pd
 import paths
 
 # tried in order: an overloaded / unavailable / out-of-free-requests model hands over to the next (each has its own free
-# allowance). Nov 4 2026: 2.5-flash 404s for new keys, and the newest Flash answered 503 "high demand" all afternoon.
-MODELS = list(dict.fromkeys(m for m in (os.environ.get("GEMINI_MODEL"), "gemini-flash-latest", "gemini-3.6-flash",
-                                        "gemini-flash-lite-latest") if m))
+# allowance; Flash first, the Lite models last). Nov 4 2026: 2.5-flash 404s for new keys, the newest Flash answered 503
+# "high demand" all afternoon, and by midnight flash-latest and 3.6-flash were out of free requests (429).
+MODELS = list(dict.fromkeys(m for m in (os.environ.get("GEMINI_MODEL"), "gemini-flash-latest", "gemini-3.8-flash",
+                                        "gemini-3.7-flash", "gemini-3.6-flash", "gemini-3.5-flash", "gemini-flash-lite-latest",
+                                        "gemini-3.5-flash-lite", "gemini-3.1-flash-lite") if m))
 API = "https://generativelanguage.googleapis.com/v1beta/models/{}:generateContent"
 MAX_CALLS = 14   # notes per run: the free tier allows a limited number of requests a day (per Google project)
 PAUSE = 6        # seconds between notes (the free tier allows ~10 requests a minute)
+BUDGET = 300     # seconds of writing per hourly run (~30 s a note), so the run's commit isn't held up: the rest next run
 WORDS = (120, 270)
 CALLS = ("SLAM", "1U", "PASS", "AVOID")
 WINDOWS = (("season", "season"), ("30", "last_30_days"), ("14", "last_14_days"), ("7", "last_7_days"))
@@ -325,17 +328,22 @@ def ask(model, system, prompt):
 
 
 def gemini(system, prompt):
-    """(text, finish reason, model) from the first model in MODELS that answers."""
+    """(text, finish reason, model) from the first model in MODELS that answers; when none does, one more pass after a
+    pause (an overload usually clears in seconds)."""
     last = None
-    for model in MODELS:
-        try:
-            return (*ask(model, system, prompt), model)
-        except urllib.error.HTTPError as e:
-            if e.code not in (404, 429, 500, 503):
-                raise
-            print(f"  ({model}: {e.code}, trying the next model)")
-            last = e
-            time.sleep(2)
+    for attempt in range(2):
+        for model in MODELS:
+            try:
+                return (*ask(model, system, prompt), model)
+            except urllib.error.HTTPError as e:
+                if e.code not in (404, 429, 500, 503):
+                    raise
+                print(f"  ({model}: {e.code}, trying the next model)")
+                last = e
+                time.sleep(2)
+        if not attempt:
+            print("  (no model answered: one more pass in 30 s)")
+            time.sleep(30)
     raise last
 
 
@@ -418,6 +426,7 @@ def write_note(f, used, topic):
         why = check(text, f, finish, topic)
         if not why:
             return text, "", model
+        print(f"  ({model}'s note can't be used: {why})")
         time.sleep(PAUSE)
     return None, why, model
 
@@ -543,15 +552,17 @@ def run(preview=False):
             todo.append((key, f, sig))
     # the slate's most unusual games pick their topic first; a kind already used today counts less
     todo.sort(key=lambda z: -max(c[0] for c in leads(z[1])))
+    t0 = time.time()
     for key, f, sig in todo:
-        if calls >= MAX_CALLS:
+        if calls >= MAX_CALLS or (not preview and time.time() - t0 > BUDGET):
+            print(f"(game notes: stopping here for this run; {len(todo) - made - len(failed)} left for the next one)")
             break
         score, kind, topic = max(leads(f), key=lambda c: c[0] - 0.6 * kinds[c[1]])
         try:
             text, why, model = write_note(f, used, topic)
             calls += 1
         except urllib.error.HTTPError as e:
-            print(f"(game notes: Gemini answered {e.code}: {e.read().decode()[:160]})")
+            print(f"(game notes: Gemini answered {e.code}: {' '.join(e.read().decode(errors='replace').split())[:200]})")
             if e.code in (429, 403, 404, 503):
                 calls = MAX_CALLS  # out of free requests, no access, no model or every model overloaded: try next run
             failed.append(key)
