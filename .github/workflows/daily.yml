@@ -131,7 +131,7 @@ jobs:
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}   # empty = no notes, the template as before
         run: |
-          python src/notes.py || { echo "game notes failed (the dashboard keeps the template)"
+          python -u src/notes.py || { echo "game notes failed (the dashboard keeps the template)"
             echo "✗ Game notes failed (the dashboard keeps the template)" >> "$RUN_SUMMARY"; }
 
       - name: Report

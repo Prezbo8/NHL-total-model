@@ -605,12 +605,18 @@ asked, real_ask, real_sleep = [], notes.ask, notes.time.sleep
 notes.ask, notes.time.sleep = fake_ask, (lambda s: None)
 try:
     got = notes.gemini("system", "prompt")
+    try:  # out of time for this note: no model is asked, the note gives up
+        notes.gemini("system", "prompt", deadline=notes.time.time() - 1)
+        late = "no error"
+    except TimeoutError:
+        late = "gave up"
 except Exception as ex:
-    got = (f"{type(ex).__name__}: {ex}",)
+    got, late = (f"{type(ex).__name__}: {ex}",), "?"
 finally:
     notes.ask, notes.time.sleep = real_ask, real_sleep
-check("game notes: a Gemini model that doesn't answer in time hands over to the next one (the game isn't skipped)",
-      got[-1] == notes.MODELS[1] and asked == notes.MODELS[:2], f"{got} after {asked}")
+check("game notes: a Gemini model that doesn't answer in time hands over to the next one (the game isn't skipped); past "
+      "the note's time limit no model is asked", got[-1] == notes.MODELS[1] and asked == notes.MODELS[:2] and late == "gave up",
+      f"{got} after {asked}; late: {late}")
 hcols = notes.colors(nf)
 chips = notes.colorize("BUF gets +0.21 from Ersson, loses -0.14, 5-on-5 at 2.12, a 53% chance, 7-2-1 <b> (6.55), "
                        "its #11 attack, the OTT #2 defense, net +0.85", hcols)

@@ -17,7 +17,7 @@ concurrency:
 jobs:
   preview:
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 45   # writing stops at notes.PREVIEW_BUDGET (20 min) so the notes and HTML print before this
     env:
       TZ: America/New_York
       RUN_SUMMARY: /tmp/run_summary.txt   # each step adds what it did; the last step prints it (.github/scripts/summary.py)
@@ -50,7 +50,7 @@ jobs:
         id: write-notes
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-        run: python src/notes.py --preview
+        run: python -u src/notes.py --preview   # -u: each line shows in the log as it happens (and survives a timeout)
 
       - name: Summary (what this run did and how it ended; also on the run's page)
         if: ${{ always() }}
