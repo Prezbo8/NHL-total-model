@@ -328,13 +328,27 @@ def ask(model, system, prompt):
     """(text, finish reason) from one model."""
     key = os.environ.get("GEMINI_API_KEY")
     body = {"systemInstruction": {"parts": [{"text": system}]}, "contents": [{"role": "user", "parts": [{"text": prompt}]}],
-            "generationConfig": {"temperature": 1.0, "maxOutputTokens": 8192}}  # room for a thinking model's thoughts + the note
+            "generationConfig": {"temperature": 1.0, "maxOutputTokens": 16384}}  # room for a thinking model's thoughts + the
+    # note (8192 ran out: a 3.6-flash note was cut off by MAX_TOKENS on Nov 5)
     req = urllib.request.Request(API.format(model), data=json.dumps(body).encode(), method="POST",
                                  headers={"Content-Type": "application/json", "x-goog-api-key": key})  # key in a header, never the URL
     with urllib.request.urlopen(req, timeout=90) as f:
         out = json.load(f)
     c = out["candidates"][0]
     return "".join(p.get("text", "") for p in c["content"]["parts"] if not p.get("thought")).strip(), c.get("finishReason", "")
+
+
+def quota(body):
+    """'(out of free requests: per-day limit 20)' from a 429's error body (which free limit, so the log says whether
+    waiting a minute helps); '(overloaded)' for a 503; '' otherwise."""
+    if "UNAVAILABLE" in body or "overloaded" in body.lower() or "high demand" in body.lower():
+        return "(overloaded)"
+    per = re.search(r"Per(Day|Minute)", body)
+    lim = re.search(r"limit: (\d+)", body)
+    if per or lim or "RESOURCE_EXHAUSTED" in body:
+        return ("(out of free requests" + (f": per-{per.group(1).lower()}" if per else "")
+                + (f" limit {lim.group(1)}" if lim else "") + ")")
+    return ""
 
 
 def gemini(system, prompt, deadline=None):
@@ -356,7 +370,8 @@ def gemini(system, prompt, deadline=None):
             except urllib.error.HTTPError as e:
                 if e.code not in (404, 429, 500, 503):
                     raise
-                print(f"  ({model}: {e.code} after {time.time() - t:.0f} s, trying the next model)")
+                e.detail = quota(e.read().decode(errors="replace"))
+                print(f"  ({model}: {e.code}{' ' + e.detail if e.detail else ''} after {time.time() - t:.0f} s, trying the next model)")
                 last = e
                 time.sleep(2)
             except (TimeoutError, urllib.error.URLError) as e:  # (HTTPError, a URLError, is caught above)
@@ -606,7 +621,7 @@ def run(preview=False):
             text, why, model = write_note(f, used, topic)
             calls += 1
         except urllib.error.HTTPError as e:
-            print(f"(game notes: Gemini answered {e.code}: {' '.join(e.read().decode(errors='replace').split())[:200]})")
+            print(f"(game notes: Gemini answered {e.code} {getattr(e, 'detail', '')}: stopping for this run)")
             if e.code in (429, 403, 404, 503):
                 calls = MAX_CALLS  # out of free requests, no access, no model or every model overloaded: try next run
             failed.append(key)

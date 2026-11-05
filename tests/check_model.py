@@ -614,9 +614,13 @@ except Exception as ex:
     got, late = (f"{type(ex).__name__}: {ex}",), "?"
 finally:
     notes.ask, notes.time.sleep = real_ask, real_sleep
+q = (notes.quota('{"error": {"code": 429, "message": "Quota exceeded for metric: generate_content_free_tier_requests, limit: 20",'
+                  ' "status": "RESOURCE_EXHAUSTED", "details": [{"quotaId": "GenerateRequestsPerDayPerProjectPerModel-FreeTier"}]}}'),
+     notes.quota('{"error": {"code": 503, "message": "The model is overloaded. Please try again later.", "status": "UNAVAILABLE"}}'))
 check("game notes: a Gemini model that doesn't answer in time hands over to the next one (the game isn't skipped); past "
-      "the note's time limit no model is asked", got[-1] == notes.MODELS[1] and asked == notes.MODELS[:2] and late == "gave up",
-      f"{got} after {asked}; late: {late}")
+      "the note's time limit no model is asked; the log says which free limit a 429 hit, or that a model is overloaded",
+      got[-1] == notes.MODELS[1] and asked == notes.MODELS[:2] and late == "gave up"
+      and q == ("(out of free requests: per-day limit 20)", "(overloaded)"), f"{got} after {asked}; late: {late}; {q}")
 hcols = notes.colors(nf)
 chips = notes.colorize("BUF gets +0.21 from Ersson, loses -0.14, 5-on-5 at 2.12, a 53% chance, 7-2-1 <b> (6.55), "
                        "its #11 attack, the OTT #2 defense, net +0.85", hcols)
