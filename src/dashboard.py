@@ -392,7 +392,7 @@ _NOTES = {}
 
 
 def load_notes(day):
-    """data/notes/<day>.json (src/notes.py): AI game notes, debrief facts and each team's recent form; cached per build."""
+    """data/notes/<day>.json (src/notes.py): AI game notes and each team's recent form; cached per build."""
     if day not in _NOTES:
         p = paths.data(f"notes/{day}.json")
         _NOTES[day] = json.load(open(p, encoding="utf-8")) if os.path.exists(p) else {}
@@ -418,15 +418,16 @@ def form_strip(r):
 
 
 def game_notes(r, flagged):
-    """The AI-written note for this game (src/notes.py) with its numbers in color and the full breakdown one click away,
-    when there is one that matches the game's current facts; else the template (reasoning). Form strip either way."""
+    """The AI-written note for one of today's games until it's final (src/notes.py), with its numbers in color and the
+    full breakdown one click away, when it matches the game's current facts; else, and on past days, the template
+    (reasoning). Form strip either way."""
     import notes
     key, saved = f"{r.away}@{r.home}", load_notes(r.date)
     n = saved.get("notes", {}).get(key)
     strip = form_strip(r)
-    if n and n.get("text"):
+    if n and n.get("text") and r.date == date.today().isoformat() and pd.isna(r.final_total):
         try:  # only a note written from these same facts (else it says old numbers): the template meanwhile
-            fresh = n.get("sig") == notes.signature(notes.facts(r, flagged, saved.get("form", {}), saved.get("debrief", {}).get(key)))
+            fresh = n.get("sig") == notes.signature(notes.facts(r, flagged, saved.get("form", {})))
         except Exception:
             fresh = False
         if fresh:

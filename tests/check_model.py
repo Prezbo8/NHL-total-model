@@ -484,7 +484,7 @@ import notes
 nf = {"game": "OTT @ BUF", "call": "PASS", "projected_total": 6.67, "line": "6.5", "chance_of_7_plus_goals": "53%",
       "over_flag_needs": "both teams 3.10+ projected goals and a line of 6 or 6.5",
       "how_calls_like_this_did_2021_26": "Flagged games like this went over only 47% of the time in 2021-26.",
-      "why_this_call": "PASS: both teams project as high-scoring (OTT 3.30, BUF 3.38; cutoff 3.10), but neither is great at 5-on-5.",
+      "why_this_call": "PASS: both teams project at least 3.10 goals (OTT 3.30, BUF 3.38), but neither is great at 5-on-5.",
       "teams": {"OTT": {"projected_goals": 3.3, "five_on_five": "good (2.12 projected goals)", "power_play": "great (0.67 projected goals)",
                         "goalie_faced": "Colten Ellis, an OK goalie, grade 35", "players_out": [],
                         "pushing_up": ["5-on-5 matchup +0.09 (its attack ranks #11 of 32, BUF's defense #17)"],
@@ -499,13 +499,41 @@ good = ("Buffalo has won 4 straight and is 7-2-1 in its last 10, but the model k
         "adds +0.21 to Buffalo's projection, yet Ottawa's #2 defense takes -0.14 back, and neither team is great at 5-on-5. "
         "The model has the total at 6.67 against a 6.5 line with a 53% chance of 7 or more. Flagged games like this went over "
         "only 47% of the time in 2021-26, so the streak is context, not a reason to bet.")
-check("game notes: a note using only the model's numbers and its call passes the check", notes.check(good, nf) == "", notes.check(good, nf))
+topic = max(notes.leads(nf))[2]
+check("game notes: a note using only the model's numbers and its call passes the check",
+      notes.check(good, nf, "STOP", topic) == "", notes.check(good, nf, "STOP", topic))
+call_topic = "the model's call and the matchup behind it"
 bad = {"invented number": good.replace("6.67", "7.15"), "another call": good.replace("keeps this a PASS", "keeps this a SLAM, not a PASS"),
-       "no call": good.replace("PASS", "pass"), "cut off": good[:good.index(" so the streak")]}
-why_bad = {k: notes.check(t, nf) for k, t in bad.items()}
-check("game notes: an invented number, another call, a missing call or a note cut off mid-sentence is rejected (then the template stays)",
+       "no call": good.replace("PASS", "pass"), "cut off": good[:good.index(" so the streak")],
+       "jargon": good.replace("The model has the total", "Both clear the cutoff, and the model has the total"),
+       "lowercase start": good[0].lower() + good[1:], "field name": good.replace("53% chance", "53% chance_of_7_plus_goals"),
+       "copied topic": "The model's call and the matchup behind it agree here. " + good}
+why_bad = {k: notes.check(t, nf, "STOP", call_topic if k == "copied topic" else topic) for k, t in bad.items()}
+check("game notes: an invented number, another call, a missing call, a note cut off mid-sentence, 'cutoff', a lowercase start, "
+      "a field name or a copied opening topic is rejected (one retry, then the template stays)",
       "7.15" in why_bad["invented number"] and "SLAM" in why_bad["another call"] and "PASS" in why_bad["no call"]
-      and "mid-sentence" in why_bad["cut off"], str(why_bad))
+      and "mid-sentence" in why_bad["cut off"] and "cutoff" in why_bad["jargon"] and "capital" in why_bad["lowercase start"]
+      and "field names" in why_bad["field name"] and "the model's call and" in why_bad["copied topic"], str(why_bad))
+from collections import Counter
+reasons = [notes.plain(t).split(" At 5-on-5,")[0] for t in texts if "no full reasoning" not in t and "not available" not in t]
+plain_r = [notes.plain_reason(x) for x in reasons]
+left = [p for p in plain_r if re.search(r"cutoff|high-scoring|\bslam\b", p)]
+check("game notes: the model's reason reaches the AI in plain words (no 'cutoff' / 'high-scoring'), same numbers, every logged game",
+      not left and all(notes.numbers(a) == notes.numbers(b) for a, b in zip(reasons, plain_r)),
+      left[0] if left else f"{len(reasons)} games: " + ", ".join(f"{c} {n}" for c, n in sorted(Counter(x.split(':')[0] for x in reasons).items())))
+def shows_ai(**x):  # a real game with a saved note written from its own facts (in memory only; nothing is written)
+    r = next(pd.DataFrame([{**row0, **x}]).itertuples())
+    fl = dashboard._is(r.flag)
+    dashboard._NOTES.clear()
+    dashboard._NOTES[r.date] = {"notes": {f"{r.away}@{r.home}": {"text": "A test note.", "sig": notes.signature(notes.facts(r, fl, {}))}}}
+    return "ai-note" in dashboard.game_notes(r, fl)
+today_s = datetime.date.today().isoformat()
+ai_shown = {"today": shows_ai(date=today_s, final_total=nan),
+            "past day": shows_ai(date=(datetime.date.today() - datetime.timedelta(days=1)).isoformat(), final_total=nan),
+            "today, final": shows_ai(date=today_s, final_total=6.0, away_score=3.0, home_score=3.0)}
+dashboard._NOTES.clear()
+check("game notes: the AI note shows only for today's games until they're final (past days and finished games: the template)",
+      ai_shown == {"today": True, "past day": False, "today, final": False}, str(ai_shown))
 hcols = notes.colors(nf)
 chips = notes.colorize("BUF gets +0.21 from Ersson, loses -0.14, 5-on-5 at 2.12, a 53% chance, 7-2-1 <b> (6.55)", hcols)
 check("game notes: the model's numbers get the breakdown table's tier colors, last 10 hot / cold; text escaped, no partial matches",
