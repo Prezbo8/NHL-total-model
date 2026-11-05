@@ -1857,7 +1857,7 @@ def form_view():
             + "".join(sched_cell(r, c) for c, _, _ in sched) + sched_phone(r)
             + f"<td class='num muted fm-gp' data-k='{-r.gp}'>{r.gp}</td></tr>"
             for i, r in enumerate(x.itertuples()))
-        short = {"Allowing": "Allow"}  # phones: narrower header (no sideways scrolling at 375 px)
+        short = {"Allowing": "Allow", "Scoring": "Score"}  # phones: narrower headers (no sideways scrolling at 375 px)
         hlabel = lambda h: f"<span class='fm-long'>{h}</span><span class='fm-short'>{short[h]}</span>" if h in short else h
         heads = "".join(f"<th class='num{' fm-sd' if j >= len(FORM_COLS) else ''}{' g1' if c in g1 or j == len(FORM_COLS) else ''}'>{tip(hlabel(h), ex, 'tr' if j > 2 else '')}</th>"
                         for j, (c, h, ex) in enumerate(FORM_COLS + sched))
@@ -2109,10 +2109,12 @@ table th.fm-sd,table td.fm-sd{text-align:center}
 /* rankings: group labels above the column names, a divider before each group, the Overview's stacked cells, Form's 'Right now' box */
 table.rk-t tr.rk-g th{font-size:9.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);text-align:center;padding:7px 5px 3px;border-bottom:1px solid var(--line)}
 table.rk-t .g1{border-left:2px solid var(--line)}
-table.ov-t td.ov{line-height:1.2}table.ov-t td.ov b{display:block;font-size:15px}table.ov-t td.ov .ov-s{display:block;font-size:10.5px;opacity:.75;white-space:nowrap}
+table.ov-t td.ov,table.ov-t th.num:not(.rk-x){text-align:center}table.ov-t td.ov{line-height:1.2}table.ov-t td.ov b{display:block;font-size:15px}table.ov-t td.ov .ov-s{display:block;font-size:10.5px;opacity:.75;white-space:nowrap}
 table.ov-t td.ov .ov-c{display:inline-flex;align-items:center;gap:2px;margin:0 3px;white-space:nowrap}
 table.ov-t tr.rk-row{cursor:default}table.ov-t tr.rk-row:hover td.tm b{text-decoration:none}
-@media (max-width:760px){table.ov-t td.tm img,table.ov-t td.tm picture{display:none}table.ov-t td.ov .ov-c{display:flex;margin:1px 0}table.ov-t td.ov b{font-size:13px}table.ov-t td.ov .ov-s{font-size:9px}}
+@media (max-width:760px){.rk-switch{display:flex;width:100%;box-sizing:border-box}.rk-switch button{flex:1 1 0;padding:7px 4px;font-size:13px}
+  table.rk-t .g1{border-left:0}table.rk-t tr.rk-g th{white-space:normal;letter-spacing:.02em;font-size:8.5px;padding:4px 2px 2px;line-height:1.15}
+  table.ov-t td.tm img,table.ov-t td.tm picture{display:none}table.ov-t td.ov .ov-c{display:flex;margin:1px 0}table.ov-t td.ov b{font-size:13px}table.ov-t td.ov .ov-s{font-size:9px}}
 .fm-now{background:var(--ice);border:1px solid var(--line);border-radius:10px;padding:4px 14px 8px;margin:0 0 12px}.fm-now .fm-h{margin:6px 0 2px}
 .fm-now .fm-notes{max-width:none;columns:2 360px;column-gap:28px;margin:0}.fm-now .fm-notes li{break-inside:avoid}
 .fm-same{font-weight:600;opacity:.65}.fm-gl{max-width:820px;margin:6px 0 0;font-size:13px}details.rk-how{margin-top:12px}
