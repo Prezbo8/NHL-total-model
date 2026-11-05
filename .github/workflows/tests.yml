@@ -108,15 +108,6 @@ jobs:
               f"✓ Backtest unchanged: {total[0]} bets at the opening line ROI {total[1]:+.1f}%, {total[2]} at the close {total[3]:+.1f}% "
               f"(= the dashboard's Backtest tab, every season)\n")
           PY
-      - name: Preview the AI game notes (only when Tests is started by hand; until 'Preview game notes' is on main)
-        id: notes-preview
-        if: ${{ github.event_name == 'workflow_dispatch' }}
-        env:
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-        run: |
-          set -o pipefail
-          python src/model.py today | tail -2   # today's games and their form, in this checkout only (nothing is committed)
-          python src/notes.py --preview
       - name: Summary (what passed and how the run ended; also on the run's page)
         if: ${{ always() }}
         env:
