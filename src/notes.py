@@ -46,7 +46,8 @@ API = "https://generativelanguage.googleapis.com/v1beta/models/{}:generateConten
 MAX_CALLS = 16   # notes per run (a full slate): the free tier allows a limited number of requests a day (per Google project)
 PAUSE = 6        # seconds between notes (the free tier allows ~10 requests a minute)
 BUDGET = 600     # seconds of writing per run (~30 s a note), so a slow Gemini can't hold the run's commit up for long
-NOTE_WAIT = 240  # seconds of trying models for one note before giving up on it (a request times out after 90 s)
+NOTE_WAIT = 240  # seconds of trying models for one note, both tries, before giving up on it (a request times out after 90 s)
+PREVIEW_BUDGET = 1200  # a preview's writing time, so it ends (and prints) inside its workflow's time limit
 NOTE_HOURS = (12, 15, 18, 20)                    # new notes only at the 12:17, 3:17, 6:17 and 8:17 PM runs (user's choice)
 NOTE_TRIGGERS = ("hourly", "schedule", "retry")  # the keeper's hourly slot, GitHub's backup schedule, or a retry of one
 WORDS = (120, 300)  # asked for 150-230; the Lite models run long (281-370 words on Nov 5)
@@ -327,7 +328,8 @@ def ask(model, system, prompt):
     """(text, finish reason) from one model."""
     key = os.environ.get("GEMINI_API_KEY")
     body = {"systemInstruction": {"parts": [{"text": system}]}, "contents": [{"role": "user", "parts": [{"text": prompt}]}],
-            "generationConfig": {"temperature": 1.0, "maxOutputTokens": 8192}}  # room for a thinking model's thoughts + the note
+            "generationConfig": {"temperature": 1.0, "maxOutputTokens": 16384}}  # room for a thinking model's thoughts + the
+    # note (8192 ran out: a 3.6-flash note was cut off by MAX_TOKENS on Nov 5)
     req = urllib.request.Request(API.format(model), data=json.dumps(body).encode(), method="POST",
                                  headers={"Content-Type": "application/json", "x-goog-api-key": key})  # key in a header, never the URL
     with urllib.request.urlopen(req, timeout=90) as f:
@@ -336,31 +338,50 @@ def ask(model, system, prompt):
     return "".join(p.get("text", "") for p in c["content"]["parts"] if not p.get("thought")).strip(), c.get("finishReason", "")
 
 
-def gemini(system, prompt):
+def quota(body):
+    """'(out of free requests: per-day limit 20)' from a 429's error body (which free limit, so the log says whether
+    waiting a minute helps); '(overloaded)' for a 503; '' otherwise."""
+    if "UNAVAILABLE" in body or "overloaded" in body.lower() or "high demand" in body.lower():
+        return "(overloaded)"
+    per = re.search(r"Per(Day|Minute)", body)
+    lim = re.search(r"limit: (\d+)", body)
+    if per or lim or "RESOURCE_EXHAUSTED" in body:
+        return ("(out of free requests" + (f": per-{per.group(1).lower()}" if per else "")
+                + (f" limit {lim.group(1)}" if lim else "") + ")")
+    return ""
+
+
+def gemini(system, prompt, deadline=None):
     """(text, finish reason, model) from the first model in MODELS that answers; when none does, one more pass after a
     pause (an overload usually clears in seconds). A model that doesn't answer in time (or drops the connection) hands
-    over to the next one and isn't asked again for this note; after NOTE_WAIT seconds no new model is tried."""
-    last, slow, t0 = None, set(), time.time()
+    over to the next one and isn't asked again for this note; past the deadline (write_note: NOTE_WAIT seconds for the
+    whole note) no new model is tried. Every answer and failure is logged with how long it took."""
+    last, slow = None, set()
+    deadline = deadline or time.time() + NOTE_WAIT
     for attempt in range(2):
         for model in MODELS:
-            if model in slow or time.time() - t0 > NOTE_WAIT:
+            if model in slow or time.time() > deadline:
                 continue
+            t = time.time()
             try:
-                return (*ask(model, system, prompt), model)
+                out = ask(model, system, prompt)
+                print(f"  ({model} answered in {time.time() - t:.0f} s)")
+                return (*out, model)
             except urllib.error.HTTPError as e:
                 if e.code not in (404, 429, 500, 503):
                     raise
-                print(f"  ({model}: {e.code}, trying the next model)")
+                e.detail = quota(e.read().decode(errors="replace"))
+                print(f"  ({model}: {e.code}{' ' + e.detail if e.detail else ''} after {time.time() - t:.0f} s, trying the next model)")
                 last = e
                 time.sleep(2)
             except (TimeoutError, urllib.error.URLError) as e:  # (HTTPError, a URLError, is caught above)
-                print(f"  ({model}: no answer ({type(e).__name__}: {str(e)[:60]}), trying the next model)")
+                print(f"  ({model}: no answer after {time.time() - t:.0f} s ({type(e).__name__}), trying the next model)")
                 last = e
                 slow.add(model)
-        if not attempt and time.time() - t0 <= NOTE_WAIT:
+        if not attempt and time.time() < deadline:
             print("  (no model answered: one more pass in 30 s)")
             time.sleep(30)
-    raise last
+    raise last or TimeoutError("no time left for this note")
 
 
 NUM = re.compile(r"(?<![\w.])[+\-−]?\d+(?:\.\d+)?(?:-\d+){0,2}%?")
@@ -437,12 +458,15 @@ def opening(text):
 
 
 def write_note(f, used, topic):
-    """(text, '', model) or (None, why, model) after up to 2 tries."""
+    """(text, '', model) or (None, why, model) after up to 2 tries, all within NOTE_WAIT seconds."""
     prompt = (f"Facts:\n{json.dumps({**f, 'opening_topic': topic, 'openings_used_today': used}, ensure_ascii=False)}\n\n"
               "Write the note.")
-    why, model = "", None
+    why, model, deadline = "", None, time.time() + NOTE_WAIT
     for _ in range(2):
-        text, finish, model = gemini(SYSTEM, prompt if not why else prompt + f"\n\nYour last version can't be used: {why}. Rewrite it.")
+        if time.time() > deadline:
+            break
+        text, finish, model = gemini(SYSTEM, prompt if not why else prompt + f"\n\nYour last version can't be used: {why}. Rewrite it.",
+                                     deadline)
         why = check(text, f, finish, topic)
         if not why:
             return text, "", model
@@ -589,7 +613,7 @@ def run(preview=False):
     todo.sort(key=lambda z: -max(c[0] for c in leads(z[1])))
     t0 = time.time()
     for key, f, sig in todo:
-        if calls >= MAX_CALLS or (not preview and time.time() - t0 > BUDGET):
+        if calls >= MAX_CALLS or time.time() - t0 > (PREVIEW_BUDGET if preview else BUDGET):
             print(f"(game notes: stopping here; {len(todo) - made - len(failed)} left for the next AI run)")
             break
         score, kind, topic = max(leads(f), key=lambda c: c[0] - 0.6 * kinds[c[1]])
@@ -597,7 +621,7 @@ def run(preview=False):
             text, why, model = write_note(f, used, topic)
             calls += 1
         except urllib.error.HTTPError as e:
-            print(f"(game notes: Gemini answered {e.code}: {' '.join(e.read().decode(errors='replace').split())[:200]})")
+            print(f"(game notes: Gemini answered {e.code} {getattr(e, 'detail', '')}: stopping for this run)")
             if e.code in (429, 403, 404, 503):
                 calls = MAX_CALLS  # out of free requests, no access, no model or every model overloaded: try next run
             failed.append(key)
