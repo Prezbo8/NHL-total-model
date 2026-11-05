@@ -46,9 +46,10 @@ API = "https://generativelanguage.googleapis.com/v1beta/models/{}:generateConten
 MAX_CALLS = 16   # notes per run (a full slate): the free tier allows a limited number of requests a day (per Google project)
 PAUSE = 6        # seconds between notes (the free tier allows ~10 requests a minute)
 BUDGET = 600     # seconds of writing per run (~30 s a note), so a slow Gemini can't hold the run's commit up for long
+NOTE_WAIT = 240  # seconds of trying models for one note before giving up on it (a request times out after 90 s)
 NOTE_HOURS = (12, 15, 18, 20)                    # new notes only at the 12:17, 3:17, 6:17 and 8:17 PM runs (user's choice)
 NOTE_TRIGGERS = ("hourly", "schedule", "retry")  # the keeper's hourly slot, GitHub's backup schedule, or a retry of one
-WORDS = (120, 270)
+WORDS = (120, 300)  # asked for 150-230; the Lite models run long (281-370 words on Nov 5)
 CALLS = ("SLAM", "1U", "PASS", "AVOID")
 WINDOWS = (("season", "season"), ("30", "last_30_days"), ("14", "last_14_days"), ("7", "last_7_days"))
 
@@ -62,7 +63,8 @@ dashboard: use them and nothing else ("how_to_read" explains them).
    - the projection: each team's projected goals, the projected total against the line, the chance of 7 or more goals;
    - 5-on-5 and the power play: the rating and projected goals, and the attack's rank against the opposing defense's or
      penalty kill's rank;
-   - the goalie each team faces: his tag and grade, and his numbers this season and over his last 5 games;
+   - the goalie each team faces, who is the OTHER team's goalie (the facts say whose): his tag and grade, and his
+     numbers this season and over his last 5 games;
    - the rankings: total offense and total defense ranks (a standout stat or two), and the Form ranks over the season
      and the last 30, 14 and 7 days, saying how they moved (skip a window that has the same games as the season).
 3. Use only the facts. Copy every number exactly as written: never round, add, or invent numbers, players, results or
@@ -90,7 +92,8 @@ READ = {  # sent with every game's facts (the dashboard's own explanations, shor
                       "scoring + = scored more than the model projected; allowing + = allowed fewer than projected; "
                       "net = both together; finishing + = scored more than its expected goals; goaltending + = its "
                       "goalies stopped more than expected (both vs the league average); rank by net, #1 = best",
-    "goalie_faced": "the opposing starter: tag and grade (1-100, higher = better goalie), and what he does to this "
+    "goalie_faced": "the OTHER team's starter, the goalie this team shoots at (named with his team): tag and grade "
+                    "(1-100, higher = better goalie), and what he does to this "
                     "team's projected goals"}
 
 
@@ -243,9 +246,9 @@ def facts(r, flagged, form):
                 z[against] = {"goals_allowed_a_game": f"{them[f'ga_{unit}']:.2f}", "rank": int(them[f"r_ga_{unit}"])}
             x[key] = z
         gname = dashboard.goalie_parts(getattr(r, f"{o_}_goalie", ""))[0]
-        x["goalie_faced"] = (f"{gname}, {dashboard.GL_WORDS.get(dashboard.tier('gadj', v(s_, 'gadj')), 'a goalie')}, "
+        x["goalie_faced"] = (f"{gname} ({opp}'s goalie): {dashboard.GL_WORDS.get(dashboard.tier('gadj', v(s_, 'gadj')), 'a goalie')}, "
                              f"grade {dashboard.goalie_grade(v(s_, 'gadj'))}, {v(s_, 'gadj') * 100:+.1f}% to {t}'s goals"
-                             if not pd.isna(v(s_, "gadj")) else gname)
+                             if not pd.isna(v(s_, "gadj")) else f"{gname} ({opp}'s goalie)")  # whose goalie: the AI once flipped them
         g = form.get(opp, {}).get("goalie")  # the goalie this team shoots at = the opponent's starter
         if g:
             x["goalie_faced_numbers"] = {k: _goalie_line(g[k]) for k in ("this_season", "last_5_games") if g.get(k)}
@@ -298,7 +301,9 @@ def leads(f):
             c.append((1.2, "last10", f"{t}'s last 10 games ({x['last10_record']})"))
         g = x.get("goalie_faced_numbers", {}).get("means")
         if g and not g.startswith("about"):
-            c.append((1.1, "goalie", f"the goalie {t} faces ({x['goalie_faced']}) and how he has played lately"))
+            name = x["goalie_faced"].split(" (")[0]
+            opp = next(k for k in f["teams"] if k != t)
+            c.append((1.1, "goalie", f"the goalie {t} faces ({name}, {opp}'s goalie) and how he has played lately"))
         fw = x.get("form_by_window", {})
         late = next(((k, fw[k]) for k in ("last_7_days", "last_14_days", "last_30_days") if isinstance(fw.get(k), dict)), None)
         if isinstance(fw.get("season"), dict) and late and abs(fw["season"]["rank"] - late[1]["rank"]) >= 10:
@@ -333,10 +338,13 @@ def ask(model, system, prompt):
 
 def gemini(system, prompt):
     """(text, finish reason, model) from the first model in MODELS that answers; when none does, one more pass after a
-    pause (an overload usually clears in seconds)."""
-    last = None
+    pause (an overload usually clears in seconds). A model that doesn't answer in time (or drops the connection) hands
+    over to the next one and isn't asked again for this note; after NOTE_WAIT seconds no new model is tried."""
+    last, slow, t0 = None, set(), time.time()
     for attempt in range(2):
         for model in MODELS:
+            if model in slow or time.time() - t0 > NOTE_WAIT:
+                continue
             try:
                 return (*ask(model, system, prompt), model)
             except urllib.error.HTTPError as e:
@@ -345,7 +353,11 @@ def gemini(system, prompt):
                 print(f"  ({model}: {e.code}, trying the next model)")
                 last = e
                 time.sleep(2)
-        if not attempt:
+            except (TimeoutError, urllib.error.URLError) as e:  # (HTTPError, a URLError, is caught above)
+                print(f"  ({model}: no answer ({type(e).__name__}: {str(e)[:60]}), trying the next model)")
+                last = e
+                slow.add(model)
+        if not attempt and time.time() - t0 <= NOTE_WAIT:
             print("  (no model answered: one more pass in 30 s)")
             time.sleep(30)
     raise last
@@ -385,9 +397,13 @@ def check(text, f, finish="STOP", topic=""):
     """'' when the note is usable, else why not (sent back to Gemini on the retry). topic = its opening topic."""
     words = len(text.split())
     if finish not in ("STOP", "") or not re.search(r"[.?]['\")”’]?$", text.strip()):
-        return "it stops mid-sentence; write the whole note, ending with a full stop"
-    if not WORDS[0] <= words <= WORDS[1]:
-        return f"it is {words} words; write 150-230"
+        return (f"it stops mid-sentence (Gemini's finish reason: {finish or 'none'}); write the whole note, ending with "
+                "a full stop")
+    if words > WORDS[1]:
+        return (f"it is {words} words, far too long: cut it to under 230 words. Keep every part, but give only the key "
+                "number or rank for each, not every number")
+    if words < WORDS[0]:
+        return f"it is {words} words: write 150-230, covering every part for both teams"
     if "\n" in text.strip() or re.search(r"\*\*|!|^\s*(?:#|[-•*] )", text, re.M):  # (a '#' rank like '#2 defense' is fine)
         return "use one plain paragraph: no line breaks, markdown, lists or exclamation marks"
     if not re.match(r"[\"'“‘(]?[A-Z0-9]", text.strip()):

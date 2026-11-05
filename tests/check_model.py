@@ -491,7 +491,7 @@ nf = {"game": "OTT @ BUF", "call": "PASS", "projected_total": "6.67", "line": "6
                                          "opponent_defense": {"goals_allowed_a_game": "2.15", "rank": 17}},
                         "power_play": {"rating": "great", "projected_goals": "0.67", "attack": {"goals_a_game": "0.70", "rank": 12},
                                        "opponent_penalty_kill": {"goals_allowed_a_game": "0.66", "rank": 22}},
-                        "goalie_faced": "Colten Ellis, an OK goalie, grade 35, -1.0% to OTT's goals",
+                        "goalie_faced": "Colten Ellis (BUF's goalie): an OK goalie, grade 35, -1.0% to OTT's goals",
                         "goalie_faced_numbers": {"this_season": "6 games, 17 goals allowed on 16.4 expected: 0.6 more than expected (worse)"},
                         "pushing_up": ["5-on-5 matchup +0.09 (its attack ranks #11 of 32, BUF's defense #17)"],
                         "holding_back": ["Colten Ellis in goal -0.03 (an OK goalie, grade 35, -1.0%)"], "players_out": [],
@@ -506,7 +506,7 @@ nf = {"game": "OTT @ BUF", "call": "PASS", "projected_total": "6.67", "line": "6
                                          "opponent_defense": {"goals_allowed_a_game": "2.01", "rank": 2}},
                         "power_play": {"rating": "good", "projected_goals": "0.61", "attack": {"goals_a_game": "0.55", "rank": 20},
                                        "opponent_penalty_kill": {"goals_allowed_a_game": "0.60", "rank": 21}},
-                        "goalie_faced": "Samuel Ersson, a Trash goalie, grade 1, +6.8% to BUF's goals",
+                        "goalie_faced": "Samuel Ersson (OTT's goalie): a Trash goalie, grade 1, +6.8% to BUF's goals",
                         "goalie_faced_numbers": {"this_season": "8 games, 25 goals allowed on 21.3 expected: 3.7 more than expected (worse)",
                                                  "last_5_games": "5 games, 14 goals allowed on 11.5 expected: 2.5 more than expected (worse)",
                                                  "means": "he has been worse than expected, allowing 2.5 more goals than expected: easier for BUF to score"},
@@ -527,20 +527,26 @@ good = ("Buffalo has won 4 straight and sits 7-4-3, 7-2-1 over its last 10, whil
         "season to #4 over the last 14 days and #2 over the last 7, while Ottawa has slid from #5 to #19. Neither team is "
         "great at 5-on-5, so there is no team to carry the over, and the streak is context, not a reason to bet.")
 topic = max(notes.leads(nf))[2]
+longer = good + " " + good[:good.index(" At 5-on-5")]  # 268 words: over the 230 asked for, under the 300 accepted
 check("game notes: a note covering both teams' records, last 10, projection, 5-on-5 / power play, goalies and rankings with "
-      "only the model's numbers passes the check", notes.check(good, nf, "STOP", topic) == "", notes.check(good, nf, "STOP", topic))
+      "only the model's numbers passes the check (also a long one, up to 300 words)",
+      notes.check(good, nf, "STOP", topic) == "" and notes.check(longer, nf, "STOP", topic) == "",
+      notes.check(good, nf, "STOP", topic) + " | " + notes.check(longer, nf, "STOP", topic))
 call_topic = "the model's call and the matchup behind it"
 bad = {"invented number": good.replace("11.5", "12.5"), "another call": good.replace("keeps this one a PASS", "keeps this one a SLAM, not a PASS"),
        "no call": good.replace("PASS", "pass"), "cut off": good[:good.index(", and the streak")],
-       "no record": good.replace("sits 7-4-3, ", "sits "),
+       "no record": good.replace("sits 7-4-3, ", "sits "), "too long": good + " " + good,
        "jargon": good.replace("Neither team is great", "Both clear the cutoff, yet neither team is great"),
        "lowercase start": good[0].lower() + good[1:], "field name": good.replace("53% chance", "53% chance_of_7_plus_goals"),
        "copied topic": "The model's call and the matchup behind it agree here. " + good}
 why_bad = {k: notes.check(t, nf, "STOP", call_topic if k == "copied topic" else topic) for k, t in bad.items()}
-check("game notes: an invented number, another call, a missing call, a note cut off mid-sentence, a missing record, 'cutoff', "
-      "a lowercase start, a field name or a copied opening topic is rejected (one retry, then the template stays)",
+why_bad["out of tokens"] = notes.check(good, nf, "MAX_TOKENS", topic)  # complete-looking text, but Gemini says it stopped early
+check("game notes: an invented number, another call, a missing call, a note cut off mid-sentence (with Gemini's reason), a "
+      "missing record, one far too long, 'cutoff', a lowercase start, a field name or a copied opening topic is rejected "
+      "(one retry, then the template stays)",
       "12.5" in why_bad["invented number"] and "SLAM" in why_bad["another call"] and "PASS" in why_bad["no call"]
-      and "mid-sentence" in why_bad["cut off"] and "7-4-3" in why_bad["no record"] and "cutoff" in why_bad["jargon"]
+      and "mid-sentence" in why_bad["cut off"] and "MAX_TOKENS" in why_bad["out of tokens"] and "7-4-3" in why_bad["no record"]
+      and "under 230" in why_bad["too long"] and "cutoff" in why_bad["jargon"]
       and "capital" in why_bad["lowercase start"] and "field names" in why_bad["field name"]
       and "the model's call and" in why_bad["copied topic"], str(why_bad))
 from collections import Counter
@@ -577,17 +583,34 @@ ai_runs = {f"{h}:{m:02d} {t}": notes.ai_run(et(h, m), t) for h, m, t in
 check("game notes: only the 12:17, 3:17, 6:17 and 8:17 PM runs (or a retry of one) write new notes; pre-game, stats-started, "
       "12:01 AM, manual and the other hourly runs keep the last ones",
       list(ai_runs.values()) == ["12:17 PM", "3:17 PM", "6:17 PM", "8:17 PM", None, None, None, None, None, None], str(ai_runs))
-fx_crash, fx_n = "", 0
+fx_crash, fx_n, unowned = "", 0, []
 for r in dashboard.current(real).itertuples():
     try:
         fx = notes.facts(r, dashboard._is(r.flag), {})
         if fx:
             json.dumps(fx); notes.allowed(fx); notes.colors(fx); notes.signature(fx); notes.leads(fx)
             fx_n += 1
+            unowned += [f"{r.away}@{r.home}: {x['goalie_faced']}" for t, x in fx["teams"].items()  # whose goalie, for each team
+                        if f"({r.home if t == r.away else r.away}'s goalie)" not in x["goalie_faced"]]
     except Exception as ex:
         fx_crash = f"{r.away}@{r.home} {r.date}: {type(ex).__name__}: {ex}"
-check("game notes: the fact sheet (matchup ranks, Team rankings, Form windows, goalies) builds for every logged game",
-      not fx_crash and fx_n > 0, fx_crash or f"{fx_n} games")
+check("game notes: the fact sheet (matchup ranks, Team rankings, Form windows, goalies named with the team they play for) "
+      "builds for every logged game", not fx_crash and fx_n > 0 and not unowned, fx_crash or (unowned[:1] or [f"{fx_n} games"])[0])
+def fake_ask(model, system, prompt):  # the first model times out, the second answers
+    asked.append(model)
+    if model == notes.MODELS[0]:
+        raise TimeoutError("The read operation timed out")
+    return "A note.", "STOP"
+asked, real_ask, real_sleep = [], notes.ask, notes.time.sleep
+notes.ask, notes.time.sleep = fake_ask, (lambda s: None)
+try:
+    got = notes.gemini("system", "prompt")
+except Exception as ex:
+    got = (f"{type(ex).__name__}: {ex}",)
+finally:
+    notes.ask, notes.time.sleep = real_ask, real_sleep
+check("game notes: a Gemini model that doesn't answer in time hands over to the next one (the game isn't skipped)",
+      got[-1] == notes.MODELS[1] and asked == notes.MODELS[:2], f"{got} after {asked}")
 hcols = notes.colors(nf)
 chips = notes.colorize("BUF gets +0.21 from Ersson, loses -0.14, 5-on-5 at 2.12, a 53% chance, 7-2-1 <b> (6.55), "
                        "its #11 attack, the OTT #2 defense, net +0.85", hcols)
