@@ -481,39 +481,68 @@ check("every network call has a timeout (one without can hang a run until GitHub
 
 print("AI game notes (src/notes.py; nothing is sent to Gemini here)")
 import notes
-nf = {"game": "OTT @ BUF", "call": "PASS", "projected_total": 6.67, "line": "6.5", "chance_of_7_plus_goals": "53%",
+nf = {"game": "OTT @ BUF", "call": "PASS", "projected_total": "6.67", "line": "6.5", "chance_of_7_plus_goals": "53%",
       "over_flag_needs": "both teams 3.10+ projected goals and a line of 6 or 6.5",
       "how_calls_like_this_did_2021_26": "Flagged games like this went over only 47% of the time in 2021-26.",
       "why_this_call": "PASS: both teams project at least 3.10 goals (OTT 3.30, BUF 3.38), but neither is great at 5-on-5.",
-      "teams": {"OTT": {"projected_goals": 3.3, "five_on_five": "good (2.12 projected goals)", "power_play": "great (0.67 projected goals)",
-                        "goalie_faced": "Colten Ellis, an OK goalie, grade 35", "players_out": [],
+      "how_to_read": notes.READ,
+      "teams": {"OTT": {"record": "9-6-1", "last10_record": "4-5-1", "streak": "L1", "projected_goals": "3.30", "vs_an_average_team": "+0.13",
+                        "five_on_five": {"rating": "good", "projected_goals": "2.12", "attack": {"goals_a_game": "2.20", "rank": 11},
+                                         "opponent_defense": {"goals_allowed_a_game": "2.15", "rank": 17}},
+                        "power_play": {"rating": "great", "projected_goals": "0.67", "attack": {"goals_a_game": "0.70", "rank": 12},
+                                       "opponent_penalty_kill": {"goals_allowed_a_game": "0.66", "rank": 22}},
+                        "goalie_faced": "Colten Ellis, an OK goalie, grade 35, -1.0% to OTT's goals",
+                        "goalie_faced_numbers": {"this_season": "6 games, 17 goals allowed on 16.4 expected: 0.6 more than expected (worse)"},
                         "pushing_up": ["5-on-5 matchup +0.09 (its attack ranks #11 of 32, BUF's defense #17)"],
-                        "holding_back": ["Colten Ellis in goal -0.03 (an OK goalie, grade 35, -1.0%)"],
-                        "recent_form": {"last10_record": "4-5-1", "streak": "L1"}},
-                "BUF": {"projected_goals": 3.38, "five_on_five": "bad (1.90 projected goals)", "power_play": "good (0.61 projected goals)",
-                        "goalie_faced": "Samuel Ersson, a Trash goalie, grade 1", "players_out": [],
+                        "holding_back": ["Colten Ellis in goal -0.03 (an OK goalie, grade 35, -1.0%)"], "players_out": [],
+                        "team_rankings": {"total_offense_rank": 6, "total_defense_rank": 3, "offense_stats": "Goals 3.39 (#8), xG 3.20 (#5)",
+                                          "defense_allowed_stats": "Goals 2.70 (#4)"},
+                        "form_by_window": {"season": {"rank": 5, "net": "+0.45", "scoring": "+0.30", "allowing": "+0.15", "finishing": "+0.10",
+                                                      "goaltending": "+0.05", "games": 16},
+                                           "last_30_days": "same games as the season", "last_14_days": {"rank": 15, "net": "-0.05", "games": 7},
+                                           "last_7_days": {"rank": 19, "net": "-0.20", "games": 3}}},
+                "BUF": {"record": "7-4-3", "last10_record": "7-2-1", "streak": "W4", "projected_goals": "3.38", "vs_an_average_team": "+0.21",
+                        "five_on_five": {"rating": "bad", "projected_goals": "1.90", "attack": {"goals_a_game": "2.05", "rank": 9},
+                                         "opponent_defense": {"goals_allowed_a_game": "2.01", "rank": 2}},
+                        "power_play": {"rating": "good", "projected_goals": "0.61", "attack": {"goals_a_game": "0.55", "rank": 20},
+                                       "opponent_penalty_kill": {"goals_allowed_a_game": "0.60", "rank": 21}},
+                        "goalie_faced": "Samuel Ersson, a Trash goalie, grade 1, +6.8% to BUF's goals",
+                        "goalie_faced_numbers": {"this_season": "8 games, 25 goals allowed on 21.3 expected: 3.7 more than expected (worse)",
+                                                 "last_5_games": "5 games, 14 goals allowed on 11.5 expected: 2.5 more than expected (worse)",
+                                                 "means": "he has been worse than expected, allowing 2.5 more goals than expected: easier for BUF to score"},
                         "pushing_up": ["Samuel Ersson in goal +0.21 (a Trash goalie, grade 1, +6.8%)"],
-                        "holding_back": ["5-on-5 matchup -0.14 (its attack ranks #9 of 32, OTT's defense #2)"],
-                        "recent_form": {"last10_record": "7-2-1", "streak": "W4"}}}}
-good = ("Buffalo has won 4 straight and is 7-2-1 in its last 10, but the model keeps this a PASS. Samuel Ersson, a grade 1 goalie, "
-        "adds +0.21 to Buffalo's projection, yet Ottawa's #2 defense takes -0.14 back, and neither team is great at 5-on-5. "
-        "The model has the total at 6.67 against a 6.5 line with a 53% chance of 7 or more. Flagged games like this went over "
-        "only 47% of the time in 2021-26, so the streak is context, not a reason to bet.")
+                        "holding_back": ["5-on-5 matchup -0.14 (its attack ranks #9 of 32, OTT's defense #2)"], "players_out": [],
+                        "team_rankings": {"total_offense_rank": 10, "total_defense_rank": 14, "offense_stats": "Goals 3.25 (#10), HD 9.8 (#7)",
+                                          "defense_allowed_stats": "Goals 3.05 (#18)"},
+                        "form_by_window": {"season": {"rank": 13, "net": "+0.10", "games": 14}, "last_30_days": "same games as the season",
+                                           "last_14_days": {"rank": 4, "net": "+0.60", "games": 7}, "last_7_days": {"rank": 2, "net": "+0.85", "games": 3}}}}}
+good = ("Buffalo has won 4 straight and sits 7-4-3, 7-2-1 over its last 10, while Ottawa is 9-6-1 and 4-5-1, and the model "
+        "keeps this one a PASS. It projects 6.67 goals against a 6.5 line with a 53% chance of 7 or more: Ottawa 3.30, Buffalo "
+        "3.38. At 5-on-5 Ottawa is good at 2.12 projected goals, its #11 attack against Buffalo's #17 defense, while Buffalo is "
+        "bad at 1.90, its #9 attack running into Ottawa's #2 defense. On the power play Ottawa is great at 0.67 and Buffalo "
+        "good at 0.61: Ottawa's #12 unit meets Buffalo's #22 penalty kill, and Buffalo's #20 unit meets Ottawa's #21. Buffalo "
+        "shoots at Samuel Ersson, a Trash goalie with a grade of 1 who has allowed 14 goals on 11.5 expected over his last 5 "
+        "games, worth +0.21 to its projection, while Ottawa faces Colten Ellis, an OK goalie at grade 35. Ottawa ranks #6 in "
+        "total offense and #3 in total defense, Buffalo #10 and #14. In the Form view Buffalo has climbed from #13 over the "
+        "season to #4 over the last 14 days and #2 over the last 7, while Ottawa has slid from #5 to #19. Neither team is "
+        "great at 5-on-5, so there is no team to carry the over, and the streak is context, not a reason to bet.")
 topic = max(notes.leads(nf))[2]
-check("game notes: a note using only the model's numbers and its call passes the check",
-      notes.check(good, nf, "STOP", topic) == "", notes.check(good, nf, "STOP", topic))
+check("game notes: a note covering both teams' records, last 10, projection, 5-on-5 / power play, goalies and rankings with "
+      "only the model's numbers passes the check", notes.check(good, nf, "STOP", topic) == "", notes.check(good, nf, "STOP", topic))
 call_topic = "the model's call and the matchup behind it"
-bad = {"invented number": good.replace("6.67", "7.15"), "another call": good.replace("keeps this a PASS", "keeps this a SLAM, not a PASS"),
-       "no call": good.replace("PASS", "pass"), "cut off": good[:good.index(" so the streak")],
-       "jargon": good.replace("The model has the total", "Both clear the cutoff, and the model has the total"),
+bad = {"invented number": good.replace("11.5", "12.5"), "another call": good.replace("keeps this one a PASS", "keeps this one a SLAM, not a PASS"),
+       "no call": good.replace("PASS", "pass"), "cut off": good[:good.index(", and the streak")],
+       "no record": good.replace("sits 7-4-3, ", "sits "),
+       "jargon": good.replace("Neither team is great", "Both clear the cutoff, yet neither team is great"),
        "lowercase start": good[0].lower() + good[1:], "field name": good.replace("53% chance", "53% chance_of_7_plus_goals"),
        "copied topic": "The model's call and the matchup behind it agree here. " + good}
 why_bad = {k: notes.check(t, nf, "STOP", call_topic if k == "copied topic" else topic) for k, t in bad.items()}
-check("game notes: an invented number, another call, a missing call, a note cut off mid-sentence, 'cutoff', a lowercase start, "
-      "a field name or a copied opening topic is rejected (one retry, then the template stays)",
-      "7.15" in why_bad["invented number"] and "SLAM" in why_bad["another call"] and "PASS" in why_bad["no call"]
-      and "mid-sentence" in why_bad["cut off"] and "cutoff" in why_bad["jargon"] and "capital" in why_bad["lowercase start"]
-      and "field names" in why_bad["field name"] and "the model's call and" in why_bad["copied topic"], str(why_bad))
+check("game notes: an invented number, another call, a missing call, a note cut off mid-sentence, a missing record, 'cutoff', "
+      "a lowercase start, a field name or a copied opening topic is rejected (one retry, then the template stays)",
+      "12.5" in why_bad["invented number"] and "SLAM" in why_bad["another call"] and "PASS" in why_bad["no call"]
+      and "mid-sentence" in why_bad["cut off"] and "7-4-3" in why_bad["no record"] and "cutoff" in why_bad["jargon"]
+      and "capital" in why_bad["lowercase start"] and "field names" in why_bad["field name"]
+      and "the model's call and" in why_bad["copied topic"], str(why_bad))
 from collections import Counter
 reasons = [notes.plain(t).split(" At 5-on-5,")[0] for t in texts if "no full reasoning" not in t and "not available" not in t]
 plain_r = [notes.plain_reason(x) for x in reasons]
@@ -534,12 +563,26 @@ ai_shown = {"today": shows_ai(date=today_s, final_total=nan),
 dashboard._NOTES.clear()
 check("game notes: the AI note shows only for today's games until they're final (past days and finished games: the template)",
       ai_shown == {"today": True, "past day": False, "today, final": False}, str(ai_shown))
+fx_crash, fx_n = "", 0
+for r in dashboard.current(real).itertuples():
+    try:
+        fx = notes.facts(r, dashboard._is(r.flag), {})
+        if fx:
+            json.dumps(fx); notes.allowed(fx); notes.colors(fx); notes.signature(fx); notes.leads(fx)
+            fx_n += 1
+    except Exception as ex:
+        fx_crash = f"{r.away}@{r.home} {r.date}: {type(ex).__name__}: {ex}"
+check("game notes: the fact sheet (matchup ranks, Team rankings, Form windows, goalies) builds for every logged game",
+      not fx_crash and fx_n > 0, fx_crash or f"{fx_n} games")
 hcols = notes.colors(nf)
-chips = notes.colorize("BUF gets +0.21 from Ersson, loses -0.14, 5-on-5 at 2.12, a 53% chance, 7-2-1 <b> (6.55)", hcols)
-check("game notes: the model's numbers get the breakdown table's tier colors, last 10 hot / cold; text escaped, no partial matches",
+chips = notes.colorize("BUF gets +0.21 from Ersson, loses -0.14, 5-on-5 at 2.12, a 53% chance, 7-2-1 <b> (6.55), "
+                       "its #11 attack, the OTT #2 defense, net +0.85", hcols)
+check("game notes: numbers get the dashboard's colors (breakdown tiers, matchup ranks, Form numbers, last 10 hot / cold); "
+      "a rank meaning two things stays plain; text escaped, no partial matches",
       "<span class='nv t-great'>+0.21</span>" in chips and "<span class='nv t-trash'>-0.14</span>" in chips and "<span class='nv t-good'>2.12</span>" in chips
-      and "<span class='nv t-good'>53%</span>" in chips and "<span class='nv hot'>7-2-1</span>" in chips and "&lt;b&gt;" in chips and "(6.55)" in chips, chips)
-moved = json.loads(json.dumps(nf)); moved["teams"]["OTT"]["projected_goals"] = 3.31
+      and "<span class='nv t-good'>53%</span>" in chips and "<span class='nv hot'>7-2-1</span>" in chips and "<span class='nv t-good'>#11</span>" in chips
+      and "the OTT #2 defense" in chips and "<span class='nv t-great'>+0.85</span>" in chips and "&lt;b&gt;" in chips and "(6.55)" in chips, chips)
+moved = json.loads(json.dumps(nf)); moved["teams"]["OTT"]["projected_goals"] = "3.31"
 check("game notes: rewritten when the facts change (call), not for a hundredth of a goal; the lead is the game's most unusual fact",
       notes.signature(nf) == notes.signature(moved) and notes.signature(nf) != notes.signature({**nf, "call": "1U"})
       and "streak (W4)" in max(notes.leads(nf))[2], max(notes.leads(nf))[2])

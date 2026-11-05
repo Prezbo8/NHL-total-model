@@ -816,17 +816,15 @@ def today(day=None, preview=False):
             sm.save_rankings_day(rk, day)
         except Exception as e:
             print(f"(team rankings not saved: {e})")
-        tf = None
         try:  # over / under performance vs the model and vs xG + schedule faced, season + last 30/14/7 days (dashboard 'Form', context only)
-            tf = trends.team_form(proj, games, day, season, rk)
-            tf.to_csv(paths.data("team_form.csv"), index=False)
+            trends.team_form(proj, games, day, season, rk).to_csv(paths.data("team_form.csv"), index=False)
         except Exception as e:
             print(f"(team form not saved: {e})")
-        try:  # recent form for the game notes (records, streaks, goalies' last games: src/notes.py), frozen at puck drop
+        try:  # records, last 10, streaks, starters' season / last-5 numbers for the game notes (src/notes.py), frozen at puck drop
             import notes
             now_utc = pd.Timestamp.now(tz="UTC")
-            notes.form_snapshot(day, standings, starters, tf, {t["abbrev"] for g in todays if pd.Timestamp(g["startTimeUTC"]) <= now_utc
-                                                              for t in (g["homeTeam"], g["awayTeam"])}, season)
+            notes.form_snapshot(day, standings, starters, {t["abbrev"] for g in todays if pd.Timestamp(g["startTimeUTC"]) <= now_utc
+                                                           for t in (g["homeTeam"], g["awayTeam"])}, season)
         except Exception as e:
             print(f"(form for the game notes not saved: {type(e).__name__}: {e})")
         try:  # each team's top 5 attackers / defenders and whether they play (dashboard 'Key players')

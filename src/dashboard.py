@@ -1729,17 +1729,26 @@ def form_notes(x, label, f):
     return f"<h4 class='fm-h'>Right now ({e(label.lower())})</h4><ul class='notes fm-notes'>{''.join(items)}</ul>"
 
 
+def form_frame():
+    """data/team_form.csv (written by each model run) as the Form view shows it: finishing / goaltending vs the league
+    average in each window. None when missing. Also the game notes' form numbers (src/notes.py)."""
+    path = paths.data("team_form.csv")
+    if not os.path.exists(path):
+        return None
+    f = pd.read_csv(path)
+    if f.empty:
+        return None
+    for c in ("finishing", "goaltending"):  # vs the league average in that window (league-wide G - xG drifts by season)
+        f[c] = f[c] - f.groupby("window")[c].transform(lambda v: np.average(v, weights=f.loc[v.index, "gp"]))
+    return f
+
+
 def form_view():
     """Team rankings 'Form' view: over / under performance vs the model and vs xG for the season and the last 30 /
     14 / 7 days (data/team_form.csv, written by each model run). Context only, not in the projection."""
-    path = paths.data("team_form.csv")
-    if not os.path.exists(path):
+    f = form_frame()
+    if f is None:
         return ""
-    f = pd.read_csv(path)
-    if f.empty:
-        return ""
-    for c in ("finishing", "goaltending"):  # vs the league average in that window (league-wide G - xG drifts by season)
-        f[c] = f[c] - f.groupby("window")[c].transform(lambda v: np.average(v, weights=f.loc[v.index, "gp"]))
 
     def cls(v):  # per game: +0.5 great .. -0.5 trash
         return "t-" + ("great" if v >= 0.5 else "good" if v >= 0.2 else "mid" if v > -0.2 else "bad" if v > -0.5 else "trash")

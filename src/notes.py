@@ -2,17 +2,19 @@
 reads like it was written for that game, in place of the fixed template. Today's slate only: the Tomorrow preview tab,
 finished games and past days keep the template (dashboard.game_notes).
 
-Facts in, writing out. The AI gets only the model's and the repo's own numbers (facts()): the call and why (the
-template's reason in plain words: plain_reason), the projected total vs the line, and per team its projected goals,
-5-on-5 / power-play tiers, the goalie it faces (tag + grade) and the model's factors pushing its goals up or holding them
-back (dashboard.team_reasons: goals, ranks); then, as context, recent form saved by the model run (form_snapshot:
-record, last-10 record, streak and goals from the NHL standings, the goalie's last 5 games and scoring vs the model over
-two weeks, each with a plain 'means'), last-10 totals and head to head from the log. Each game on a slate opens on a
-different kind of topic (leads(), assigned in run()). A check rejects a note that uses a number not in the facts, names
-another call, leaves out the call, stops mid-sentence, says 'cutoff', copies its opening topic's wording or leaks the
-fact sheet's field names (one retry, then the template stays). A note is rewritten only when its game's facts change
-(signature()); saved in data/notes/<day>.json. No GEMINI_API_KEY (GitHub secret), or Gemini failing / out of free
-requests = the template, as before.
+Facts in, writing out. The AI gets only the model's and the dashboard's own numbers (facts()): the call and why (the
+template's reason in plain words: plain_reason), the projected total vs the line and the chance of 7+, and per team its
+record, last-10 record and streak (NHL standings, saved by the model run: form_snapshot), projected goals, 5-on-5 /
+power-play rating and projected goals with the attack's rank vs the opposing defense's (the matchup table), the goalie
+it faces (tag, grade, his numbers this season and over his last 5 games), the model's factors pushing its goals up or
+holding them back (dashboard.team_reasons), its Team rankings (total offense / defense ranks, the nine stats) and Form
+over the season and the last 30 / 14 / 7 days (form_windows), with a legend (READ). The note must cover all of it for
+both teams; each game on a slate opens on a different kind of topic (leads(), assigned in run()). A check rejects a note
+that leaves out a team's record, last-10 record or projected goals or the projected total, uses a number not in the
+facts, names another call, leaves out the call, stops mid-sentence, says 'cutoff', copies its opening topic's wording or
+leaks the fact sheet's field names (one retry, then the template stays). A note is rewritten only when its game's facts
+change (signature()); saved in data/notes/<day>.json. No GEMINI_API_KEY (GitHub secret), or Gemini failing / out of
+free requests = the template, as before.
 
   python3 src/notes.py             # today's games that haven't started (the hourly run, after projecting)
   python3 src/notes.py --preview   # also print today's notes + their dashboard HTML (Preview game notes workflow)
@@ -39,26 +41,50 @@ MODELS = list(dict.fromkeys(m for m in (os.environ.get("GEMINI_MODEL"), "gemini-
 API = "https://generativelanguage.googleapis.com/v1beta/models/{}:generateContent"
 MAX_CALLS = 14   # notes per run: the free tier allows a limited number of requests a day (per Google project)
 PAUSE = 6        # seconds between notes (the free tier allows ~10 requests a minute)
-WORDS = (50, 140)
+WORDS = (120, 270)
 CALLS = ("SLAM", "1U", "PASS", "AVOID")
+WINDOWS = (("season", "season"), ("30", "last_30_days"), ("14", "last_14_days"), ("7", "last_7_days"))
 
 SYSTEM = """You write the note for one of tonight's NHL games on a hockey model's dashboard, before the game starts. The
-reader owns the model, bets overs (lines of 6 or 6.5 only) and knows hockey. Every fact comes from the model itself: use
-them and nothing else.
-1. Explain the model's call ("call": SLAM, 1U, PASS or AVOID) with the model's numbers: the projected total against the
-   line, each team's projected goals, and the factors pushing them up or holding them back (in goals, with the ranks and
-   goalie grades given). Say the call by name. Never suggest a different call or a different bet.
-2. Use only the facts. Copy every number exactly as written: never round, add, or invent numbers, players, results or
-   history. The "means" fields tell you what a number means: follow them.
-3. 60-110 words, one paragraph of complete sentences, plain text: no headings, lists, markdown, emojis or exclamation marks.
-4. The first sentence is about "opening_topic", in your own words: start it with a capital letter and don't reuse the
+reader owns the model, bets overs (lines of 6 or 6.5 only) and knows hockey. Every fact comes from the model and its
+dashboard: use them and nothing else ("how_to_read" explains them).
+1. Explain the model's call ("call": SLAM, 1U, PASS or AVOID) with the model's numbers. Say the call by name. Never
+   suggest a different call or a different bet.
+2. Cover all of this, for both teams, in whatever order reads best:
+   - each team's record and last-10 record, copied exactly as written (like 9-6-1);
+   - the projection: each team's projected goals, the projected total against the line, the chance of 7 or more goals;
+   - 5-on-5 and the power play: the rating and projected goals, and the attack's rank against the opposing defense's or
+     penalty kill's rank;
+   - the goalie each team faces: his tag and grade, and his numbers this season and over his last 5 games;
+   - the rankings: total offense and total defense ranks (a standout stat or two), and the Form ranks over the season
+     and the last 30, 14 and 7 days, saying how they moved (skip a window that has the same games as the season).
+3. Use only the facts. Copy every number exactly as written: never round, add, or invent numbers, players, results or
+   history. Write ranks like #9. The "means" fields tell you what a number means: follow them.
+4. 150-230 words, one paragraph of complete sentences, plain text: no headings, lists, markdown, emojis or exclamation
+   marks.
+5. The first sentence is about "opening_topic", in your own words: start it with a capital letter and don't reuse the
    topic's wording. Don't open the way any of "openings_used_today" open, and don't start with a player's name unless
    opening_topic is about that player.
-5. Recent form (records, streaks, recent scoring, a goalie's last games) is context: the model already counts every game,
-   and form alone hasn't predicted totals. Use it to make the note specific to this game, never as the reason to bet.
-6. Plain words, like a sharp hockey writer. Never write "cutoff" or "threshold" (say what it means: both teams need to
+6. Records, streaks, Form ranks and a goalie's recent games are context: the model already counts every game, and form
+   alone hasn't predicted totals. Use them to make the note specific to this game, never as the reason to bet.
+7. Plain words, like a sharp hockey writer. Never write "cutoff" or "threshold" (say what it means: both teams need to
    project at least that many goals) or the fact sheet's field names. Specific, varied sentences, no cliches, no hype."""
 JARGON = re.compile(r"\bcut-?offs?\b|\bthresholds?\b", re.I)
+READ = {  # sent with every game's facts (the dashboard's own explanations, shortened)
+    "ranks": "#1 = best of the 32 teams at that thing; for a defense or penalty kill #1 = fewest goals allowed",
+    "rating": "the model's tier for that part of tonight's projected goals: great, good, mid, bad or trash",
+    "five_on_five / power_play": "attack = goals a game the team scores against an average opponent; opponent's "
+                                 "defense / penalty kill = goals a game it allows; both as of today, with their ranks",
+    "team_rankings": "the Team rankings tab: nine stats per game (offense: made; defense: allowed), combined into a total "
+                     "offense rank and a total defense rank. xG = expected goals, SOG = shots on goal, Att = shot attempts, "
+                     "HD = high-danger shots, HD xG = expected goals from them, PPG = power-play goals, Reb = rebound "
+                     "shots, Reb G = rebound goals",
+    "form_by_window": "the Team rankings tab's Form view, per game, over the season and the last 30 / 14 / 7 days: "
+                      "scoring + = scored more than the model projected; allowing + = allowed fewer than projected; "
+                      "net = both together; finishing + = scored more than its expected goals; goaltending + = its "
+                      "goalies stopped more than expected (both vs the league average); rank by net, #1 = best",
+    "goalie_faced": "the opposing starter: tag and grade (1-100, higher = better goalie), and what he does to this "
+                    "team's projected goals"}
 
 
 def path(day):
@@ -78,28 +104,30 @@ def save(day, d):
 
 # ---- recent form (model.today saves it, frozen at puck drop) ----
 
-def goalie_last(gid, season, n=5):
-    """{'games', 'goals_allowed', 'expected_goals_against'} over a goalie's last n regular-season games this season."""
+def goalie_games(gid, season, n=None):
+    """{'games', 'goals_allowed', 'expected_goals_against'} over a goalie's regular-season games this season (the
+    last n when given; MoneyPuck, data/goalie_games.csv)."""
     import goalies
     if gid is None or pd.isna(gid):
         return None
-    if not hasattr(goalie_last, "gg"):
-        goalie_last.gg = pd.read_csv(goalies.GOALIE_GAMES)
-    g = goalie_last.gg
-    g = g[(g.playerId == gid) & (g.season == season) & (g.gameId.astype(int).astype(str).str[4:6] == "02")].sort_values("gameId").tail(n)
+    if not hasattr(goalie_games, "gg"):
+        goalie_games.gg = pd.read_csv(goalies.GOALIE_GAMES)
+    g = goalie_games.gg
+    g = g[(g.playerId == gid) & (g.season == season) & (g.gameId.astype(int).astype(str).str[4:6] == "02")].sort_values("gameId")
+    g = g.tail(n) if n else g
     if not len(g):
         return None
     return {"games": int(len(g)), "goals_allowed": int(g.goals.sum()), "expected_goals_against": round(float(g.xGoals.sum()), 1)}
 
 
-def form_snapshot(day, standings, starters, team_form, started, season):
-    """Each playing team's recent form, saved in data/notes/<day>.json under 'form' and frozen at puck drop.
+def form_snapshot(day, standings, starters, started, season):
+    """Each playing team's record, last 10 and streak (NHL standings) and its starter's numbers this season and over
+    his last 5 games, saved in data/notes/<day>.json under 'form' and frozen at puck drop (also the form strip).
     standings: NHL standings rows (elimination.standings); starters: {team: (goalie name, NHL id or None)};
-    team_form: trends.team_form frame (scoring / allowing vs the model per window); started: teams whose game began."""
+    started: teams whose game began."""
     d = load(day)
     old = d.get("form", {})
     rows = {r["teamAbbrev"]["default"]: r for r in standings or []}
-    f14 = {x.team: x for x in team_form[team_form.window == "14"].itertuples()} if team_form is not None and len(team_form) else {}
     out = {}
     for team, (gname, gid) in starters.items():
         if team in started and team in old:
@@ -111,15 +139,9 @@ def form_snapshot(day, standings, starters, team_form, started, season):
                      streak=f"{s.get('streakCode') or ''}{s.get('streakCount') or ''}",
                      last10_record=f"{s.get('l10Wins')}-{s.get('l10Losses')}-{s.get('l10OtLosses')}",
                      last10_goals_for=s.get("l10GoalsFor"), last10_goals_against=s.get("l10GoalsAgainst"))
-        x = f14.get(team)
-        if x is not None and x.gp >= 3:
-            t["last_2_weeks"] = {"games": int(x.gp), "scored_vs_projection_per_game": round(float(x.scoring), 2),
-                                 "allowed_vs_projection_per_game": round(float(-x.allowing), 2),
-                                 "goals_vs_expected_goals_per_game": round(float(x.finishing), 2),
-                                 "goals_allowed_vs_expected_per_game": round(float(-x.goaltending), 2)}
-        g = goalie_last(gid, season)
-        if gname and g:
-            t["goalie"] = {"name": gname, **{f"last_{g['games']}_{k}": v for k, v in g.items() if k != "games"}}
+        g = {k: goalie_games(gid, season, n) for k, n in (("this_season", None), ("last_5_games", 5))}
+        if gname and g["this_season"]:
+            t["goalie"] = {"name": gname, **g}
         out[team] = t
     d["form"] = {**old, **out}
     save(day, d)
@@ -147,15 +169,43 @@ def _out(v):
     return [x.split("|")[0].strip() for x in str(v or "").split(";") if x.strip() and x.strip() != "nan"]
 
 
+def _goalie_line(n):
+    """'8 games, 25 goals allowed on 21.3 expected: 3.7 more than expected (worse)' (goalie_games)."""
+    d = round(n["expected_goals_against"] - n["goals_allowed"], 1)
+    return (f"{n['games']} games, {n['goals_allowed']} goals allowed on {n['expected_goals_against']} expected: "
+            + (f"{d:.1f} fewer than expected (better)" if d > 0 else f"{-d:.1f} more than expected (worse)" if d < 0 else "as expected"))
+
+
 def _goalie_means(g, team):
-    ga = next((v for k, v in g.items() if k.endswith("goals_allowed")), None)
-    xga = next((v for k, v in g.items() if k.endswith("expected_goals_against")), None)
-    if ga is None or xga is None:
+    """What a goalie's last 5 games mean for the team shooting at him (g = form_snapshot's 'goalie')."""
+    x = g.get("last_5_games")
+    if not x:
         return None
-    d = round(xga - ga, 1)
+    d = round(x["expected_goals_against"] - x["goals_allowed"], 1)
     return (f"he has been better than expected, stopping {d:.1f} more goals than expected: harder for {team} to score" if d >= 1.5
             else f"he has been worse than expected, allowing {-d:.1f} more goals than expected: easier for {team} to score" if d <= -1.5
             else "about as expected")
+
+
+def form_windows():
+    """{team: {window: the Form view's numbers}} over the season and the last 30 / 14 / 7 days (dashboard.form_frame):
+    rank by net (#1 = best), net, scoring, allowing, finishing, goaltending (per game) and games; 'same games as the
+    season' for a window that adds nothing (early in the season). Cached per run."""
+    import dashboard
+    if not hasattr(form_windows, "out"):
+        f, out = dashboard.form_frame(), {}
+        if f is not None:
+            f = f.assign(window=f.window.astype(str))
+            season_gp = f[f.window == "season"].set_index("team").gp
+            for win, name in WINDOWS:
+                x = f[f.window == win].sort_values("net", ascending=False).reset_index(drop=True)
+                for i, w in x.iterrows():
+                    out.setdefault(w.team, {})[name] = (
+                        "same games as the season" if win != "season" and season_gp.get(w.team) == w.gp else
+                        {"rank": i + 1, **{c: f"{w[c]:+.2f}" for c in ("net", "scoring", "allowing", "finishing", "goaltending")
+                                           if pd.notna(w[c])}, "games": int(w.gp)})
+        form_windows.out = out
+    return form_windows.out
 
 
 def facts(r, flagged, form):
@@ -167,43 +217,56 @@ def facts(r, flagged, form):
     if pd.isna(v("away", "ev")) or pd.isna(r.cutoff):
         return None
     call, rk = dashboard.call(r, flagged), dashboard.rank_lookup(r.date)
+    windows = form_windows()
     S = (("away", r.away), ("home", r.home))
     teams = {}
     for (s_, t), (o_, opp) in ((S[0], S[1]), (S[1], S[0])):
         proj, avg, up, down = dashboard.team_reasons(r, s_, t, o_, opp, rk, v)
-        gname = dashboard.goalie_parts(getattr(r, f"{o_}_goalie", ""))[0]
-        x = {"projected_goals": round(float(proj), 2)}
+        fm, me, them = form.get(t, {}), rk.get(t), rk.get(opp)
+        x = {k: fm[k] for k in ("record", "last10_record", "streak") if fm.get(k)}  # NHL standings (form_snapshot)
+        x["projected_goals"] = f"{proj:.2f}"
         if avg is not None:
             x["vs_an_average_team"] = f"{proj - avg:+.2f}"
-        x["five_on_five"] = f"{dashboard.tier('ev', v(s_, 'ev'))} ({v(s_, 'ev'):.2f} projected goals)"
-        x["power_play"] = f"{dashboard.tier('pp', v(s_, 'pp'))} ({v(s_, 'pp'):.2f} projected goals)"
+        for key, unit, against in (("five_on_five", "ev", "opponent_defense"), ("power_play", "pp", "opponent_penalty_kill")):
+            if pd.isna(v(s_, unit)):
+                continue
+            z = {"rating": dashboard.tier(unit, v(s_, unit)), "projected_goals": f"{v(s_, unit):.2f}"}
+            if me is not None and them is not None and f"r_gf_{unit}" in me and f"r_ga_{unit}" in them:  # = the matchup table
+                z["attack"] = {"goals_a_game": f"{me[f'gf_{unit}']:.2f}", "rank": int(me[f"r_gf_{unit}"])}
+                z[against] = {"goals_allowed_a_game": f"{them[f'ga_{unit}']:.2f}", "rank": int(them[f"r_ga_{unit}"])}
+            x[key] = z
+        gname = dashboard.goalie_parts(getattr(r, f"{o_}_goalie", ""))[0]
         x["goalie_faced"] = (f"{gname}, {dashboard.GL_WORDS.get(dashboard.tier('gadj', v(s_, 'gadj')), 'a goalie')}, "
-                             f"grade {dashboard.goalie_grade(v(s_, 'gadj'))}" if not pd.isna(v(s_, "gadj")) else gname)
+                             f"grade {dashboard.goalie_grade(v(s_, 'gadj'))}, {v(s_, 'gadj') * 100:+.1f}% to {t}'s goals"
+                             if not pd.isna(v(s_, "gadj")) else gname)
+        g = form.get(opp, {}).get("goalie")  # the goalie this team shoots at = the opponent's starter
+        if g:
+            x["goalie_faced_numbers"] = {k: _goalie_line(g[k]) for k in ("this_season", "last_5_games") if g.get(k)}
+            if _goalie_means(g, t):
+                x["goalie_faced_numbers"]["means"] = _goalie_means(g, t)
         x["pushing_up"] = [f"{label} {eff:+.2f} ({why})" for eff, label, why in up]
         x["holding_back"] = [f"{label} {eff:+.2f} ({why})" for eff, label, why in down]
         x["players_out"] = _out(getattr(r, f"{s_}_out", None))
-        fm, ctx = form.get(t, {}), {}
-        for k in ("record", "streak", "last10_record", "last10_goals_for", "last10_goals_against"):
+        if me is not None and "r_score_off" in me and "r_score_def" in me:  # the Team rankings tab
+            x["team_rankings"] = {
+                "total_offense_rank": int(me["r_score_off"]), "total_defense_rank": int(me["r_score_def"]),
+                **{f"{side}_stats": ", ".join(f"{h} {me[f'{k}{c}']:.{dec}f} (#{int(me[f'r_{k}{c}'])})"
+                                              for k, h, dec, _ in dashboard.RANK_STATS if f"r_{k}{c}" in me)
+                   for side, c in (("offense", "F"), ("defense_allowed", "A"))}}
+        if windows.get(t):
+            x["form_by_window"] = windows[t]
+        for k in ("last10_goals_for", "last10_goals_against"):
             if fm.get(k) is not None:
-                ctx[k] = fm[k]
+                x[k] = fm[k]
         if val(f"{s_}_l10_n"):
-            ctx["last10_games_with_7_plus_total_goals"] = f"{int(val(f'{s_}_l10_7'))} of {int(val(f'{s_}_l10_n'))}"
-            ctx["last10_games_average_total_goals"] = val(f"{s_}_l10_avg")
-        w2 = fm.get("last_2_weeks")
-        if w2:
-            sc = w2["scored_vs_projection_per_game"]
-            ctx["last_2_weeks"] = {**w2, "means": "scoring more than the model projected" if sc >= 0.5 else
-                                   "scoring less than the model projected" if sc <= -0.5 else "scoring about as projected"}
-        g = form.get(opp, {}).get("goalie")  # the goalie this team shoots at = the opponent's starter
-        if g and _goalie_means(g, t):
-            ctx["goalie_faced_lately"] = {**g, "means": _goalie_means(g, t)}
-        x["recent_form"] = ctx
+            x["last10_games_with_7_plus_total_goals"] = f"{int(val(f'{s_}_l10_7'))} of {int(val(f'{s_}_l10_n'))}"
+            x["last10_games_average_total_goals"] = val(f"{s_}_l10_avg")
         teams[t] = x
     reason = plain(dashboard.reasoning(r, flagged))
     f = {"game": f"{r.away} @ {r.home}", "call": call, "why_this_call": plain_reason(reason.split(" At 5-on-5,")[0]),
-         "projected_total": round(float(r.proj), 2), "chance_of_7_plus_goals": f"{r.p7:.0%}",
+         "projected_total": f"{r.proj:.2f}", "chance_of_7_plus_goals": f"{r.p7:.0%}",
          "over_flag_needs": f"both teams {r.cutoff:.2f}+ projected goals and a line of 6 or 6.5",
-         "how_calls_like_this_did_2021_26": dashboard.CALL_HISTORY[call], "teams": teams}
+         "how_calls_like_this_did_2021_26": dashboard.CALL_HISTORY[call], "how_to_read": READ, "teams": teams}
     if val("bet_total") is not None:
         f["line"] = f"{val('bet_total'):g}"
         if val("open_total") is not None and val("open_total") != val("bet_total"):
@@ -220,23 +283,25 @@ def leads(f):
     """[(score, kind, topic)]: what's unusual about this game. run() gives the slate's games different kinds."""
     c = [(0.5, "call", "the model's call and the matchup behind it")]
     for t, x in f["teams"].items():
-        fm = x["recent_form"]
-        s = fm.get("streak") or ""
+        s = x.get("streak") or ""
         if s[:1] in ("W", "L") and s[1:].isdigit() and int(s[1:]) >= 3:
             c.append((1.0 + int(s[1:]) / 5, "streak", f"{t}'s {'winning' if s[0] == 'W' else 'losing'} streak ({s})"))
-        w = (fm.get("last10_record") or "").split("-")[0]
+        w = (x.get("last10_record") or "").split("-")[0]
         if w.isdigit() and (int(w) >= 7 or int(w) <= 3):
-            c.append((1.2, "last10", f"{t}'s last 10 games ({fm['last10_record']})"))
-        g = fm.get("goalie_faced_lately")
-        if g and not g["means"].startswith("about"):
+            c.append((1.2, "last10", f"{t}'s last 10 games ({x['last10_record']})"))
+        g = x.get("goalie_faced_numbers", {}).get("means")
+        if g and not g.startswith("about"):
             c.append((1.1, "goalie", f"the goalie {t} faces ({x['goalie_faced']}) and how he has played lately"))
-        w2 = fm.get("last_2_weeks")
-        if w2 and not w2["means"].endswith("as projected"):
-            c.append((1.0 + abs(w2["scored_vs_projection_per_game"]) / 2, "scoring", f"{t}'s scoring over the last two weeks"))
+        fw = x.get("form_by_window", {})
+        late = next(((k, fw[k]) for k in ("last_7_days", "last_14_days", "last_30_days") if isinstance(fw.get(k), dict)), None)
+        if isinstance(fw.get("season"), dict) and late and abs(fw["season"]["rank"] - late[1]["rank"]) >= 10:
+            move = abs(fw["season"]["rank"] - late[1]["rank"])
+            c.append((1.0 + move / 20, "form", f"how {t}'s Form rank has moved (#{fw['season']['rank']} over the season, "
+                                               f"#{late[1]['rank']} over the {late[0].replace('_', ' ')})"))
         for z in x["pushing_up"][:1] + x["holding_back"][:1]:
             m = re.search(r" ([+-]\d+\.\d\d) ", z)
             if m and abs(float(m.group(1))) >= 0.2:
-                c.append((0.9 + abs(float(m.group(1))), "factor", f"the biggest factor in the model's projection: {t}'s {z.split(' (')[0]}"))
+                c.append((0.9 + abs(float(m.group(1))), "factor", f"the biggest factor in the model's projection ({t}: {z.split(' (')[0]})"))
         if x["players_out"]:
             c.append((0.7, "injuries", f"who {t} is missing"))
     if f.get("line_moved"):
@@ -310,7 +375,7 @@ def check(text, f, finish="STOP", topic=""):
     if finish not in ("STOP", "") or not re.search(r"[.?]['\")”’]?$", text.strip()):
         return "it stops mid-sentence; write the whole note, ending with a full stop"
     if not WORDS[0] <= words <= WORDS[1]:
-        return f"it is {words} words; write 60-110"
+        return f"it is {words} words; write 150-230"
     if "\n" in text.strip() or re.search(r"\*\*|!|^\s*(?:#|[-•*] )", text, re.M):  # (a '#' rank like '#2 defense' is fine)
         return "use one plain paragraph: no line breaks, markdown, lists or exclamation marks"
     if not re.match(r"[\"'“‘(]?[A-Z0-9]", text.strip()):
@@ -320,6 +385,11 @@ def check(text, f, finish="STOP", topic=""):
     other = [c for c in CALLS if c != f["call"] and re.search(rf"\b{c}\b", text)]
     if other:
         return f"only the model's call ({f['call']}) may be named, not {', '.join(other)}"
+    need = [x[k] for x in f["teams"].values() for k in ("record", "last10_record", "projected_goals") if x.get(k)] + [f["projected_total"]]
+    miss = [n for n in need if not re.search(rf"(?<![\w.]){re.escape(n)}(?![\w.]*\d)", text)]
+    if miss:
+        return (f"include these exactly as written: {', '.join(miss)} (each team's record, last-10 record and projected "
+                "goals, and the projected total)")
     if JARGON.search(text):
         return f"don't say '{JARGON.search(text).group(0)}': say what it means (both teams need to project at least that many goals)"
     if "_" in text or re.search(r"\b(?:the facts|fact sheet|JSON|opening topic)\b", text, re.I):
@@ -355,31 +425,57 @@ def write_note(f, used, topic):
 # ---- colors (applied when the dashboard renders a note) ----
 
 def colors(f):
-    """{number as written: css classes}, from the model's numbers: goal effects, team projections, 5-on-5 / power-play
-    projections and the chance of 7+ by what they mean for tonight's goals (the breakdown table's tiers, green = more);
-    last-10 records hot / cold (form, not goals)."""
-    out = {}
+    """{number as written: css class}, each colored the way the dashboard colors it: goal effects, team projections,
+    5-on-5 / power-play projections and the chance of 7+ by what they mean for tonight's goals (the breakdown table's
+    tiers, green = more); 5-on-5 / power-play ranks like the matchup table (green = good for that team's scoring); total
+    offense / defense, stat and Form ranks and Form numbers like the Team rankings tab (green = strong); last-10 records
+    hot / cold. A number that would get two different colors (a rank meaning different things) gets none."""
+    out, clash = {}, set()
+
+    def put(k, c):
+        if out.get(k, c) != c:
+            clash.add(k)
+        out[k] = c
     lvl = lambda v: "t-great" if v >= 0.10 else "t-good" if v >= 0.03 else "t-trash" if v <= -0.10 else "t-bad" if v <= -0.03 else "t-mid"
+    fifth = lambda good: "t-" + ("trash", "bad", "mid", "good", "great")[4 - min(4, (good - 1) * 5 // 32)]  # 1 = best of 32
+    form = lambda v: "t-" + ("great" if v >= 0.5 else "good" if v >= 0.2 else "mid" if v > -0.2 else "bad" if v > -0.5 else "trash")
     cut = re.search(r"(\d+\.\d\d)\+", f.get("over_flag_needs", ""))
     for t, x in f["teams"].items():
         for z in x["pushing_up"] + x["holding_back"] + [x.get("vs_an_average_team") or ""]:
             m = re.search(r"([+-]\d+\.\d\d)\b", z)
             if m:
-                out[m.group(1)] = lvl(float(m.group(1)))
+                put(m.group(1), lvl(float(m.group(1))))
         if cut:
-            out[f"{x['projected_goals']:.2f}"] = "t-good" if x["projected_goals"] >= float(cut.group(1)) else "t-bad"
-        for k in ("five_on_five", "power_play"):
-            m = re.match(r"(great|good|mid|bad|trash) \((\d+\.\d\d)", x.get(k, ""))
-            if m:
-                out[m.group(2)] = f"t-{m.group(1)}"
-        rec = x["recent_form"].get("last10_record") or ""
-        w = rec.split("-")[0]
-        if w.isdigit():
-            out[rec] = "hot" if int(w) >= 7 else "cold" if int(w) <= 3 else "even"
+            put(x["projected_goals"], "t-good" if float(x["projected_goals"]) >= float(cut.group(1)) else "t-bad")
+        for k, against in (("five_on_five", "opponent_defense"), ("power_play", "opponent_penalty_kill")):
+            z = x.get(k, {})
+            if z.get("rating"):
+                put(z["projected_goals"], f"t-{z['rating']}")
+            if "attack" in z:
+                put(f"#{z['attack']['rank']}", fifth(z["attack"]["rank"]))
+                put(f"#{z[against]['rank']}", fifth(33 - z[against]["rank"]))  # a weak defense = good for this team's scoring
+        tr = x.get("team_rankings", {})
+        for k in ("total_offense_rank", "total_defense_rank"):
+            if k in tr:
+                put(f"#{tr[k]}", fifth(tr[k]))
+        for k in ("offense_stats", "defense_allowed_stats"):
+            for n in re.findall(r"\(#(\d+)\)", tr.get(k, "")):
+                put(f"#{n}", fifth(int(n)))
+        for w in x.get("form_by_window", {}).values():
+            if isinstance(w, dict):
+                put(f"#{w['rank']}", fifth(w["rank"]))
+                for c in ("net", "scoring", "allowing", "finishing", "goaltending"):
+                    if c in w:
+                        put(w[c], form(float(w[c])))
+        if x.get("record"):
+            put(x["record"], "")  # a season record that matches a last-10 record stays plain
+        rec = x.get("last10_record") or ""
+        if rec.split("-")[0].isdigit():
+            put(rec, "hot" if int(rec.split("-")[0]) >= 7 else "cold" if int(rec.split("-")[0]) <= 3 else "even")
     p = f.get("chance_of_7_plus_goals", "")
     if p.rstrip("%").isdigit():
-        out[p] = "t-good" if int(p.rstrip("%")) >= 50 else "t-bad" if int(p.rstrip("%")) <= 42 else "t-mid"
-    return out
+        put(p, "t-good" if int(p.rstrip("%")) >= 50 else "t-bad" if int(p.rstrip("%")) <= 42 else "t-mid")
+    return {k: c for k, c in out.items() if c and k not in clash}
 
 
 def colorize(text, cls):
@@ -395,8 +491,11 @@ def colorize(text, cls):
 
 def signature(f):
     """What a note depends on: a new note only when one of these changes (not on every hundredth of a goal or price)."""
-    t = {k: {"proj": round(v["projected_goals"] * 20) / 20, "out": v.get("players_out"), "goalie": v.get("goalie_faced"),
-             "form": [v["recent_form"].get("streak"), v["recent_form"].get("last10_record")]} for k, v in f["teams"].items()}
+    t = {k: {"proj": round(float(v["projected_goals"]) * 20) / 20, "out": v.get("players_out"), "goalie": v.get("goalie_faced"),
+             "form": [v.get("record"), v.get("streak"), v.get("last10_record")],
+             "ranks": [w["rank"] if isinstance(w, dict) else w for w in v.get("form_by_window", {}).values()]
+                      + [v.get("team_rankings", {}).get(r) for r in ("total_offense_rank", "total_defense_rank")]}
+         for k, v in f["teams"].items()}
     return json.dumps({"call": f["call"], "teams": t, "line": f.get("line"), "watch": f.get("watch")}, sort_keys=True, default=str)
 
 
