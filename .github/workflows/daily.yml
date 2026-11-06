@@ -166,7 +166,8 @@ jobs:
             # GitHub sometimes rejects a push (500 Internal Server Error, Oct 14 2026): pull + push again until it lands
             for i in 1 2 3 4 5 6 7 8; do
               if git pull --rebase && git push; then  # the push starts GitHub Pages' build: the site is live in about a minute
-                echo "✓ Results and dashboard pushed ($(git rev-parse --short HEAD)); the website updates in about a minute" >> "$RUN_SUMMARY"; exit 0
+                echo "✓ Results and dashboard pushed ($(git rev-parse --short HEAD)); the website updates in about a minute" >> "$RUN_SUMMARY"
+                echo "pushed=true" >> "$GITHUB_OUTPUT"; exit 0
               fi
               git rebase --abort 2>/dev/null || true
               echo "push failed (try $i of 8), retrying in $((i * 20)) s"; sleep $((i * 20))
@@ -174,6 +175,18 @@ jobs:
             echo "✗ Couldn't push the results (8 tries): the retry step starts a fresh run" >> "$RUN_SUMMARY"
             echo "::error::push failed 8 times (the retry step below starts a fresh run)"; exit 1
           fi
+
+      - name: Start the website check (re-runs GitHub Pages' deploy until the new dashboard is live)
+        if: ${{ !cancelled() && steps.commit-push.outputs.pushed == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for i in 1 2 3 4 5; do
+            gh workflow run pages.yml -R "${{ github.repository }}" -f trigger=model \
+              && { echo "• Started the website check (it re-runs GitHub's deploy until the site is live)" >> "$RUN_SUMMARY"; exit 0; }
+            echo "couldn't start the website check (try $i of 5)"; sleep 30
+          done
+          echo "✗ Couldn't start the website check (the next run's push deploys the site again)" >> "$RUN_SUMMARY"
 
       - name: Alert on data sources failing 2+ runs in a row (GitHub issue; closes itself on recovery)
         if: ${{ !cancelled() }}

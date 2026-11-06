@@ -24,6 +24,8 @@ STARTED = {
     "monthly": "a model run (this month's report wasn't saved yet)",
     "schedule": "GitHub's schedule",
     "push": "a code push",
+    "model": "a model run (it pushed a new dashboard)",
+    "recheck": "the previous website check (the site still wasn't live after 40 minutes)",
 }
 
 
