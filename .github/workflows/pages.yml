@@ -1,0 +1,86 @@
+name: Website deploy check
+
+# Makes sure the newest commit on main goes live on the website. Every push starts GitHub's own
+# "pages build and deployment" run, and its deploy step sometimes fails on GitHub's side ("Deployment failed,
+# try again later.": the 11:17 AM and 1:17 PM runs on Nov 6 2026 never reached the site). The model run starts
+# this check after it pushes; it waits for that deploy and re-runs it until it works, then stops. After
+# 40 minutes it starts a fresh check, so it keeps retrying until the site is live.
+# The last step (Summary) says what the run did and how it ended, in the log and on the run's page.
+on:
+  workflow_dispatch:
+    inputs:
+      trigger:
+        description: "What started this check (model / recheck / manual)"
+        default: manual
+
+permissions:
+  actions: write   # re-run a failed deploy; start a fresh check
+  pages: write     # ask GitHub Pages for a new build when there's nothing to re-run
+
+concurrency:
+  group: website-check
+  cancel-in-progress: false   # a running check always looks at main's NEWEST commit, so a queued one just checks again
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    env:
+      TZ: America/New_York
+      RUN_SUMMARY: /tmp/run_summary.txt   # each step adds what it did; the last step prints it (.github/scripts/summary.py)
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: .github/scripts
+
+      - name: Wait for the website deploy; re-run it until it works
+        id: deploy-check
+        run: |
+          api() { gh api "$@" 2>/dev/null; }
+          end=$((SECONDS + 40 * 60)); wait=60; tries=0; seen=""; since=$SECONDS
+          while [ $SECONDS -lt $end ]; do
+            head=$(api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha) || { sleep 30; continue; }
+            [ "$head" != "$seen" ] && { seen=$head; since=$SECONDS; }   # a newer push: give its deploy time to start
+            # newest Pages run for main's newest commit (the API lists newest first)
+            read -r id status conclusion < <(api "repos/$GITHUB_REPOSITORY/actions/runs?event=dynamic&head_sha=$head&per_page=10" \
+              --jq '[.workflow_runs[] | select(.path == "dynamic/pages/pages-build-deployment")][0] | "\(.id) \(.status) \(.conclusion)"' || echo "null")
+            if [ -z "$id" ] || [ "$id" = "null" ]; then
+              if [ $((SECONDS - since)) -gt 300 ]; then   # no deploy 5 minutes after the push: ask Pages for one
+                echo "no deploy for ${head:0:7} after 5 minutes: asking GitHub Pages for a build"
+                api -X POST "repos/$GITHUB_REPOSITORY/pages/builds" >/dev/null || echo "couldn't ask for a build"
+                since=$SECONDS
+              fi
+              sleep 20; continue
+            fi
+            if [ "$status" != "completed" ]; then sleep 20; continue; fi
+            if [ "$conclusion" = "success" ]; then
+              if [ $tries -eq 0 ]; then echo "✓ Website is live with ${head:0:7} (deployed on the first try)" >> "$RUN_SUMMARY"
+              else echo "✓ Website is live with ${head:0:7} after $tries re-run(s) of GitHub's deploy" >> "$RUN_SUMMARY"; fi
+              exit 0
+            fi
+            tries=$((tries + 1))
+            echo "deploy $id for ${head:0:7} ended '$conclusion': re-running it (re-run $tries), then waiting"
+            echo "• GitHub's deploy for ${head:0:7} ended '$conclusion' ($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$id): re-ran it" >> "$RUN_SUMMARY"
+            gh run rerun "$id" --failed -R "$GITHUB_REPOSITORY" || gh run rerun "$id" -R "$GITHUB_REPOSITORY" \
+              || api -X POST "repos/$GITHUB_REPOSITORY/pages/builds" >/dev/null || echo "couldn't re-run it or ask for a build (trying again)"
+            sleep $wait; wait=$((wait * 2 > 300 ? 300 : wait * 2))
+          done
+          echo "still not live after 40 minutes: starting a fresh check"
+          for i in 1 2 3 4 5; do
+            gh workflow run pages.yml -R "$GITHUB_REPOSITORY" -f trigger=recheck \
+              && { echo "✗ Website still not live after 40 minutes: started a fresh check (it keeps retrying)" >> "$RUN_SUMMARY"; exit 1; }
+            sleep 30
+          done
+          echo "✗ Website still not live and a fresh check couldn't be started (the next model run starts one)" >> "$RUN_SUMMARY"
+          exit 1
+
+      - name: Summary (what this run did and how it ended; also on the run's page)
+        if: ${{ always() }}
+        env:
+          STARTED_BY: ${{ inputs.trigger }}
+          JOB_STATUS: ${{ job.status }}
+          STEPS: ${{ toJSON(steps) }}
+        run: |
+          python3 .github/scripts/summary.py "Website deploy check: waits for GitHub Pages to put main's newest commit on the website and re-runs the deploy until it works" \
+            || echo "Result: ${{ job.status }} (the summary script failed)"
