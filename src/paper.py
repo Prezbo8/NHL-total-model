@@ -34,12 +34,14 @@ COLS = ["date", "away", "home", "proj", "proj_away", "proj_home", "cutoff", "fla
         "away_l10_n", "away_l10_avg", "away_l10_7", "home_l10_n", "home_l10_avg", "home_l10_7",
         "h2h_n", "h2h_avg", "h2h_7", "h2h_last", "trend_lean",
         # goalie confirmation sources (confirm.py) and, after the game, who actually started (NHL box score)
-        "game_id", "start_utc", "away_goalie_src", "home_goalie_src", "away_goalie_actual", "home_goalie_actual"] + [
+        "game_id", "start_utc", "away_goalie_src", "home_goalie_src", "away_goalie_actual", "home_goalie_actual",
+        # SLAM / 1U / PASS / AVOID as the model called it at the time (never recomputed from later tier cutoffs)
+        "call"] + [
         f"{s}_{c}" for s in ("away", "home") for c in ("ev", "pp", "oth", "gadj", "b2badj", "spd", "inj", "elim")]
 BREAKDOWN = [f"{s}_{c}" for s in ("away", "home") for c in ("ev", "pp", "oth", "gadj", "b2badj", "spd", "inj", "elim")]
 # latest run's numbers for games that haven't started (what the dashboard shows); the columns above
 # stay as first logged, which is the paper bet
-NOW_BASE = ["proj", "proj_away", "proj_home", "p7", "cutoff", "flag", "bet_total", "bet_over"] + BREAKDOWN
+NOW_BASE = ["proj", "proj_away", "proj_home", "p7", "cutoff", "flag", "bet_total", "bet_over", "call"] + BREAKDOWN
 NOW = [f"{c}_now" for c in NOW_BASE]
 COLS += NOW
 
@@ -59,7 +61,8 @@ def read_log():
         d[c] = d[c].map(was_flagged_now).astype(bool)
     for c in ("result", "result_best", "best_book", "away_goalie_now", "home_goalie_now", "updated_at", "flagged_at",
               "away_goalie", "home_goalie", "away_out", "home_out", "away_dtd", "home_dtd", "away_lineup", "home_lineup",
-              "h2h_last", "trend_lean", "start_utc", "away_goalie_src", "home_goalie_src", "away_goalie_actual", "home_goalie_actual"):
+              "h2h_last", "trend_lean", "start_utc", "away_goalie_src", "home_goalie_src", "away_goalie_actual", "home_goalie_actual",
+              "call", "call_now"):
         d[c] = d[c].astype(object)
     return d
 
@@ -104,12 +107,27 @@ def log_games(rows):
             if r.flag and not was_flagged_now(old.at[i, "flag"]):  # newly qualifies: flag it at today's current line
                 for c in ("proj", "proj_away", "proj_home", "p7", "away_goalie", "home_goalie",
                           "bet_total", "bet_over", "bet_under", "best_book", "best_total", "best_over", "best_under",
-                          "flag", "flagged_at") + tuple(BREAKDOWN):
+                          "flag", "flagged_at", "call") + tuple(BREAKDOWN):
                     old.loc[i, c] = r[c]
                 upgraded += 1
     out = pd.concat([old, added], ignore_index=True) if len(old) else added
     out.reindex(columns=COLS).to_csv(LOG, index=False)
     return len(added), upgraded
+
+
+def fill_calls():
+    """Save the call for rows logged before calls were saved (once; rows that have one are never touched).
+    Uses the tier cutoffs in force today, i.e. the same calls the dashboard showed until now."""
+    import dashboard  # imports paper: only here, at run time
+    d = read_log()
+    first, now = d.call.isna(), d.call_now.isna()
+    if not (first.any() or now.any()):
+        return 0
+    d.loc[first, "call"] = [dashboard.call(r, was_flagged_now(r.flag)) for r in d[first].itertuples()]
+    cur = dashboard.current(d)  # the latest run's numbers (rows without them keep their logged ones)
+    d.loc[now, "call_now"] = [dashboard.call(r, bool(r.flag)) for r in cur[now].itertuples()]
+    d.reindex(columns=COLS).to_csv(LOG, index=False)
+    return int((first | now).sum())
 
 
 STARTED = ("LIVE", "CRIT", "OFF", "FINAL")  # NHL game states once the puck has dropped

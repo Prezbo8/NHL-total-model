@@ -596,6 +596,8 @@ def today(day=None, preview=False):
     import odds
     import split_model as sm
     import trends
+    from types import SimpleNamespace
+    import dashboard
     import health  # every source is retried until it works (health.attempt); failures re-run the job
     day = day or date.today().isoformat()
     if preview:  # runs right after today's run: its data is fresh, and an early look shouldn't wait on retries
@@ -786,6 +788,7 @@ def today(day=None, preview=False):
                          "away_lineup": lineup_label(lineup_info.get(a)), "home_lineup": lineup_label(lineup_info.get(h)),
                          **tr,
                          **{f"{s}_{c}": round(v, 4) for s in ("away", "home") for c, v in det[s].items()}})
+        log_rows[-1]["call"] = dashboard.call(SimpleNamespace(**log_rows[-1]), bool(flag))  # saved: later tier changes never rewrite it
     print("\n(goalie % = share of expected goals stopped beyond average; higher = better)")
     print("OVER FLAG = both teams high-scoring (marked +) and the line is 6 or 6.5. Overs only, never 5.5.")
     print("Always bet the 'best over' book: line shopping added ~+2 pts ROI in the backtest.")
@@ -804,6 +807,7 @@ def today(day=None, preview=False):
         with open(paths.data("last_run.txt"), "w") as f:  # shown on the dashboard
             f.write(pd.Timestamp.now(tz="America/New_York").strftime("%Y-%m-%d %H:%M %Z") + "\n")
         added, upgraded = paper.log_games(log_rows)
+        paper.fill_calls()  # rows logged before calls were saved: once
         if postponed:  # postponed / cancelled after an earlier run logged it
             paper.remove_games(day, postponed)
         import store  # run history in Supabase (skipped when not configured; never stops the run)

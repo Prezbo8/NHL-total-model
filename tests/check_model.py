@@ -481,6 +481,17 @@ rep = open(SP + "report_summary.txt", encoding="utf-8").read()
 want = f"{(cb.res == 'W').sum()}-{(cb.res == 'L').sum()}-{(cb.res == 'P').sum()}"
 check("the daily Report's paper record is the dashboard's (closing line), not the first-logged bets",
       f"Paper record (closing line, as on the dashboard): {want} " in rep and f"{cb.units.sum():+.2f}u" in rep, rep.strip())
+calls_of = lambda d: [dashboard.call(r, True) for r in dashboard.closing_bets(d).itertuples()]
+before = calls_of(paper.read_log())  # on the real log's copy
+paper.fill_calls()
+saved = paper.read_log()
+_ev = dashboard.TIERS["ev"]
+dashboard.TIERS["ev"] = (9.0, 9.0, 9.0, 9.0)  # nobody is good at 5v5 any more: recomputed calls would all change
+moved = calls_of(saved)
+dashboard.TIERS["ev"] = _ev
+check("calls are saved: filling in old rows changes no call, every row has one, and a later tier change can't rewrite them",
+      before == calls_of(saved) == moved and saved.call.notna().all() and saved.call_now.notna().all(),
+      f"{before} / {moved}")
 def no_timeout(path):
     """'file:line' of every urlopen( call whose arguments have no timeout= (it would wait forever on a stuck server)."""
     s_, out, i = open(path, encoding="utf-8").read(), [], 0
