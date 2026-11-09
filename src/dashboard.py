@@ -887,17 +887,20 @@ def day_cards(g):
 
 
 def day_summary(g):
-    done = g[g.final_total.notna()]
-    flags = int(current(g).flag.sum())
+    """One line for a day, from the last pre-game run's numbers (current) and closing lines, like the rest of the page."""
+    cur = current(g)
+    done = cur[cur.final_total.notna()]
+    flags = int(cur.flag.sum())
     parts = [f"{len(g)} games", f"<b>{flags} flag{'s' if flags != 1 else ''}</b>"]
     if len(done):
-        wl = done[done.bet_total.notna()]
-        parts.append(f"<b>{(wl.final_total > wl.bet_total).sum()} of {len(wl)}</b> went over the line")
+        ln = done.close_total.fillna(done.bet_total)  # the closing line, else the last pre-game one
+        wl = done[ln.notna()]
+        parts.append(f"<b>{(wl.final_total > ln[ln.notna()]).sum()} of {len(wl)}</b> went over the closing line")
         parts.append(f"avg <b>{done.final_total.mean():.1f}</b> goals (projected {done.proj.mean():.1f})")
-        fl = closing_bets(done, keep_retro=True)  # paper picks, closing information only
+        fl = closing_bets(g[g.final_total.notna()], keep_retro=True)  # paper picks, closing information only
         if len(fl):
             parts.append(f"flags <b>{(fl.res == 'W').sum()}-{(fl.res == 'L').sum()}-{(fl.res == 'P').sum()}</b> ({fl.units.sum():+.2f}u at close)")
-        parts.append(call_record(current(done)))
+        parts.append(call_record(done))
     return " · ".join(parts)
 
 

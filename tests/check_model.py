@@ -512,6 +512,11 @@ check("closing lines on the real log: every settled game checked; the record is 
       rl[rl.final_total.notna() & rl.close_total.notna()].close_src.notna().all() and rec_after.close_total.isin([6.0, 6.5]).all(),
       f"replaced: {changed or 'none'} | flagged games not at 6/6.5: {[f'{r.away}@{r.home} {r.date} {r.close_total:g}' for r in odd.itertuples()] or 'none'}"
       f" | record before (old closes) {rec_line(rec_before)}, after {rec_line(rec_after)}")
+ds = pd.DataFrame([{**row0, "date": "2026-10-20", "proj": 5.0, "proj_now": 7.0, "bet_total": 5.5, "bet_total_now": 6.5,
+                    "close_total": 6.5, "final_total": 6.0, "away_score": 3.0, "home_score": 3.0}])
+ds_line = dashboard.day_summary(ds)
+check("day summary: uses the last pre-game projection and the closing line (not the first-logged ones)",
+      "projected 7.0" in ds_line and "0 of 1</b> went over the closing line" in ds_line, ds_line)
 calls_of = lambda d: [dashboard.call(r, True) for r in dashboard.closing_bets(d).itertuples()]
 before = calls_of(paper.read_log())  # on the real log's copy
 paper.fill_calls()
