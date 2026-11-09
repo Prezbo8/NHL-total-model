@@ -45,7 +45,7 @@ TIPS = {
     "Team": "Team, away first then home.",
     "5v5": "Goals this team should score at full strength (5 skaters vs 5). Most of a team's goals come from here.",
     "PP": "Goals this team should score on the power play: how good its power play is, how bad the other team's penalty kill is, and how many penalties are expected.",
-    "Oth": "Goals from everything else (4-on-4, overtime, empty nets, shorthanded goals, the shootout winner's goal). Same league-average number for every team, so it has no colors.",
+    "Oth": "Goals from everything else (4-on-4, overtime, empty nets, shorthanded goals, the shootout winner's goal). A league-average number, nearly the same for every team (it moves a hair with the goalie, back-to-back and speed adjustments), so it has no colors.",
     "Gl": "How the other team's goalie changes this team's scoring. + = weak goalie, more goals. − = strong goalie, fewer goals.",
     "B2B": "Tired legs: a team that played yesterday scores 8% less. A team whose opponent played yesterday scores 6.5% more.",
     "Spd": "How fast this team skates compared with the opponent (20+ mph bursts last season). Fast teams score a bit more and allow a bit less.",
@@ -74,10 +74,10 @@ TIPS = {
     "Projected": "Starter not announced yet: DailyFaceoff's guess, or this team's usual recent starter.",
     "OVER FLAG": "The model's pick: both teams projected high-scoring and the line is 6 or 6.5. Bet the OVER at the 'Best over' book. These are the picks that count in the record.",
     "Lineups": "Projected lineup source (DailyFaceoff line combinations, checked against the official NHL roster). A reporter name = tonight's lineup; 'last game's lineup' = not updated for tonight yet. Regulars missing from the lineup are treated as out (scratch).",
-    "SLAM": "Flagged over where both teams are good or great at 5-on-5. Went over 55% (opening line) / 56.5% (closing line) in 2021-26.",
-    "1U": "Flagged over where one team is great at 5-on-5 (above 2.19) but the other isn't good. Went over 58% (opening line) / 59% (closing line) in 2021-26.",
-    "PASS": "Flagged over, but neither team is great at 5-on-5 and they aren't both good. No bet: these went over only 47% in 2021-26.",
-    "AVOID": "Not flagged, or flagged but both teams face a Strong or Good goalie. These went over only 47-49% in 2021-26.",
+    "SLAM": "Flagged over where both teams are good or great at 5-on-5. Went over 55% (opening line) / 56.5% (closing line) in 2021-26 (the seasons the rule was built on, so not a fair test).",
+    "1U": "Flagged over where one team is great at 5-on-5 (above 2.19) but the other isn't good. Went over 58% (opening line) / 59% (closing line) in 2021-26 (the seasons the rule was built on, so not a fair test).",
+    "PASS": "Flagged over, but neither team is great at 5-on-5 and they aren't both good. No bet: these went over only 47% in 2021-26 (the seasons the rule was built on, so not a fair test).",
+    "AVOID": "Not flagged, or flagged but both teams face a Strong or Good goalie. These went over only 47-49% in 2021-26 (the seasons the rule was built on, so not a fair test).",
     "Paper bet": "The paper-trading record's pick: flagged at the last model run before puck drop, graded at the closing consensus total and over price (6 or 6.5 closes only).",
     "Near miss": "{team} missed the {cutoff:.2f}-goal high-scoring cutoff by only {gap:.3f}. Not a bet: the over rule needs both teams over the cutoff (and a 6 or 6.5 line). Shown so close calls are easy to spot.",
     "B2B tag": "Played yesterday: the model cuts this team's scoring ~8% and raises its opponent's ~6.5%.",
@@ -182,10 +182,10 @@ def call_result(r, flagged):
 
 GL_WORDS = {"great": "a Trash goalie", "good": "an OK goalie", "mid": "a Mid goalie",  # same names as the goalie tags (GOALIE_TAGS)
             "bad": "a Good goalie", "trash": "a Strong goalie"}
-CALL_HISTORY = {"SLAM": "Games like this went over 55% of the time at the opening line and 56.5% at the closing line in 2021-26.",
-                "1U": "Games like this went over 58% of the time at the opening line and 59% at the closing line in 2021-26.",
-                "PASS": "Flagged games like this went over only 47% of the time in 2021-26.",
-                "AVOID": "Games like this went over only 47-49% of the time in 2021-26."}
+CALL_HISTORY = {"SLAM": "Games like this went over 55% of the time at the opening line and 56.5% at the closing line in 2021-26 (the seasons the rule was built on, so not a fair test).",
+                "1U": "Games like this went over 58% of the time at the opening line and 59% at the closing line in 2021-26 (the seasons the rule was built on, so not a fair test).",
+                "PASS": "Flagged games like this went over only 47% of the time in 2021-26 (the seasons the rule was built on, so not a fair test).",
+                "AVOID": "Games like this went over only 47-49% of the time in 2021-26 (the seasons the rule was built on, so not a fair test)."}
 
 
 _RANKS = {}
@@ -2101,9 +2101,13 @@ function hide(ev) {
   const t = ev.target.closest && ev.target.closest(".tip");
   if (t && !(ev.relatedTarget && t.contains(ev.relatedTarget))) box.classList.remove("on");
 }
-document.querySelectorAll(".runstale").forEach(function (m) {  // the model runs at least daily (12:01 AM): 26 h quiet = stopped
+document.querySelectorAll(".runstale").forEach(function (m) {
+  // hourly runs 11:17 AM-10:17 PM Eastern: quiet for 2.5 h in that window = stopped; overnight (12:01 AM, then 11:17 AM) 12 h
   const h = (Date.now() - Date.parse(m.dataset.at)) / 3.6e6;
-  if (h > 26) { m.textContent = "No model run for " + Math.floor(h) + " hours: check GitHub Actions"; m.hidden = false; }
+  const et = new Date().toLocaleString("en-US", {timeZone: "America/New_York", hour: "numeric", minute: "numeric", hour12: false}).split(":");
+  const mins = (+et[0] % 24) * 60 + (+et[1]);
+  const limit = (mins >= 11 * 60 + 45 && mins <= 23 * 60 + 30) ? 2.5 : 12;
+  if (h > limit) { m.textContent = "No model run for " + (h < 10 ? h.toFixed(1) : Math.floor(h)) + " hours: check GitHub Actions"; m.hidden = false; }
 });
 </script>
 """

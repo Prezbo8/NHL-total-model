@@ -7,6 +7,8 @@ on:
   workflow_dispatch: {}
   push:
     paths: ["src/**", "research/**", "tests/**", ".github/workflows/**", ".github/scripts/**"]
+permissions:
+  contents: read   # tests never push (a temporary preview step that does adds its own permission)
 concurrency:   # a newer push to the same branch replaces a test run still going
   group: tests-${{ github.ref }}
   cancel-in-progress: true

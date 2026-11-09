@@ -679,6 +679,14 @@ check("lineups: while DailyFaceoff still shows LAST game's lineup only IR player
       [r["name"] for r in _merged] == ["Hurt Guy"] and [r["name"] for r in _merged2] == ["Scratch Guy", "Hurt Guy"],
       f"{[r['name'] for r in _merged]} / {[r['name'] for r in _merged2]}")
 
+import books as _bk
+check("Best over: only the owner's books (DraftKings, FanDuel, BetRivers, BetMGM, Caesars)",
+      all(_bk.mine(b) for b in ("DK NJ", "FanDuel NJ", "BetRivers NJ", "BetMGM NJ", "Caesars NJ"))
+      and not any(_bk.mine(b) for b in ("bet365 NJ", "Parx", "Bovada", "Kalshi", "Parx NJ")))
+_dsrc = open(dashboard.__file__, encoding="utf-8").read()
+check("site: the stale-run warning uses 2.5 h in game hours and 12 h overnight; the backtest call rates say they're in-sample",
+      "? 2.5 : 12" in _dsrc and all("not a fair test" in dashboard.CALL_HISTORY[c] for c in dashboard.CALL_HISTORY))
+
 print("team rankings page (Overview, Offense, Defense, Form)")
 rk_html = dashboard.rankings(real)
 misaligned = []
