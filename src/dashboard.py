@@ -955,45 +955,77 @@ def team_over_rows(x):
     return pd.DataFrame(rows, columns=["team", "n", "o", "u", "p", "over", "units", "vs"]).sort_values(["units", "over"], ascending=False)
 
 
-TEAM_TOP = 10  # rows in each block: the best 10 teams by units, then the worst 10 (never the same team twice)
+TEAM_TOP = 10  # rows in each block: the best 10 teams, then the worst 10 (never the same team twice)
+
+
+def top_bottom(t, cells, heads, sort_col):
+    """A sortable team table: every team is in it, but only a 'Top 10' block (t's first rows) and a 'Bottom 10' block (its last
+    rows, never repeating a top team) show. Clicking a header (not Team) re-sorts it and shows that column's top / bottom 10
+    (SCRIPT, table.tor-t). cells(r) -> [(sort key, html, class)], one per column after Team; heads = header HTML, Team first."""
+    nb = max(0, min(TEAM_TOP, len(t) - TEAM_TOP))
+    label = lambda cls, txt: f"<tr class='tor-g {cls}'><td colspan='{len(heads)}'>{txt}</td></tr>"
+    rows = []
+    for i, r in enumerate(t.itertuples()):
+        if i == 0:
+            rows.append(label("tor-top", f"Top {min(TEAM_TOP, len(t))}"))
+        if i == len(t) - nb and nb:
+            rows.append(label("tor-bot", f"Bottom {nb}"))
+        hide = " hidden" if TEAM_TOP <= i < len(t) - nb else ""
+        tds = "".join(f"<td class='{c}' data-k='{k}'>{h}</td>" for k, h, c in cells(r))
+        rows.append(f"<tr class='tor-row'{hide}><td>{logo(r.team, 18)} {e(r.team)}</td>{tds}</tr>")
+    th = "".join(f"<th class='{c}'>{h}</th>" for h, c in heads)
+    return (f"<div class='scroll'><table class='rec-t type-t tor-t' data-sort='{sort_col}'><thead><tr>{th}</tr></thead>"
+            f"<tbody>{''.join(rows)}</tbody></table></div>")
 
 
 def team_over_table(t, games):
-    top, rest = t.head(TEAM_TOP), t.iloc[TEAM_TOP:]
-    bottom = rest.tail(TEAM_TOP)
-    block = lambda label, x: (f"<tr class='tor-g'><td colspan='6'>{label}</td></tr>" + row(x)) if len(x) else ""
-    row = lambda x: "".join(f"<tr><td>{logo(r.team, 18)} {e(r.team)}</td><td class='c'>{r.n}</td><td class='c'>{r.o}-{r.u}-{r.p}</td>"
-                   f"<td class='c'>{f'{r.over:.0%}' if r.over == r.over else '–'}</td>"
-                   f"<td class='r {'pos' if r.units > 0 else 'neg' if r.units < 0 else ''}'>{r.units:+.2f}u</td>"
-                   f"<td class='r'>{r.vs:+.2f}</td></tr>" for r in x.itertuples())
-    body = block(f"Top {len(top)}", top) + block(f"Bottom {len(bottom)}", bottom)
-    return (f"<div class='scroll'><table class='rec-t type-t'><thead><tr><th>Team</th><th class='c'>{games}</th>"
-            f"<th class='c'>{tip('O-U-P', 'Over-under-push: final goals vs the closing total.', 'tr')}</th><th class='c'>Over %</th>"
-            f"<th class='r'>{tip('Units', 'Betting the over at the closing consensus over price, 1 unit each game.', 'tr')}</th>"
-            f"<th class='r'>{tip('vs close', 'Average goals scored above (+) or below (−) the closing total.', 'tr')}</th></tr></thead>"
-            f"<tbody>{body}</tbody></table></div>")
+    cells = lambda r: [(r.n, r.n, "c"), (r.o, f"{r.o}-{r.u}", "c"),
+                       (f"{r.over:.4f}" if r.over == r.over else -1, f"{r.over:.0%}" if r.over == r.over else "–", "c"),
+                       (f"{r.units:.4f}", f"{r.units:+.2f}u", f"r {'pos' if r.units > 0 else 'neg' if r.units < 0 else ''}"),
+                       (f"{r.vs:.4f}", f"{r.vs:+.2f}", "r")]
+    heads = [("Team", ""), (games, "c"), (tip("Over-under", "Final goals vs the closing total of 6.5 (no pushes at 6.5).", "tr"), "c"),
+             ("Over %", "c"), (tip("Units", "Betting the over at the closing consensus over price, 1 unit each game.", "tr"), "r"),
+             (tip("vs close", "Average goals scored above (+) or below (−) the closing total.", "tr"), "r")]
+    return top_bottom(t, cells, heads, 4)
+
+
+def team_7_rows(x):
+    """One row per team over every finished game, whatever its line: games, 7+ goals (over 6.5) vs 6 or fewer, 7+ %,
+    average total goals. Highest 7+ % first (then more goals). A game counts for both of its teams."""
+    rows = []
+    for t in sorted(set(x.away) | set(x.home)):
+        y = x[(x.away == t) | (x.home == t)]
+        o = int((y.final_total >= 7).sum())
+        rows.append((t, len(y), o, len(y) - o, o / len(y), y.final_total.mean()))
+    return pd.DataFrame(rows, columns=["team", "n", "o", "u", "over", "goals"]).sort_values(["over", "goals"], ascending=False)
+
+
+def team_7_table(t):
+    cells = lambda r: [(r.n, r.n, "c"), (r.o, f"{r.o}-{r.u}", "c"), (f"{r.over:.4f}", f"{r.over:.0%}", "c"),
+                       (f"{r.goals:.4f}", f"{r.goals:.2f}", "r")]
+    heads = [("Team", ""), ("Games", "c"), (tip("Over-under", "7+ goals (over 6.5) vs 6 or fewer, whatever the game’s line was.", "tr"), "c"),
+             ("Over %", "c"), (tip("Avg goals", "Average total goals in the team’s games.", "tr"), "r")]
+    return top_bottom(t, cells, heads, 3)
 
 
 def team_records(d):
-    """Team over records at the closing line (every game that closed at 6 or 6.5) and SLAM + 1U records by team."""
-    g = d[d.final_total.notna() & d.close_total.notna() & d.close_over.notna() & (d.close_total >= 6)].copy()
+    """Games over 6.5 by team (7+ goals, every finished game whatever its line) and SLAM + 1U records by team (6.5 closes)."""
+    g = d[d.final_total.notna()]
     if g.empty:
         return "<p class='muted'>No finished games yet.</p>"
-    g["res"] = np.where(g.final_total > g.close_total, "W", np.where(g.final_total < g.close_total, "L", "P"))
-    g["units"] = np.where(g.res == "W", grade.payout(g.close_over), np.where(g.res == "L", -1.0, 0.0))
     s = closing_bets(d)
-    s = s[[call(r, True) in ("SLAM", "1U") for r in s.itertuples()]]
+    s = s[[call(r, True) in ("SLAM", "1U") and r.close_total == 6.5 for r in s.itertuples()]]
     picks = (team_over_table(team_over_rows(s), "Picks") if len(s) else "<p class='muted'>No SLAM or 1U picks have settled yet.</p>")
     return f"""<div class='acc-grid'>
-        <div><h3>Over record · 6 / 6.5 closing lines</h3>{team_over_table(team_over_rows(g), "Games")}</div>
-        <div><h3>🔨 SLAM + 1U picks by team</h3>{picks}</div>
+        <div><h3>Games over 6.5 · any line</h3>{team_7_table(team_7_rows(g))}</div>
+        <div><h3>🔨 SLAM + 1U picks by team · 6.5</h3>{picks}</div>
       </div>
-      <ul class='notes'><li><b>Closing line.</b> Every game that closed at 6 or 6.5 ({len(g)} so far, {g.date.min()} to {g.date.max()}),
-      graded as an over at the closing consensus total and price, 1 unit each. A game counts for both teams.
-      Each table shows the best 10 teams by units, then the worst 10.</li>
-      <li><b>SLAM + 1U</b> are the flagged picks in the paper record below, by team (a pick counts for both teams).</li>
+      <ul class='notes'><li><b>Games over 6.5:</b> every finished game ({len(g)} so far, {g.date.min()} to {g.date.max()}), over = 7+ goals,
+      whatever the game's line was. Best 10 teams by over %, then the worst 10. A game counts for both teams.</li>
+      <li><b>Sort:</b> click a column header to sort by it (highest first); click again to flip it. Each table always shows that column's top 10 and bottom 10.</li>
+      <li><b>SLAM + 1U</b> are the flagged picks in the paper record below that closed at 6.5, graded at the closing price
+      (1 unit each), by team: best 10 by units, then the worst.</li>
       <li>About 15 games a team is a small sample: early-season team records are mostly noise.</li></ul>"""
-
 
 def accuracy(d):
     """How the projections did: summary tiles, then by projected total and by call (last pre-game projection)."""
@@ -1968,6 +2000,30 @@ def backtest():
 
 
 SCRIPT = """<script>
+(function(){  // Team over records: click a header (not Team) to sort, highest first; click again to flip. Shows the top 10 + bottom 10
+  document.querySelectorAll('table.tor-t').forEach(function(t){
+    var ths = t.tHead.rows[0].cells, body = t.tBodies[0], TOP = 10;
+    var lt = body.querySelector('tr.tor-top'), lb = body.querySelector('tr.tor-bot');
+    function sort(i, rev){
+      var rows = Array.prototype.slice.call(body.querySelectorAll('tr.tor-row')), n = rows.length, nb = Math.max(0, Math.min(TOP, n - TOP));
+      rows.sort(function(a, b){ var c = parseFloat(b.cells[i].dataset.k) - parseFloat(a.cells[i].dataset.k); return rev ? -c : c; });
+      body.appendChild(lt);
+      rows.forEach(function(r, k){
+        if (k === n - nb && lb) body.appendChild(lb);
+        r.hidden = k >= TOP && k < n - nb; body.appendChild(r);
+      });
+      Array.prototype.forEach.call(ths, function(h, j){ h.classList.toggle('sorted', j === i); h.classList.toggle('rev', j === i && rev); });
+      t.dataset.sort = i; t.dataset.rev = rev ? '1' : '';
+    }
+    Array.prototype.forEach.call(ths, function(h, i){
+      if (i === 0) return;  // Team name: not sortable
+      h.classList.add('sortable');
+      h.addEventListener('click', function(){ sort(i, String(t.dataset.sort) === String(i) && !t.dataset.rev); });
+    });
+    var start = +t.dataset.sort;
+    Array.prototype.forEach.call(ths, function(h, j){ h.classList.toggle('sorted', j === start); });
+  });
+})();
 (function(){  // Team rankings: click a column header (not Team) to sort by it (best first), click again to reverse
   document.querySelectorAll('table.rk-t').forEach(function(t){
     var ths = t.tHead.rows[t.tHead.rows.length - 1].cells;  // the column names (a group-label row may sit above them)
@@ -2090,7 +2146,7 @@ table.rec-t tr.tor-g td{color:var(--muted);font-size:12px;font-weight:700;letter
 .fm-switch{display:flex;flex-wrap:wrap;gap:4px;margin:0 0 10px}.fm-switch button{font:inherit;font-size:12.5px;font-weight:700;padding:5px 12px;border:1px solid var(--line);border-radius:999px;background:transparent;color:var(--muted);cursor:pointer}.fm-switch button.on{background:var(--card);color:var(--ink);border-color:var(--muted)}.fm-note{max-width:820px}.fm-h{margin:14px 0 4px;font-size:13.5px}.fm-notes{max-width:820px;margin-top:4px}@media (max-width:760px){table.fm-t td.tm img,table.fm-t td.tm picture{display:none}table.fm-t th,table.fm-t td{padding:5px 3px!important;font-size:11.5px}table.fm-t th{white-space:normal;font-size:9px;letter-spacing:0}table.fm-t .fm-p,table.fm-t .fm-gp,table.fm-t .fm-sd{display:none}table.fm-t th,table.fm-t td{padding:5px 2px!important}table.fm-t td.fm-sm,table.fm-t th.fm-sm{display:table-cell;line-height:1.25}table.fm-t th .fm-long{display:none}table.fm-t th .fm-short{display:inline}}table.fm-t .fm-sm,table.fm-t .fm-short{display:none}.fm-sl{color:var(--muted);font-size:9px;margin-right:3px}.fm-d{display:block;font-size:10px;font-weight:600;opacity:.8;line-height:1.2;white-space:nowrap}.fm-rkm{display:none}@media (max-width:760px){.fm-d{font-size:8.5px}.fm-rkm{display:block;font-size:8.5px;color:var(--muted);white-space:nowrap}.fm-rkm .fm-d{display:inline}}.mv{list-style:none;margin:4px 0 4px;padding:0;font-size:12.5px;max-width:820px}.mv li{padding:4px 0;border-bottom:1px solid var(--line)}.mv li b{font-variant-numeric:tabular-nums}.mv-d{font-weight:800;margin:0 6px}.mv-up{color:#4ade80}.mv-dn{color:#f87171}.mv-why{display:block;color:var(--muted);font-size:12px;margin-top:1px}.kp-also{margin:8px 0 2px;font-size:13px;line-height:1.5}.fm-chip{display:inline-block;padding:1px 7px;border-radius:999px;font-size:11px;font-weight:700;line-height:1.5}.fm-tough{background:rgba(124,58,237,.45);color:#fff}.fm-average{background:transparent;color:var(--muted);border:1px solid var(--line)}.fm-easy{background:rgba(14,165,233,.30);color:var(--ink)}@media (max-width:760px){.fm-chip{padding:0 3px;font-size:9px;letter-spacing:-.1px}.fm-sl{margin-right:1px}}
 .rk-switch button.on{background:var(--card);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.25)}
 .rk[hidden]{display:none!important}
-table.rk-t th.sortable{cursor:pointer;user-select:none}table.rk-t th.sorted{color:var(--ink)}
+table.rk-t th.sortable{cursor:pointer;user-select:none}table.tor-t th.sortable{cursor:pointer;user-select:none}table.tor-t th.sorted{color:var(--ink)}table.tor-t th.sorted::after{content:" ▼";font-size:9px}table.tor-t th.sorted.rev::after{content:" ▲"}table.rk-t th.sorted{color:var(--ink)}
 table.rk-t th.sorted::after{content:" ▲";font-size:9px}table.rk-t th.sorted.rev::after{content:" ▼"}
 .rk-wrap{display:flex;flex-wrap:wrap;gap:16px}.rk-stack{flex-direction:column}.rk-stack .rk{flex:0 0 auto;width:100%;max-width:100%}.rk{flex:1 1 360px;min-width:0;overflow-x:auto}.rk h3{margin:0 0 8px;font-size:15px}
 table.gt.rk-t{table-layout:auto;font-size:13px}table.gt.rk-t td.tm b{font-size:16px;letter-spacing:.01em}table.gt.rk-t td.tm img{margin-right:8px;vertical-align:middle}table.gt.rk-t td,table.gt.rk-t th{padding:4px 8px;white-space:nowrap;overflow:visible;text-overflow:clip}
