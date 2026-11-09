@@ -23,7 +23,7 @@ import pandas as pd
 
 URL = os.environ.get("SUPABASE_URL", "").rstrip("/")
 KEY = os.environ.get("SUPABASE_KEY", "")
-BREAKDOWN = [f"{s}_{c}" for s in ("away", "home") for c in ("ev", "pp", "oth", "gadj", "b2badj", "spd", "inj")]
+BREAKDOWN = [f"{s}_{c}" for s in ("away", "home") for c in ("ev", "pp", "oth", "gadj", "b2badj", "spd", "inj", "elim")]
 INT_COLS = {"open_over", "line_over", "line_under", "best_over", "best_under", "bet_over", "bet_under",
             "close_over", "close_under", "away_score", "home_score", "final_total", "game_id", "n_games", "n_flags"}
 
@@ -146,15 +146,23 @@ def record_run(day, rows, sources=None, trigger=None):
 
 @safe
 def sync_log(d):
-    """Mirror the CSV log's finals / closing lines (nhl_games) and paper bets (nhl_paper_bets)."""
+    """Mirror the CSV log's finals / closing lines (nhl_games) and paper bets (nhl_paper_bets). A paper bet row is every
+    game ever flagged, with its first-flag line (bet_*, result, profit, clv) AND whether it is in the paper record the
+    dashboard shows (in_record: still flagged at the last run before puck drop, closed at 6 / 6.5) with that record's
+    call, result and units (dashboard.closing_bets)."""
+    import dashboard
     done = d[d.final_total.notna()]
     _send("nhl_games", [{"game_date": r.date, "away": r.away, "home": r.home, "away_score": r.away_score,
                          "home_score": r.home_score, "final_total": r.final_total, "close_total": r.close_total,
-                         "close_over": r.close_over, "close_under": r.close_under,
+                         "close_over": r.close_over, "close_under": r.close_under, "close_src": r.close_src,
                          "updated_at": pd.Timestamp.now(tz="UTC").isoformat()} for r in done.itertuples()],
           on_conflict="game_date,away,home")
     bets = d[d.flag.astype(bool)]
+    rec = {(r.date, r.away, r.home): r for r in dashboard.closing_bets(d).itertuples()}
+    rk = lambda r: rec.get((r.date, r.away, r.home))
     _send("nhl_paper_bets", [{"game_date": r.date, "away": r.away, "home": r.home, "flagged_at": r.flagged_at,
+                              "in_record": rk(r) is not None, "call_close": dashboard.call(rk(r), True) if rk(r) else None,
+                              "close_result": rk(r).res if rk(r) else None, "close_units": float(rk(r).units) if rk(r) else None,
                               "proj": r.proj, "p7": r.p7, "bet_total": r.bet_total, "bet_over": r.bet_over,
                               "bet_under": r.bet_under, "best_book": r.best_book, "best_total": r.best_total,
                               "best_over": r.best_over, "best_under": r.best_under, "result": r.result,

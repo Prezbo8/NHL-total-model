@@ -35,8 +35,8 @@ create table if not exists nhl_projections (
   away_goalie   text, home_goalie text,
   away_b2b      boolean, home_b2b boolean,
   away_out      text, home_out text, away_dtd text, home_dtd text,
-  away_ev real, away_pp real, away_oth real, away_gadj real, away_b2badj real, away_spd real, away_inj real,
-  home_ev real, home_pp real, home_oth real, home_gadj real, home_b2badj real, home_spd real, home_inj real,
+  away_ev real, away_pp real, away_oth real, away_gadj real, away_b2badj real, away_spd real, away_inj real, away_elim real,
+  home_ev real, home_pp real, home_oth real, home_gadj real, home_b2badj real, home_spd real, home_inj real, home_elim real,
   primary key (run_id, game_date, away, home)
 );
 create index if not exists nhl_projections_game on nhl_projections (game_date, away, home);
@@ -50,6 +50,7 @@ create table if not exists nhl_games (
   start_utc     timestamptz,
   away_score    int, home_score int, final_total int,
   close_total   real, close_over int, close_under int,
+  close_src     text,              -- feed / pre-game / rejected (src/paper.py official_close)
   updated_at    timestamptz default now(),
   primary key (game_date, away, home)
 );
@@ -65,6 +66,8 @@ create table if not exists nhl_paper_bets (
   best_book     text, best_total real, best_over int, best_under int,
   result        text, profit real, clv real,
   result_best   text, profit_best real,
+  -- the paper record the dashboard shows (closing information only; dashboard.closing_bets)
+  in_record     boolean, call_close text, close_result text, close_units real,
   updated_at    timestamptz default now(),
   primary key (game_date, away, home)
 );
@@ -158,3 +161,9 @@ alter table nhl_daily_goalies enable row level security;
 alter table nhl_daily_skaters enable row level security;
 alter table nhl_daily_meta    enable row level security;
 revoke all on nhl_daily_teams, nhl_daily_goalies, nhl_daily_skaters, nhl_daily_meta from anon, authenticated;
+
+-- Nov 9 2026 (already applied to the live database):
+-- alter table nhl_projections add column if not exists away_elim real, add column if not exists home_elim real;
+-- alter table nhl_games add column if not exists close_src text;
+-- alter table nhl_paper_bets add column if not exists in_record boolean, add column if not exists call_close text,
+--   add column if not exists close_result text, add column if not exists close_units real;

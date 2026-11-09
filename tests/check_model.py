@@ -300,6 +300,17 @@ check("run saved: 1 run, only not-started games projected", len(by.get("nhl_runs
       [p["away"] for p in by.get("nhl_projections", [])] == ["AAA"] and by["nhl_projections"][0]["run_id"] == rid)
 unknown = {f"{t}.{k}" for t, rows in by.items() for r in rows for k in r if k not in cols.get(t, set())}
 check("every field sent exists in supabase/schema.sql", not unknown and len(cols) == 8, ", ".join(sorted(unknown)))
+sent.clear()
+store.sync_log(real)
+pb = [r for t, r in sent if t == "nhl_paper_bets"]
+rb = dashboard.closing_bets(real)
+check("Supabase paper bets: every game ever flagged, marked in_record exactly for the dashboard's record (same calls, results, units)",
+      sum(bool(r["in_record"]) for r in pb) == len(rb) and abs(sum(r["close_units"] or 0 for r in pb) - rb.units.sum()) < 1e-6
+      and {r["call_close"] for r in pb if r["in_record"]} <= set(dashboard.RECORD_CALLS) and len(pb) == int(real.flag.sum()),
+      f"{len(pb)} flagged, {sum(bool(r['in_record']) for r in pb)} in the record (dashboard: {len(rb)})")
+by.setdefault("nhl_paper_bets", []).extend(pb)
+unknown = {f"{t}.{k}" for t, rows in by.items() for r in rows for k in r if k not in cols.get(t, set())}
+check("every paper-bet field sent exists in supabase/schema.sql", not unknown, ", ".join(sorted(unknown)))
 check("call saved with each projection, no NaN sent", by["nhl_projections"][0]["call"] in ("SLAM", "1U", "PASS", "AVOID")
       and "NaN" not in json.dumps([r for _, r in sent]))
 store._send = lambda *a, **k: (_ for _ in ()).throw(RuntimeError("supabase down"))
