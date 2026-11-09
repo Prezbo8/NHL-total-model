@@ -710,6 +710,14 @@ _lvl = {int(k): v for k, v in (_full.groupby("season").proj.mean() - _full.group
 _done = {k: v for k, v in _lvl.items() if k < max(_lvl)}  # finished seasons (the current one is partial)
 check("season level: every finished season's mean projected total is within 0.3 goals of its mean actual goals",
       all(abs(v) <= 0.3 for v in _done.values()), ", ".join(f"{k}-{str(k + 1)[2:]} {v:+.3f}" for k, v in _done.items()))
+import judge
+_same = judge.noise(_full, _full, _g, n=50)
+_worse = judge.noise(_full, _full.assign(lam_h=_full.lam_h * 1.15, lam_a=_full.lam_a * 1.15), _g, n=50)
+check("error bars: a model against itself differs by exactly 0 everywhere ('~'); projections 15% too high are worse "
+      "beyond noise on team-goal deviance ('x')",
+      all(v == (0.0, 0.0, 0.0) for v in _same.values()) and _worse["dev 21-23"][1] > 0 and _worse["dev 23-26"][1] > 0
+      and "x" in judge.row("t", judge.scorecard(_full, _g), 4, ci=_worse).split()[1],
+      f"{_worse['dev 21-23']} {_worse['dev 23-26']}")
 _bad = [x for x in history.bad_lines() if x[0] >= 20200801 and not any(pd.isna(v) for v in x[4:])]  # 2020-21 on, real prices
 _fl = history.flagged(_full)
 _fl = set(zip(_fl[_fl.both].gameDate, _fl[_fl.both].away, _fl[_fl.both].home))
