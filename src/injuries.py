@@ -218,11 +218,15 @@ def team_gp(teams, season):
 
 def merge_lineups(injured, lineup_outs):
     """Add players missing from the projected lineup (lineups.outs) to ESPN's list, without duplicates.
-    Game-time decisions become day-to-day. Returns the merged list."""
+    Game-time decisions become day-to-day. While DailyFaceoff still shows last game's lineup ('Last Game'), its scratches
+    are skipped: only IR players count. Returns the merged list."""
     merged = [dict(r) for r in injured]
     have = {(r["team"], m.norm_name(r["name"])): r for r in merged}
     for team, lu in lineup_outs.items():
+        last_game = str(lu.get("source", "")).lower().startswith("last game")  # last game's lineup, not tonight's yet
         for pid, name, reason in lu["missing"]:
+            if last_game and not reason.startswith("IR"):
+                continue  # a scratch from LAST game says nothing about tonight (IR still holds)
             r = have.get((team, m.norm_name(name)))
             if r is not None:
                 if r["status"] == "Day-To-Day":  # day-to-day on ESPN but not in tonight's lineup: he's out
@@ -239,3 +243,29 @@ def merge_lineups(injured, lineup_outs):
 def team_games_this_season(games, season):
     g = games[games.season == season]
     return pd.concat([g.home, g.away]).value_counts().to_dict()
+
+
+LAST_GOOD = "injuries_last.json"
+LAST_GOOD_HOURS = 6
+
+
+def fetch_or_last(fetch_fn, now=None):
+    """(rows, note): ESPN's injury list, saved as the last good one; if ESPN fails, the last good list when it's under
+    LAST_GOOD_HOURS old (else []). Without it every 'out' player would count as playing and every total would rise,
+    which could flag a game only because a source failed."""
+    import os
+    import paths
+    p, now = paths.data(LAST_GOOD), now or pd.Timestamp.now(tz="UTC")
+    try:
+        rows = fetch_fn()
+        if not rows:
+            raise ValueError("returned no data")
+        with open(p, "w", encoding="utf-8") as f:
+            json.dump({"at": now.isoformat(), "rows": rows}, f)
+        return rows, None
+    except Exception as e:
+        last = json.load(open(p, encoding="utf-8")) if os.path.exists(p) else None
+        age = (now - pd.Timestamp(last["at"])).total_seconds() / 3600 if last else None
+        if last and age <= LAST_GOOD_HOURS:
+            return last["rows"], f"ESPN injuries failed ({type(e).__name__}): using the list from {age:.1f} h ago"
+        raise

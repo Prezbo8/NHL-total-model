@@ -587,6 +587,40 @@ def daily_stats(day=None):
     return failed
 
 
+TRUST_CONFIRMED_HOUR = 10  # before 10 AM ET a back-to-back team's "confirmed" goalie is usually last night's starter
+
+
+def rest_b2b_starters(calls, tired, yday, starts):
+    """Early runs only: for a team on a back-to-back whose sources name the goalie who started for it YESTERDAY, assume
+    the backup instead (Projected). Just after midnight every source still lists last night's confirmed starter:
+    Oct-Nov 2026, 41 of 49 back-to-back teams logged 'Confirmed' at 12:0x AM started someone else.
+    calls: {team: (goalie, label, summary, nhl_id)} (confirm.combine); yesterday's starters from the paper log
+    (*_goalie_actual, NHL box scores); the backup = the team's most frequent other starter in its last 20 starts."""
+    import confirm
+    import paper
+    d = paper.read_log()
+    last = {}
+    for r in d[d.date == yday].itertuples():
+        for side, t in (("away", r.away), ("home", r.home)):
+            g = getattr(r, f"{side}_goalie_actual")
+            if isinstance(g, str) and g.strip():
+                last[t] = g
+    out = dict(calls)
+    for t in tired:
+        name, _, summary, _ = calls.get(t, (None, None, "", None))
+        if not name or t not in last or not confirm.same(name, last[t]):
+            continue
+        r = starts[(starts.team == t) & (starts.started == 1)].sort_values("gameId").tail(20)
+        r = r[[not confirm.same(n, last[t]) for n in r.name]]
+        why = f"back-to-back: {last[t]} started yesterday, so before {TRUST_CONFIRMED_HOUR} AM the backup is assumed ({summary})"
+        if len(r):
+            pid = r.playerId.mode()[0]
+            out[t] = (r[r.playerId == pid].name.iloc[0], "Projected", why, int(pid))
+        else:
+            out[t] = (name, "Projected", why, calls[t][3])
+    return out
+
+
 def today(day=None, preview=False):
     """Daily projections from the 5v5 / power-play split model (2020-21 onward data only), with the
     overs flag: OVER only, line 6 or 6.5, both teams high-scoring.
@@ -675,8 +709,20 @@ def today(day=None, preview=False):
     dfo_by_team = {t["abbrev"]: dfo.get(norm_name(f'{t["placeName"]["default"]} {t["commonName"]["default"]}'), (None, None))
                    for g in todays for t in (g["homeTeam"], g["awayTeam"])}
     goalie_calls = {t: confirm.combine(r) for t, r in confirm.gather(dfo_by_team, rw_goalies, gp_goalies).items()}
+    if not preview and day == date.today().isoformat() and pd.Timestamp.now(tz="America/New_York").hour < TRUST_CONFIRMED_HOUR:
+        goalie_calls = rest_b2b_starters(goalie_calls, tired, yday, pd.read_csv(goalies.STARTS))
     import injuries
-    injured = health.attempt("ESPN injuries", injuries.fetch, [], must=True)
+    espn_note = []
+
+    def espn():
+        rows, note = injuries.fetch_or_last(injuries.fetch)
+        if note:
+            espn_note.append(note)
+        return rows
+    injured = health.attempt("ESPN injuries", espn, [], must=True)
+    if espn_note:
+        print(f"({espn_note[-1]})")
+        health.note(f"⚠ {espn_note[-1]}")
     injured = confirm.add_rotowire_injuries(injured, rw_injuries)
     import lineups  # projected lineups (DailyFaceoff) vs official NHL rosters: healthy scratches, late changes
     playing = [t["abbrev"] for g in todays for t in (g["homeTeam"], g["awayTeam"])]

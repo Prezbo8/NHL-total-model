@@ -641,6 +641,44 @@ check("game notes: numbers get the dashboard's colors (breakdown tiers, matchup 
       and "the OTT #2 defense" in chips and "<span class='nv t-great'>+0.85</span>" in chips and "&lt;b&gt;" in chips and "(6.55)" in chips, chips)
 check("game notes: the lead is the game's most unusual fact", "streak (W4)" in max(notes.leads(nf))[2], max(notes.leads(nf))[2])
 
+print("early goalies, ESPN fallback, last game's lineup")
+import model as _m, injuries as _inj
+_yd = "2026-11-08"
+_log0 = paper.LOG
+paper.LOG = SP + "b2b_log.csv"
+pd.DataFrame([{"date": _yd, "away": "DAL", "home": "COL", "away_goalie_actual": "J. Oettinger", "home_goalie_actual": "M. Blackwood"}]
+             ).reindex(columns=paper.COLS).to_csv(paper.LOG, index=False)
+_starts = pd.DataFrame({"team": ["DAL"] * 6 + ["COL"] * 2, "playerId": [1, 1, 1, 2, 2, 1, 3, 3], "started": 1,
+                        "gameId": range(8), "name": ["Jake Oettinger"] * 3 + ["Casey DeSmith"] * 2 + ["Jake Oettinger", "Mackenzie Blackwood", "Mackenzie Blackwood"]})
+_calls = {"DAL": ("Jake Oettinger", "Confirmed", "DailyFaceoff: ✓ (confirmed)", 1),
+          "COL": ("Scott Wedgewood", "Confirmed", "", 4), "BOS": ("Jeremy Swayman", "Confirmed", "", 5)}
+_out = _m.rest_b2b_starters(_calls, {"DAL", "COL", "BOS"}, _yd, _starts)
+paper.LOG = _log0
+check("early runs: a back-to-back team 'confirmed' with YESTERDAY's starter gets its backup (Projected); a different goalie, "
+      "or a team with no game yesterday in the log, is left alone",
+      _out["DAL"][:2] == ("Casey DeSmith", "Projected") and _out["DAL"][3] == 2 and "started yesterday" in _out["DAL"][2]
+      and _out["COL"] == _calls["COL"] and _out["BOS"] == _calls["BOS"], str(_out))
+_inj.LAST_GOOD = SP + "injuries_last.json"
+_t0 = pd.Timestamp("2026-11-09 18:00", tz="UTC")
+_ok = _inj.fetch_or_last(lambda: [{"team": "DAL", "name": "X", "status": "Out"}], _t0)
+def _down():
+    raise OSError("espn down")
+_late = _inj.fetch_or_last(_down, _t0 + pd.Timedelta(hours=2))
+try:
+    _inj.fetch_or_last(_down, _t0 + pd.Timedelta(hours=7)); _stale = "no error"
+except OSError:
+    _stale = "raised"
+check("ESPN injuries: a good list is saved; if ESPN fails, the last list is used for up to 6 hours (with a note), then the "
+      "failure stands", _ok[1] is None and _late[0] == _ok[0] and "2.0 h ago" in (_late[1] or "") and _stale == "raised",
+      f"{_late} / {_stale}")
+_lu = {"DAL": {"missing": [(1, "Scratch Guy", "not in lineup"), (2, "Hurt Guy", "IR (DailyFaceoff)")], "gtd": [], "source": "Last Game"}}
+_merged = _inj.merge_lineups([], _lu)
+_lu["DAL"]["source"] = "Projected Lineup"
+_merged2 = _inj.merge_lineups([], _lu)
+check("lineups: while DailyFaceoff still shows LAST game's lineup only IR players count as out (scratches skipped)",
+      [r["name"] for r in _merged] == ["Hurt Guy"] and [r["name"] for r in _merged2] == ["Scratch Guy", "Hurt Guy"],
+      f"{[r['name'] for r in _merged]} / {[r['name'] for r in _merged2]}")
+
 print("team rankings page (Overview, Offense, Defense, Form)")
 rk_html = dashboard.rankings(real)
 misaligned = []
