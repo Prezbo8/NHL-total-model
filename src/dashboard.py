@@ -89,6 +89,7 @@ TIPS = {
 TIERS = {"ev": (1.83, 1.94, 2.05, 2.19), "pp": (0.46, 0.53, 0.59, 0.65), "gadj": (-0.052, -0.030, -0.014, 0.004),
          "spd": (-0.019, -0.006, 0.005, 0.018), "inj": (-0.02, -0.005, 0.005, 0.015)}
 TIER_NAMES = ("trash", "bad", "mid", "good", "great")
+CALLS = ("SLAM", "1U", "PASS", "AVOID")
 
 
 def _tier_lines(stat, pct):
@@ -121,6 +122,9 @@ def call(r, flagged):
     not flagged 47% / 49% (with PP/PK K = 25, Oct 16 2026)."""
     if not flagged:
         return "AVOID"
+    saved = getattr(r, "call", None)  # paper-log rows: the call as made at the time (paper.py "call" / "call_now")
+    if isinstance(saved, str) and saved in CALLS:
+        return saved
     both = lambda stat, ts: all(tier(stat, getattr(r, f"{s}_{stat}", float("nan"))) in ts for s in ("away", "home"))
     if both("gadj", ("bad", "trash")):
         return "AVOID"
@@ -145,7 +149,7 @@ def current(g):
         g[f"{s_}_goalie"] = g[f"{s_}_goalie"].astype(object)
         g.loc[has, f"{s_}_goalie"] = g.loc[has, f"{s_}_goalie_now"]
     g["flag"] = g.flag.map(_is)
-    for c in [c for c in paper.NOW_BASE if c != "flag"]:
+    for c in [c for c in paper.NOW_BASE if c not in ("flag", "call")]:
         g[c] = pd.to_numeric(g[c], errors="coerce")
     return g
 
