@@ -955,27 +955,21 @@ def team_over_rows(x):
     return pd.DataFrame(rows, columns=["team", "n", "o", "u", "p", "over", "units", "vs"]).sort_values(["units", "over"], ascending=False)
 
 
-TEAM_TOP = 10  # rows in each block: the best 10 teams, then the worst 10 (never the same team twice)
+def team_tiers(v):
+    """great / good / mid / bad / trash for each team: fifths of the teams by v (highest = great; tied teams share a tier)."""
+    q = v.rank(pct=True, method="average")
+    return [TIER_NAMES[min(4, int(x * 5 - 1e-9))] for x in q]
 
 
-def top_bottom(t, cells, heads, sort_col):
-    """A sortable team table: every team is in it, but only a 'Top 10' block (t's first rows) and a 'Bottom 10' block (its last
-    rows, never repeating a top team) show. Clicking a header (not Team) re-sorts it and shows that column's top / bottom 10
-    (SCRIPT, table.tor-t). cells(r) -> [(sort key, html, class)], one per column after Team; heads = header HTML, Team first."""
-    nb = max(0, min(TEAM_TOP, len(t) - TEAM_TOP))
-    label = lambda cls, txt: f"<tr class='tor-g {cls}'><td colspan='{len(heads)}'>{txt}</td></tr>"
-    rows = []
-    for i, r in enumerate(t.itertuples()):
-        if i == 0:
-            rows.append(label("tor-top", f"Top {min(TEAM_TOP, len(t))}"))
-        if i == len(t) - nb and nb:
-            rows.append(label("tor-bot", f"Bottom {nb}"))
-        hide = " hidden" if TEAM_TOP <= i < len(t) - nb else ""
-        tds = "".join(f"<td class='{c}' data-k='{k}'>{h}</td>" for k, h, c in cells(r))
-        rows.append(f"<tr class='tor-row'{hide}><td>{logo(r.team, 18)} {e(r.team)}</td>{tds}</tr>")
+def team_table(t, cells, heads, sort_col, grade_by):
+    """A sortable table of every team, each row shaded by its tier on grade_by (team_tiers). Clicking a header (not Team)
+    re-sorts it (SCRIPT, table.tor-t). cells(r) -> [(sort key, html, class)], one per column after Team; heads = header HTML, Team first."""
+    rows = "".join(f"<tr class='tor-row t-{g}'><td>{logo(r.team, 18)} {e(r.team)}</td>"
+                   + "".join(f"<td class='{c}' data-k='{k}'>{h}</td>" for k, h, c in cells(r)) + "</tr>"
+                   for r, g in zip(t.itertuples(), team_tiers(t[grade_by])))
     th = "".join(f"<th class='{c}'>{h}</th>" for h, c in heads)
     return (f"<div class='scroll'><table class='rec-t type-t tor-t' data-sort='{sort_col}'><thead><tr>{th}</tr></thead>"
-            f"<tbody>{''.join(rows)}</tbody></table></div>")
+            f"<tbody>{rows}</tbody></table></div>")
 
 
 def team_over_table(t, games):
@@ -986,7 +980,7 @@ def team_over_table(t, games):
     heads = [("Team", ""), (games, "c"), (tip("Over-under", "Final goals vs the closing total of 6.5 (no pushes at 6.5).", "tr"), "c"),
              ("Over %", "c"), (tip("Units", "Betting the over at the closing consensus over price, 1 unit each game.", "tr"), "r"),
              (tip("vs close", "Average goals scored above (+) or below (−) the closing total.", "tr"), "r")]
-    return top_bottom(t, cells, heads, 4)
+    return team_table(t, cells, heads, 4, "units")
 
 
 def team_7_rows(x):
@@ -1005,7 +999,7 @@ def team_7_table(t):
                        (f"{r.goals:.4f}", f"{r.goals:.2f}", "r")]
     heads = [("Team", ""), ("Games", "c"), (tip("Over-under", "7+ goals (over 6.5) vs 6 or fewer, whatever the game’s line was.", "tr"), "c"),
              ("Over %", "c"), (tip("Avg goals", "Average total goals in the team’s games.", "tr"), "r")]
-    return top_bottom(t, cells, heads, 3)
+    return team_table(t, cells, heads, 3, "over")
 
 
 def team_records(d):
@@ -1020,12 +1014,15 @@ def team_records(d):
         <div><h3>Games over 6.5 · any line</h3>{team_7_table(team_7_rows(g))}</div>
         <div><h3>🔨 SLAM + 1U picks by team · 6.5</h3>{picks}</div>
       </div>
+      <div class='tier-key'>Row color:{''.join(f"<span class='t-{t}'>{t}</span>" for t in reversed(TIER_NAMES))}</div>
       <ul class='notes'><li><b>Games over 6.5:</b> every finished game ({len(g)} so far, {g.date.min()} to {g.date.max()}), over = 7+ goals,
-      whatever the game's line was. Best 10 teams by over %, then the worst 10. A game counts for both teams.</li>
-      <li><b>Sort:</b> click a column header to sort by it (highest first; ties go to the higher Avg goals, or vs close in the SLAM + 1U table); click again to flip it. Each table always shows that column's top 10 and bottom 10.</li>
+      whatever the game's line was. A game counts for both teams.</li>
+      <li><b>Sort:</b> click a column header to sort by it (highest first; ties go to the higher Avg goals, or vs close in the SLAM + 1U table); click again to flip it.</li>
+      <li><b>Row colors</b> grade each team against the others, in fifths: Over % in the left table, Units in the right (great = top fifth, trash = bottom fifth; tied teams share a color).</li>
       <li><b>SLAM + 1U</b> are the flagged picks in the paper record below that closed at 6.5, graded at the closing price
-      (1 unit each), by team: best 10 by units, then the worst.</li>
+      (1 unit each), by team.</li>
       <li>About 15 games a team is a small sample: early-season team records are mostly noise.</li></ul>"""
+
 
 def accuracy(d):
     """How the projections did: summary tiles, then by projected total and by call (last pre-game projection)."""
@@ -2000,12 +1997,11 @@ def backtest():
 
 
 SCRIPT = """<script>
-(function(){  // Team over records: click a header (not Team) to sort, highest first; click again to flip. Shows the top 10 + bottom 10
+(function(){  // Team over records: click a header (not Team) to sort, highest first; click again to flip
   document.querySelectorAll('table.tor-t').forEach(function(t){
-    var ths = t.tHead.rows[0].cells, body = t.tBodies[0], TOP = 10;
-    var lt = body.querySelector('tr.tor-top'), lb = body.querySelector('tr.tor-bot');
+    var ths = t.tHead.rows[0].cells, body = t.tBodies[0];
     function sort(i, rev){
-      var rows = Array.prototype.slice.call(body.querySelectorAll('tr.tor-row')), n = rows.length, nb = Math.max(0, Math.min(TOP, n - TOP));
+      var rows = Array.prototype.slice.call(body.querySelectorAll('tr.tor-row'));
       var last = ths.length - 1;  // ties: broken by the last column (Avg goals; vs close in the SLAM + 1U table), then the order on load
       rows.forEach(function(r, k){ if (r.dataset.o === undefined) r.dataset.o = k; });
       rows.sort(function(a, b){
@@ -2013,11 +2009,7 @@ SCRIPT = """<script>
         var c = (k(b, i) - k(a, i)) || (k(b, last) - k(a, last));
         return (rev ? -c : c) || (a.dataset.o - b.dataset.o);
       });
-      body.appendChild(lt);
-      rows.forEach(function(r, k){
-        if (k === n - nb && lb) body.appendChild(lb);
-        r.hidden = k >= TOP && k < n - nb; body.appendChild(r);
-      });
+      rows.forEach(function(r){ body.appendChild(r); });
       Array.prototype.forEach.call(ths, function(h, j){ h.classList.toggle('sorted', j === i); h.classList.toggle('rev', j === i && rev); });
       t.dataset.sort = i; t.dataset.rev = rev ? '1' : '';
     }
@@ -2146,7 +2138,7 @@ body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 -apple-system
 .mcards{display:none}
 .rk-tag{margin-left:6px;font-size:10px;font-weight:700;color:var(--muted);white-space:nowrap}.mu{margin:4px 0 10px;overflow-x:auto}.mu-box{display:inline-block;border:3px solid color-mix(in srgb,var(--muted) 60%,transparent);border-radius:10px;overflow:hidden;background:var(--card)}details.mu-why{margin:0 0 8px}details.mu-why>summary{cursor:pointer;font-weight:700;font-size:12.5px;color:var(--accent)}table.mu-t{border-collapse:separate;border-spacing:0;width:auto;font-size:12px;font-variant-numeric:tabular-nums;background:var(--card)}table.mu-t th,table.mu-t td,.gt tr.whyrow table.mu-t th,.gt tr.whyrow table.mu-t td{padding:5px 12px!important;text-align:center!important;white-space:nowrap;border:none!important;border-radius:0!important;height:auto!important;vertical-align:middle!important;line-height:1.25!important;box-shadow:inset -1px 0 0 var(--line),inset 0 -1px 0 var(--line)}table.mu-t tbody tr:last-child td{box-shadow:inset -1px 0 0 var(--line)}table.mu-t tr>*:last-child{box-shadow:inset 0 -1px 0 var(--line)}table.mu-t tbody tr:last-child td:last-child{box-shadow:none}table.mu-t th{font-size:10px;color:var(--muted);font-weight:800;text-transform:uppercase;letter-spacing:.05em;background:var(--ice)}table.mu-t tr.mu-sec th{color:var(--ink);font-size:10.5px}.gt tr.whyrow table.mu-t .mu-g,table.mu-t .mu-g{box-shadow:inset 8px 0 0 var(--muted),inset -1px 0 0 var(--line),inset 0 -1px 0 var(--line);padding-left:20px!important}.gt table.mu-t tbody tr:last-child td.mu-g,table.mu-t tbody tr:last-child td.mu-g{box-shadow:inset 8px 0 0 var(--muted),inset -1px 0 0 var(--line)}table.mu-t .mu-tm,.gt tr.whyrow table.mu-t .mu-tm{text-align:left!important;min-width:64px}table.mu-t td.mu-tm b{font-size:13.5px;vertical-align:middle}table.mu-t td.mu-tm img,table.mu-t td.mu-tm picture{vertical-align:middle;margin-right:6px}table.mu-t td.mu-v{min-width:62px;line-height:1.15}table.mu-t td.mu-v b{display:block;font-size:13.5px}.mu-rk{display:block;font-size:9.5px;font-weight:600;opacity:.75}table.mu-t td.mu-p b{font-size:14px}table.kp-t td.kp-n,.gt tr.whyrow table.kp-t td.kp-n{text-align:left!important;font-weight:600}.kp-note{margin:4px 0 8px;max-width:760px}.lu-flag .tip{display:inline-block;font-size:10.5px;font-weight:800;padding:2px 7px;border-radius:999px;background:#eab308;color:#111;border:none}.lu-line{margin:0 0 8px;padding:6px 10px;border-left:4px solid #eab308;background:color-mix(in srgb,#eab308 14%,transparent);border-radius:6px;color:var(--ink);font-size:12.5px}.kp-was{display:block;margin-top:3px;font-size:9.5px;font-weight:700;opacity:.9}td.kp-chg{box-shadow:inset 0 0 0 2px #eab308!important}.mu-phone{overflow:visible}.mu-phone .mu-box{display:block;margin:0 0 8px}.mu-phone table.mu-t{width:100%}.mu-phone table.mu-t th,.mu-phone table.mu-t td{padding:5px 6px!important}.mu-phone table.kp-t td.kp-n{white-space:normal;font-size:12px}.mu-phone table.kp-t .mu-g,.gt tr.whyrow .mu-phone table.kp-t .mu-g,.mu-phone table.kp-t tbody tr:last-child td.mu-g{box-shadow:inset -1px 0 0 var(--line),inset 0 -1px 0 var(--line);padding-left:10px!important}.mu-phone .kp-st{font-size:10px;padding:2px 6px}table.kp-t tr.kp-team td{text-align:left!important;background:var(--ice);font-size:12.5px}table.kp-t tr.kp-team img,table.kp-t tr.kp-team picture{vertical-align:middle;margin-right:6px}.kp-pos{font-size:9.5px;font-weight:700;opacity:.75}td.kp-gone{text-decoration:line-through}.kp-st{font-size:10.5px;font-weight:800;padding:2px 7px;border-radius:999px;white-space:nowrap}.kp-in{opacity:.85}.kp-out{background:#dc2626;color:#fff;box-shadow:0 0 0 1.5px #fff}.kp-q{background:#eab308;color:#111;box-shadow:0 0 0 1.5px #fff}table.kp-t tr.kp-first>*{box-shadow:inset 0 3px 0 color-mix(in srgb,var(--muted) 60%,transparent),inset -1px 0 0 var(--line),inset 0 -1px 0 var(--line)}table.kp-t tr.kp-first>.mu-g{box-shadow:inset 0 3px 0 color-mix(in srgb,var(--muted) 60%,transparent),inset 8px 0 0 var(--muted),inset 0 -1px 0 var(--line)}.rk-sm{display:block;font-size:9.5px;font-weight:600;opacity:.75;line-height:1.05}.tg-ranks{font-size:12.5px;margin:0 0 4px}
 .b2b-sq{display:inline-block;width:9px;height:9px;background:#dc2626;border-radius:2px;margin-right:5px;vertical-align:middle}
-table.rec-t tr.tor-g td{color:var(--muted);font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;padding-top:12px}.acc-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:18px;margin-top:16px}.acc-grid h3{margin:0 0 6px;font-size:15px}table.acc-t{width:100%}table.acc-t td,table.acc-t th{padding:6px 8px}
+table.tor-t tr.t-great td{background:rgba(22,163,74,.50)}table.tor-t tr.t-good td{background:rgba(22,163,74,.22)}table.tor-t tr.t-mid td{background:rgba(234,179,8,.28)}table.tor-t tr.t-bad td{background:rgba(220,38,38,.22)}table.tor-t tr.t-trash td{background:rgba(220,38,38,.50)}table.tor-t td.pos,table.tor-t td.neg{color:var(--ink)}.acc-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:18px;margin-top:16px}.acc-grid h3{margin:0 0 6px;font-size:15px}table.acc-t{width:100%}table.acc-t td,table.acc-t th{padding:6px 8px}
 .rk-switch{display:inline-flex;gap:4px;padding:4px;margin:0 0 14px;background:var(--ice);border:1px solid var(--line);border-radius:999px}
 .rk-switch button{font:inherit;font-size:14px;font-weight:800;padding:7px 22px;border:0;border-radius:999px;background:transparent;color:var(--muted);cursor:pointer}
 .fm-switch{display:flex;flex-wrap:wrap;gap:4px;margin:0 0 10px}.fm-switch button{font:inherit;font-size:12.5px;font-weight:700;padding:5px 12px;border:1px solid var(--line);border-radius:999px;background:transparent;color:var(--muted);cursor:pointer}.fm-switch button.on{background:var(--card);color:var(--ink);border-color:var(--muted)}.fm-note{max-width:820px}.fm-h{margin:14px 0 4px;font-size:13.5px}.fm-notes{max-width:820px;margin-top:4px}@media (max-width:760px){table.fm-t td.tm img,table.fm-t td.tm picture{display:none}table.fm-t th,table.fm-t td{padding:5px 3px!important;font-size:11.5px}table.fm-t th{white-space:normal;font-size:9px;letter-spacing:0}table.fm-t .fm-p,table.fm-t .fm-gp,table.fm-t .fm-sd{display:none}table.fm-t th,table.fm-t td{padding:5px 2px!important}table.fm-t td.fm-sm,table.fm-t th.fm-sm{display:table-cell;line-height:1.25}table.fm-t th .fm-long{display:none}table.fm-t th .fm-short{display:inline}}table.fm-t .fm-sm,table.fm-t .fm-short{display:none}.fm-sl{color:var(--muted);font-size:9px;margin-right:3px}.fm-d{display:block;font-size:10px;font-weight:600;opacity:.8;line-height:1.2;white-space:nowrap}.fm-rkm{display:none}@media (max-width:760px){.fm-d{font-size:8.5px}.fm-rkm{display:block;font-size:8.5px;color:var(--muted);white-space:nowrap}.fm-rkm .fm-d{display:inline}}.mv{list-style:none;margin:4px 0 4px;padding:0;font-size:12.5px;max-width:820px}.mv li{padding:4px 0;border-bottom:1px solid var(--line)}.mv li b{font-variant-numeric:tabular-nums}.mv-d{font-weight:800;margin:0 6px}.mv-up{color:#4ade80}.mv-dn{color:#f87171}.mv-why{display:block;color:var(--muted);font-size:12px;margin-top:1px}.kp-also{margin:8px 0 2px;font-size:13px;line-height:1.5}.fm-chip{display:inline-block;padding:1px 7px;border-radius:999px;font-size:11px;font-weight:700;line-height:1.5}.fm-tough{background:rgba(124,58,237,.45);color:#fff}.fm-average{background:transparent;color:var(--muted);border:1px solid var(--line)}.fm-easy{background:rgba(14,165,233,.30);color:var(--ink)}@media (max-width:760px){.fm-chip{padding:0 3px;font-size:9px;letter-spacing:-.1px}.fm-sl{margin-right:1px}}
