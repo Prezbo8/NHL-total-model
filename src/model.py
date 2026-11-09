@@ -416,6 +416,19 @@ def save_preview(day, rows):
 
 
 HIGH_Q = 0.60  # "high-scoring" = team's projected goals in the top 40% of last season's team projections
+FLAG_LINES = (6.0, 6.5)  # overs only at these lines (never 5.5)
+
+
+# THE over-flag rule, used by the live run, the backtest (research/lib/history.py) and retroactive days (backfill.py):
+# both teams' projected goals at or above last season's HIGH_Q quantile of team projections, and a 6 or 6.5 line.
+def flag_cutoff(prev):
+    """Last season's cutoff from its projections (columns lam_h, lam_a)."""
+    return float(np.quantile(np.r_[prev.lam_h, prev.lam_a], HIGH_Q))
+
+
+def both_high(lam_h, lam_a, cutoff):
+    """Both teams projected high-scoring (numbers or pandas columns)."""
+    return (lam_h >= cutoff) & (lam_a >= cutoff)
 
 
 def check_daily_stats(health):
@@ -452,7 +465,7 @@ def daily_results(games, season):
     plain = lambda v: None if v is None or (not isinstance(v, str) and pd.isna(v)) else v.item() if hasattr(v, "item") else v
     proj, project = sm.walk_split(games, known_starters=False, with_projector=True, live_season=season)
     prev = proj[proj.season == season - 1]
-    cutoff = float(np.quantile(np.r_[prev.lam_h, prev.lam_a], HIGH_Q))
+    cutoff = flag_cutoff(prev)
     rk = sm.team_rankings(project, set(games[games.season >= season - 1].home), season, games)
     main = ["gf", "gf_ev", "gf_pp", "ga", "ga_ev", "ga_pp", "games"]
     teams = [{"team": r["team"], "season": season, **{c: plain(r[c]) for c in main},
@@ -644,7 +657,7 @@ def today(day=None, preview=False):
     proj, project = sm.walk_split(games, known_starters=False, with_projector=True, live_season=season)
     cal = fit_calibration(proj[proj.season.between(2022, season - 1)])
     prev = proj[proj.season == season - 1]
-    cutoff = np.quantile(np.r_[prev.lam_h, prev.lam_a], HIGH_Q)
+    cutoff = flag_cutoff(prev)
 
     def schedule(d):
         with urllib.request.urlopen(fetch(f"https://api-web.nhle.com/v1/schedule/{d}"), timeout=30) as f:
@@ -788,7 +801,7 @@ def today(day=None, preview=False):
         ln = lines.get((h, a), {})
         cur = ln.get("now") or ln.get("open")
         high_h, high_a = lh >= cutoff, la >= cutoff
-        flag = high_h and high_a and cur is not None and cur["total"] in (6.0, 6.5)
+        flag = bool(both_high(lh, la, cutoff)) and cur is not None and cur["total"] in FLAG_LINES
         star = "  *** OVER FLAG ***" if flag else ""
         print(f"{a:>3} @ {h:<3}  proj {x:4.2f} ({a} {la:.2f}{'+' if high_a else ''}, {h} {lh:.2f}{'+' if high_h else ''})"
               f"   P(7+) {p7:5.1%}{star}")

@@ -20,7 +20,7 @@ import dashboard
 import history as h
 import split_model as sm
 
-Q = h.HIGH_Q
+Q = h.m.HIGH_Q  # the live setting (model.py)
 MIN_GAMES, FULL_GAMES = 200, 600
 
 

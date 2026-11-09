@@ -687,6 +687,25 @@ _dsrc = open(dashboard.__file__, encoding="utf-8").read()
 check("site: the stale-run warning uses 2.5 h in game hours and 12 h overnight; the backtest call rates say they're in-sample",
       "? 2.5 : 12" in _dsrc and all("not a fair test" in dashboard.CALL_HISTORY[c] for c in dashboard.CALL_HISTORY))
 
+print("no look-ahead (the backtest projects every game from earlier games only)")
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "research", "lib"))
+import history
+_g = sm.load_split()
+_cut = 20240115  # mid 2023-24; anything after 2020-21 (that season's league averages warm the model up)
+_full = sm.walk_split(_g, known_starters=False)
+_part = sm.walk_split(_g[_g.gameDate < _cut], known_starters=False)
+_a = _full[_full.gameDate < _cut].set_index("gameId")
+_b = _part.set_index("gameId").reindex(_a.index)
+_d = (_a[["lam_h", "lam_a"]] - _b[["lam_h", "lam_a"]]).abs().max(axis=1)
+_fa = history.flagged(_full).set_index("gameId").both.reindex(_a.index).fillna(False)  # 2020-21: no flags (no season before)
+_fb = history.flagged(_part).set_index("gameId").both.reindex(_a.index).fillna(False)
+_first = _d[_d > 1e-9].index[:1].tolist() or _a.index[(_fa != _fb).values][:1].tolist()
+check(f"no look-ahead: every game before {_cut} gets the same projection and flag with all later games removed "
+      f"({len(_a)} games, 2020-21 to mid 2023-24)",
+      _b.lam_h.notna().all() and _d.max() < 1e-9 and (_fa == _fb).all(),
+      f"max difference {_d.max():.2e}; first game that changed: {_first} "
+      + (str(_a.loc[_first[0], ['gameDate', 'home', 'away']].to_dict()) if _first else ""))
+
 print("team rankings page (Overview, Offense, Defense, Form)")
 rk_html = dashboard.rankings(real)
 misaligned = []

@@ -14,9 +14,8 @@ import pandas as pd
 import grade
 import odds
 import sbr
+import model as m
 import split_model as sm
-
-HIGH_Q = 0.60
 
 
 def flagged(proj):
@@ -26,8 +25,7 @@ def flagged(proj):
         prev = proj[proj.season == s - 1]
         if prev.empty:
             continue
-        cut = np.quantile(np.r_[prev.lam_h, prev.lam_a], HIGH_Q)
-        out.append(x.assign(both=(x.lam_h >= cut) & (x.lam_a >= cut)))
+        out.append(x.assign(both=m.both_high(x.lam_h, x.lam_a, m.flag_cutoff(prev))))  # the live rule (model.py)
     return pd.concat(out)
 
 
@@ -54,7 +52,7 @@ def lines():
 
 def bet_results(d, when):
     t, o = d[f"{when}_total"], d[f"{when}_over"]
-    ok = d.both & t.isin([6.0, 6.5]) & o.notna() & (o.abs() >= 100)
+    ok = d.both & t.isin(m.FLAG_LINES) & o.notna() & (o.abs() >= 100)
     b = d[ok]
     total = b.total  # actual goals, shootout winner counted
     res = np.sign(total - b[f"{when}_total"])
