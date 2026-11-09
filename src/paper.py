@@ -346,7 +346,7 @@ def report():
         c = s.clv.dropna()
         if len(c):
             print(f"line moved toward our over by close: {(c > 0).mean():.0%} of {len(c)} (backtest: ~75%+ is good)")
-        print("\nbacktest (2021-26, 2020+ data): 53.7% wins / +2.6% ROI at the opening line, about 55% / +3.1% at the close, ~+2 pts more at the best book. Judge after ~50-75 flagged picks, not before.")
+        print("\nbacktest (2021-26, 2020+ data): about 54% wins / +2.8% ROI at the opening line, about 55% / +3.1% at the close, ~+2 pts more at the best book. Judge after ~50-75 flagged picks, not before.")
         print(s[["date", "away", "home", "bet_total", "bet_over", "best_book", "best_total", "best_over", "close_total",
                  "final_total", "result", "profit", "profit_best", "clv"]]
               .tail(15).to_string(index=False))

@@ -183,7 +183,7 @@ def season_of(day):
 
 def walk_split(games, k=m.K, w=m.W_GOALS, regress=m.REGRESS, known_starters=True, with_projector=False, roster_w=0.0,
                live_season=None, use_speed=True, record_detail=False, guess="mode", damp=1.0, pp_k=m.K_PP, pp_regress=None, w_def=0.0,
-               league_now=False):
+               league_now=False, carry_franchise=False, speed_carry_fix=False, first_both=True):
     """live_season: the season being projected. If it's newer than the data (e.g. opening day, before any
     of its games exist), last season's ratings are rolled over into this season's starting ratings.
     guess (known_starters=False): "mode" = the team's most common starter in its last 10 games;
@@ -197,6 +197,10 @@ def walk_split(games, k=m.K, w=m.W_GOALS, regress=m.REGRESS, known_starters=True
     league_now (research, research/studies/league_avg.py): divide each matchup by the mean of this season's teams'
     CURRENT ratings instead of last season's league rate (Rate.lg, the live model). Rejected Nov 10 2026: the math is
     cleaner, but accuracy is worse in both halves and SLAM+1U units fall.
+    carry_franchise / speed_carry_fix (research, research/studies/arizona_first.py; rejected Nov 10 2026): Utah starts
+    2024-25 from Arizona's ratings; Arizona's speed carries to Utah only from 2024-25 (not into Arizona's own 2022-24
+    games). first_both: the first season's starting league averages use home AND away teams (live from Nov 10 2026;
+    False = home only, the model before).
 """
     starter, by_game, gg = m.load_goalies()
     # goalie history only from seasons that are part of this run (nothing before games' first season)
@@ -212,12 +216,16 @@ def walk_split(games, k=m.K, w=m.W_GOALS, regress=m.REGRESS, known_starters=True
     lg_init = {"off5": avg("ev_xFor") / t5, "def5": avg("ev_xFor") / t5,
                "pp": avg("pp_xFor") / avg("pp_iceTime"), "pk": avg("pp_xFor") / avg("pp_iceTime"),
                "drawn": tpp, "taken": tpp}
+    if first_both:  # both teams: home rows hold the away side as ev_xAgainst and (away power play) pk_xAgainst / pk_iceTime
+        ev = (avg("ev_xFor") + avg("ev_xAgainst")) / 2 / t5
+        ppr = (avg("pp_xFor") + avg("pk_xAgainst")) / (avg("pp_iceTime") + avg("pk_iceTime"))
+        lg_init.update(off5=ev, def5=ev, pp=ppr, pk=ppr)
     for key, r in R.items():
         r.lg = lg_init[key]
     other = avg("o_goalsFor") + avg("o_goalsAgainst")
     T5 = t5  # league 5v5 seconds per game, updated as games come in
     rows, details = [], []
-    zspeed = speed.z_prev(games) if use_speed else {}
+    zspeed = speed.z_prev(games, carry_from=speed.CARRY_FROM if speed_carry_fix else None) if use_speed else {}
 
     def goalie_skill(goalie):
         """One goalie's skill, or a mix [(goalie, weight), ...] when the starter isn't known."""
@@ -268,6 +276,11 @@ def walk_split(games, k=m.K, w=m.W_GOALS, regress=m.REGRESS, known_starters=True
     for season, sg in games.groupby("season", sort=True):
         gs.new_season()
         teams_now = set(sg.home) | set(sg.away)
+        if carry_franchise:  # a relocated franchise starts from its old code's ratings (Arizona -> Utah, 2024-25)
+            for old_code, new_code in speed.CARRY.items():
+                for rate in R.values():
+                    if new_code in teams_now and new_code not in rate.prior and old_code in rate.prior:
+                        rate.prior[new_code] = rate.prior[old_code]
         if roster_w and R["off5"].prior:
             # blend last season's team 5v5 rates with this season's roster (players' past on-ice xG)
             for t, (f, a) in players.roster_ratings(season, min_season=games.season.min()).items():
