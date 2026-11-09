@@ -1047,7 +1047,13 @@ Trash: below 0.46'>Proj</span></th></tr></thead><tbody><tr><td class='mu-tm'><pi
     var lt = body.querySelector('tr.tor-top'), lb = body.querySelector('tr.tor-bot');
     function sort(i, rev){
       var rows = Array.prototype.slice.call(body.querySelectorAll('tr.tor-row')), n = rows.length, nb = Math.max(0, Math.min(TOP, n - TOP));
-      rows.sort(function(a, b){ var c = parseFloat(b.cells[i].dataset.k) - parseFloat(a.cells[i].dataset.k); return rev ? -c : c; });
+      var last = ths.length - 1;  // ties: broken by the last column (Avg goals; vs close in the SLAM + 1U table), then the order on load
+      rows.forEach(function(r, k){ if (r.dataset.o === undefined) r.dataset.o = k; });
+      rows.sort(function(a, b){
+        var k = function(r, j){ return parseFloat(r.cells[j].dataset.k); };
+        var c = (k(b, i) - k(a, i)) || (k(b, last) - k(a, last));
+        return (rev ? -c : c) || (a.dataset.o - b.dataset.o);
+      });
       body.appendChild(lt);
       rows.forEach(function(r, k){
         if (k === n - nb && lb) body.appendChild(lb);
