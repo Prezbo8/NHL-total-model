@@ -182,7 +182,8 @@ def season_of(day):
 
 
 def walk_split(games, k=m.K, w=m.W_GOALS, regress=m.REGRESS, known_starters=True, with_projector=False, roster_w=0.0,
-               live_season=None, use_speed=True, record_detail=False, guess="mode", damp=1.0, pp_k=m.K_PP, pp_regress=None, w_def=0.0):
+               live_season=None, use_speed=True, record_detail=False, guess="mode", damp=1.0, pp_k=m.K_PP, pp_regress=None, w_def=0.0,
+               fixed_lg=False):
     """live_season: the season being projected. If it's newer than the data (e.g. opening day, before any
     of its games exist), last season's ratings are rolled over into this season's starting ratings.
     guess (known_starters=False): "mode" = the team's most common starter in its last 10 games;
@@ -192,7 +193,10 @@ def walk_split(games, k=m.K, w=m.W_GOALS, regress=m.REGRESS, known_starters=True
     pp_k: K for the power-play and penalty-kill ratings (live m.K_PP; None = same as 5v5). pp_regress (research,
     research/studies/pp_shrink.py): REGRESS for them only; None = same as 5v5 (the live model).
     w_def (research, research/studies/goals_xg_mix.py): share of actual goals in the 5v5 defense and penalty-kill
-    ratings; 0 = the live model (xG only, the goalie rating handles goals vs xG)."""
+    ratings; 0 = the live model (xG only, the goalie rating handles goals vs xG).
+    League average (the divisor in each matchup): the mean of this season's teams' CURRENT ratings, so it moves through
+    the season exactly as the team ratings do (Nov 2026 audit). fixed_lg=True (research, research/studies/league_avg.py)
+    = the model before Nov 10 2026: last season's league rate all season (projections drift when league scoring moves)."""
     starter, by_game, gg = m.load_goalies()
     # goalie history only from seasons that are part of this run (nothing before games' first season)
     gs = m.GoalieSkill(gg.iloc[0:0])
@@ -220,21 +224,32 @@ def walk_split(games, k=m.K, w=m.W_GOALS, regress=m.REGRESS, known_starters=True
             return sum(w_ * gs.skill(p) for p, w_ in goalie)
         return gs.skill(goalie)
 
+    teams_now = set()  # this season's teams (Arizona -> Utah in 2024); empty before a season's first game
+
+    def lg_now(key):
+        """League average for a rating right now: the mean of this season's teams' current ratings (their priors average
+        last season's league rate, then this season's games move them), or last season's rate when fixed_lg."""
+        if fixed_lg:
+            return R[key].lg
+        ts = teams_now or set(R[key].prior)
+        return sum(R[key].get(t) for t in ts) / len(ts) if ts else R[key].lg
+
     def project(home, away, home_goalie, away_goalie, h_b2b=False, a_b2b=False, detail=False, season=None):
         """Projected (home goals, away goals) from the ratings as they stand right now.
         detail=True also returns each side's parts: 5v5, power play, other situations,
         and the opposing goalie / back-to-back adjustments (as fractions, e.g. -0.05)."""
-        g = {key: {t: R[key].get(t) for t in (home, away)} for key in R}
+        L = {key: lg_now(key) for key in R}
+        g = {key: {t: L[key] if t == "AVG" else R[key].get(t) for t in (home, away)} for key in R}  # 'AVG' = a league-average team
         def parts(att, dfn):
             if damp != 1.0:
-                rel = lambda key, t: (g[key][t] / R[key].lg) ** damp
-                ev = R["off5"].lg * rel("off5", att) * rel("def5", dfn) * T5
-                pp_time = R["taken"].lg * rel("drawn", att) * rel("taken", dfn)
-                pp = R["pp"].lg * rel("pp", att) * rel("pk", dfn) * pp_time
+                rel = lambda key, t: (g[key][t] / L[key]) ** damp
+                ev = L["off5"] * rel("off5", att) * rel("def5", dfn) * T5
+                pp_time = L["taken"] * rel("drawn", att) * rel("taken", dfn)
+                pp = L["pp"] * rel("pp", att) * rel("pk", dfn) * pp_time
                 return ev, pp, other / 2
-            ev = g["off5"][att] * g["def5"][dfn] / R["def5"].lg * T5
-            pp_time = g["drawn"][att] * g["taken"][dfn] / R["taken"].lg
-            pp = g["pp"][att] * g["pk"][dfn] / R["pk"].lg * pp_time
+            ev = g["off5"][att] * g["def5"][dfn] / L["def5"] * T5
+            pp_time = g["drawn"][att] * g["taken"][dfn] / L["taken"]
+            pp = g["pp"][att] * g["pk"][dfn] / L["pk"] * pp_time
             return ev, pp, other / 2
         fh, fa = m.b2b_factors(h_b2b, a_b2b)
         s_ = season if season is not None else last
@@ -251,6 +266,7 @@ def walk_split(games, k=m.K, w=m.W_GOALS, regress=m.REGRESS, known_starters=True
     last = max(games.season.max(), live_season or 0)
     for season, sg in games.groupby("season", sort=True):
         gs.new_season()
+        teams_now = set(sg.home) | set(sg.away)
         if roster_w and R["off5"].prior:
             # blend last season's team 5v5 rates with this season's roster (players' past on-ice xG)
             for t, (f, a) in players.roster_ratings(season, min_season=games.season.min()).items():
