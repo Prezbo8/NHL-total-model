@@ -126,14 +126,6 @@ jobs:
           python src/model.py preview || { echo "preview failed (the tab keeps the last one)"
             echo "✗ Tomorrow preview failed (the dashboard tab keeps the last one)" >> "$RUN_SUMMARY"; }
 
-      - name: Write the game notes (Google Gemini, free tier; only the 12:17, 3:17, 6:17 and 8:17 PM runs write new ones)
-        if: ${{ !cancelled() }}
-        env:
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}   # empty = no notes, the template as before
-        run: |
-          python -u src/notes.py || { echo "game notes failed (the dashboard keeps the template)"
-            echo "✗ Game notes failed (the dashboard keeps the template)" >> "$RUN_SUMMARY"; }
-
       - name: Report
         id: paper-report
         if: ${{ !cancelled() }}
