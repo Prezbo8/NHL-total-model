@@ -955,45 +955,65 @@ def team_over_rows(x):
     return pd.DataFrame(rows, columns=["team", "n", "o", "u", "p", "over", "units", "vs"]).sort_values(["units", "over"], ascending=False)
 
 
-TEAM_TOP = 10  # rows in each block: the best 10 teams by units, then the worst 10 (never the same team twice)
+TEAM_TOP = 10  # rows in each block: the best 10 teams, then the worst 10 (never the same team twice)
+
+
+def top_bottom(t, row, ncol):
+    """Table body: a 'Top 10' block (t's first rows) and a 'Bottom 10' block (its last rows, never repeating a top team)."""
+    top, bottom = t.head(TEAM_TOP), t.iloc[TEAM_TOP:].tail(TEAM_TOP)
+    block = lambda label, x: (f"<tr class='tor-g'><td colspan='{ncol}'>{label}</td></tr>" + "".join(map(row, x.itertuples()))) if len(x) else ""
+    return block(f"Top {len(top)}", top) + block(f"Bottom {len(bottom)}", bottom)
 
 
 def team_over_table(t, games):
-    top, rest = t.head(TEAM_TOP), t.iloc[TEAM_TOP:]
-    bottom = rest.tail(TEAM_TOP)
-    block = lambda label, x: (f"<tr class='tor-g'><td colspan='6'>{label}</td></tr>" + row(x)) if len(x) else ""
-    row = lambda x: "".join(f"<tr><td>{logo(r.team, 18)} {e(r.team)}</td><td class='c'>{r.n}</td><td class='c'>{r.o}-{r.u}-{r.p}</td>"
-                   f"<td class='c'>{f'{r.over:.0%}' if r.over == r.over else '–'}</td>"
-                   f"<td class='r {'pos' if r.units > 0 else 'neg' if r.units < 0 else ''}'>{r.units:+.2f}u</td>"
-                   f"<td class='r'>{r.vs:+.2f}</td></tr>" for r in x.itertuples())
-    body = block(f"Top {len(top)}", top) + block(f"Bottom {len(bottom)}", bottom)
+    row = lambda r: (f"<tr><td>{logo(r.team, 18)} {e(r.team)}</td><td class='c'>{r.n}</td><td class='c'>{r.o}-{r.u}</td>"
+                     f"<td class='c'>{f'{r.over:.0%}' if r.over == r.over else '–'}</td>"
+                     f"<td class='r {'pos' if r.units > 0 else 'neg' if r.units < 0 else ''}'>{r.units:+.2f}u</td>"
+                     f"<td class='r'>{r.vs:+.2f}</td></tr>")
     return (f"<div class='scroll'><table class='rec-t type-t'><thead><tr><th>Team</th><th class='c'>{games}</th>"
-            f"<th class='c'>{tip('O-U-P', 'Over-under-push: final goals vs the closing total.', 'tr')}</th><th class='c'>Over %</th>"
+            f"<th class='c'>{tip('Over-under', 'Final goals vs the closing total of 6.5 (no pushes at 6.5).', 'tr')}</th><th class='c'>Over %</th>"
             f"<th class='r'>{tip('Units', 'Betting the over at the closing consensus over price, 1 unit each game.', 'tr')}</th>"
             f"<th class='r'>{tip('vs close', 'Average goals scored above (+) or below (−) the closing total.', 'tr')}</th></tr></thead>"
-            f"<tbody>{body}</tbody></table></div>")
+            f"<tbody>{top_bottom(t, row, 6)}</tbody></table></div>")
+
+
+def team_7_rows(x):
+    """One row per team over every finished game, whatever its line: games, 7+ goals (over 6.5) vs 6 or fewer, 7+ %,
+    average total goals. Highest 7+ % first (then more goals). A game counts for both of its teams."""
+    rows = []
+    for t in sorted(set(x.away) | set(x.home)):
+        y = x[(x.away == t) | (x.home == t)]
+        o = int((y.final_total >= 7).sum())
+        rows.append((t, len(y), o, len(y) - o, o / len(y), y.final_total.mean()))
+    return pd.DataFrame(rows, columns=["team", "n", "o", "u", "over", "goals"]).sort_values(["over", "goals"], ascending=False)
+
+
+def team_7_table(t):
+    row = lambda r: (f"<tr><td>{logo(r.team, 18)} {e(r.team)}</td><td class='c'>{r.n}</td><td class='c'>{r.o}-{r.u}</td>"
+                     f"<td class='c'>{r.over:.0%}</td><td class='r'>{r.goals:.2f}</td></tr>")
+    return (f"<div class='scroll'><table class='rec-t type-t'><thead><tr><th>Team</th><th class='c'>Games</th>"
+            f"<th class='c'>{tip('Over-under', '7+ goals (over 6.5) vs 6 or fewer, whatever the game’s line was.', 'tr')}</th>"
+            f"<th class='c'>Over %</th><th class='r'>{tip('Avg goals', 'Average total goals in the team’s games.', 'tr')}</th></tr></thead>"
+            f"<tbody>{top_bottom(t, row, 5)}</tbody></table></div>")
 
 
 def team_records(d):
-    """Team over records at the closing line (every game that closed at 6.5) and SLAM + 1U records by team (6.5 closes only)."""
-    g = d[d.final_total.notna() & d.close_total.notna() & d.close_over.notna() & (d.close_total == 6.5)].copy()
+    """Games over 6.5 by team (7+ goals, every finished game whatever its line) and SLAM + 1U records by team (6.5 closes)."""
+    g = d[d.final_total.notna()]
     if g.empty:
         return "<p class='muted'>No finished games yet.</p>"
-    g["res"] = np.where(g.final_total > g.close_total, "W", np.where(g.final_total < g.close_total, "L", "P"))
-    g["units"] = np.where(g.res == "W", grade.payout(g.close_over), np.where(g.res == "L", -1.0, 0.0))
     s = closing_bets(d)
     s = s[[call(r, True) in ("SLAM", "1U") and r.close_total == 6.5 for r in s.itertuples()]]
     picks = (team_over_table(team_over_rows(s), "Picks") if len(s) else "<p class='muted'>No SLAM or 1U picks have settled yet.</p>")
     return f"""<div class='acc-grid'>
-        <div><h3>Over record · 6.5 closing lines</h3>{team_over_table(team_over_rows(g), "Games")}</div>
+        <div><h3>Games over 6.5 · any line</h3>{team_7_table(team_7_rows(g))}</div>
         <div><h3>🔨 SLAM + 1U picks by team · 6.5</h3>{picks}</div>
       </div>
-      <ul class='notes'><li><b>Closing line.</b> Every game that closed at 6.5 ({len(g)} so far, {g.date.min()} to {g.date.max()}),
-      graded as an over at the closing consensus total and price, 1 unit each. A game counts for both teams.
-      Each table shows the best 10 teams by units, then the worst 10.</li>
-      <li><b>SLAM + 1U</b> are the flagged picks in the paper record below that closed at 6.5, by team (a pick counts for both teams).</li>
+      <ul class='notes'><li><b>Games over 6.5:</b> every finished game ({len(g)} so far, {g.date.min()} to {g.date.max()}), over = 7+ goals,
+      whatever the game's line was. Best 10 teams by over %, then the worst 10. A game counts for both teams.</li>
+      <li><b>SLAM + 1U</b> are the flagged picks in the paper record below that closed at 6.5, graded at the closing price
+      (1 unit each), by team: best 10 by units, then the worst.</li>
       <li>About 15 games a team is a small sample: early-season team records are mostly noise.</li></ul>"""
-
 
 def accuracy(d):
     """How the projections did: summary tiles, then by projected total and by call (last pre-game projection)."""

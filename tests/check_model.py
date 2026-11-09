@@ -466,6 +466,11 @@ shown_t = [t for t in fake_t.team if f"> {t}</td>" in tb]
 check("Team over records: Top 10 + Bottom 10 only, best first, no team twice (18 teams: top 10 + the other 8)",
       shown_t == list(fake_t.team[:10]) + list(fake_t.team[-10:]) and "Top 10" in tb and "Bottom 10" in tb
       and "Bottom 8" in dashboard.team_over_table(fake_t.head(18), "Games"), str(shown_t))
+t7 = dashboard.team_7_rows(pd.DataFrame({"away": ["A", "A", "B"], "home": ["B", "C", "C"], "final_total": [7, 5, 9],
+                                          "close_total": [5.5, 6.5, 6.0]}))
+check("Team over records: games over 6.5 = 7+ goals whatever the line (A 1-1, B 2-0, C 1-1; best % first)",
+      t7.set_index("team")[["o", "u"]].to_dict("index") == {"A": {"o": 1, "u": 1}, "B": {"o": 2, "u": 0}, "C": {"o": 1, "u": 1}}
+      and t7.team.iloc[0] == "B", t7.to_string())
 shutil.copy(paths.data("paper_trades.csv"), SP + "real_log.csv")
 paper.LOG, os.environ["RUN_SUMMARY"] = SP + "real_log.csv", SP + "report_summary.txt"
 with contextlib.redirect_stdout(io.StringIO()):
