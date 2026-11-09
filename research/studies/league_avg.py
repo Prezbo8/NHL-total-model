@@ -1,5 +1,5 @@
-"""League average in the matchup (Nov 2026 audit, finding 1): last season's rate all season (the model before Nov 10
-2026, walk_split fixed_lg=True) vs the mean of this season's teams' current ratings (live from Nov 10 2026).
+"""League average in the matchup (Nov 2026 audit, finding 1): last season's rate all season (the live model) vs the mean
+of this season's teams' current ratings (walk_split league_now=True). REJECTED Nov 10 2026 (research/README.md).
 
 With last season's rate, every projection drifts when league scoring moves (5v5 xG per 60, both teams: 2020-21 4.54,
 2021-22 5.00, 2022-23 5.29, 2023-24 5.04, 2024-26 ~4.96). Prints, old vs new: the shared scorecard (research/lib/
@@ -37,14 +37,14 @@ def backtest(p):
 
 def main():
     games = sm.load_split()
-    runs = {fixed: sm.walk_split(games, known_starters=False, record_detail=True, fixed_lg=fixed) for fixed in (True, False)}
-    names = {True: "old: last season's rate", False: "new: current team ratings"}
+    runs = {fixed: sm.walk_split(games, known_starters=False, record_detail=True, league_now=not fixed) for fixed in (True, False)}
+    names = {True: "live: last season's rate", False: "test: current team ratings"}
     w = 28
     print(header(w))
     base = scorecard(runs[True], games)
     print(row(names[True], base, w))
     print(row(names[False], scorecard(runs[False], games), w, base))
-    print("Accuracy columns: lower = better ('*' = better than old).\n")
+    print("Accuracy columns: lower = better ('*' = better than live).\n")
 
     print("Mean projected total minus mean actual goals, by season (and by quarter of the season):")
     print(f"{'season':8s} {'games':>6s} {'actual':>7s} | {'old':>6s} {'q1':>6s} {'q2':>6s} {'q3':>6s} {'q4':>6s} | "

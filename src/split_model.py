@@ -183,7 +183,7 @@ def season_of(day):
 
 def walk_split(games, k=m.K, w=m.W_GOALS, regress=m.REGRESS, known_starters=True, with_projector=False, roster_w=0.0,
                live_season=None, use_speed=True, record_detail=False, guess="mode", damp=1.0, pp_k=m.K_PP, pp_regress=None, w_def=0.0,
-               fixed_lg=False):
+               league_now=False):
     """live_season: the season being projected. If it's newer than the data (e.g. opening day, before any
     of its games exist), last season's ratings are rolled over into this season's starting ratings.
     guess (known_starters=False): "mode" = the team's most common starter in its last 10 games;
@@ -194,9 +194,10 @@ def walk_split(games, k=m.K, w=m.W_GOALS, regress=m.REGRESS, known_starters=True
     research/studies/pp_shrink.py): REGRESS for them only; None = same as 5v5 (the live model).
     w_def (research, research/studies/goals_xg_mix.py): share of actual goals in the 5v5 defense and penalty-kill
     ratings; 0 = the live model (xG only, the goalie rating handles goals vs xG).
-    League average (the divisor in each matchup): the mean of this season's teams' CURRENT ratings, so it moves through
-    the season exactly as the team ratings do (Nov 2026 audit). fixed_lg=True (research, research/studies/league_avg.py)
-    = the model before Nov 10 2026: last season's league rate all season (projections drift when league scoring moves)."""
+    league_now (research, research/studies/league_avg.py): divide each matchup by the mean of this season's teams'
+    CURRENT ratings instead of last season's league rate (Rate.lg, the live model). Rejected Nov 10 2026: the math is
+    cleaner, but accuracy is worse in both halves and SLAM+1U units fall.
+"""
     starter, by_game, gg = m.load_goalies()
     # goalie history only from seasons that are part of this run (nothing before games' first season)
     gs = m.GoalieSkill(gg.iloc[0:0])
@@ -227,9 +228,9 @@ def walk_split(games, k=m.K, w=m.W_GOALS, regress=m.REGRESS, known_starters=True
     teams_now = set()  # this season's teams (Arizona -> Utah in 2024); empty before a season's first game
 
     def lg_now(key):
-        """League average for a rating right now: the mean of this season's teams' current ratings (their priors average
-        last season's league rate, then this season's games move them), or last season's rate when fixed_lg."""
-        if fixed_lg:
+        """League average for a rating: last season's rate (the live model), or with league_now the mean of this season's
+        teams' current ratings (their priors average last season's rate, then this season's games move them)."""
+        if not league_now:
             return R[key].lg
         ts = teams_now or set(R[key].prior)
         return sum(R[key].get(t) for t in ts) / len(ts) if ts else R[key].lg
