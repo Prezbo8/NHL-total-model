@@ -25,6 +25,7 @@ BACKTEST = [  # season, open bets, open ROI, close bets, close ROI
     ("2024-25", 45, 17.7, 47, 20.8), ("2025-26", 106, 10.2, 120, 7.4),
 ]
 BACKTEST_TOTAL = (585, 2.8, 845, 3.1)  # 2021-26: open bets, open ROI, close bets, close ROI
+BACKTEST_HEADLINE = (155, 12.0, 411, 5.8)  # 2022-26, the headline: 2021-22's cutoff comes from the cold-start season (no history)
 
 SCALE = 4.5  # projected-goal bars run 0 -> 4.5 goals
 
@@ -1987,15 +1988,22 @@ def backtest():
       <th>{tip('ROI at open', 'Profit per unit risked betting at the opening line.', 'down')}</th>
       <th>{tip('Bets at close', 'Flagged overs if bet at the closing line (right before puck drop). Counts differ because lines move into or out of 6/6.5.', 'down')}</th>
       <th>{tip('ROI at close', 'Profit per unit risked betting at the closing line.', 'down tr')}</th></tr></thead>
-      <tbody>{rows}<tr class='total'><td>2021–26</td><td class='num'>{BACKTEST_TOTAL[0]}</td>{roi(BACKTEST_TOTAL[1])}
+      <tbody>{rows}<tr class='total'><td>{tip('2022–26', 'The headline: seasons where the model started from a full season of history. 2021-22 (half of all 2021-26 bets) was flagged against a cutoff from 2020-21, the cold-start season.', 'down')}</td>
+      <td class='num'>{BACKTEST_HEADLINE[0]}</td>{roi(BACKTEST_HEADLINE[1])}<td class='num'>{BACKTEST_HEADLINE[2]}</td>{roi(BACKTEST_HEADLINE[3])}</tr>
+      <tr class='total sub-total'><td>2021–26</td><td class='num'>{BACKTEST_TOTAL[0]}</td>{roi(BACKTEST_TOTAL[1])}
       <td class='num'>{BACKTEST_TOTAL[2]}</td>{roi(BACKTEST_TOTAL[3])}</tr></tbody></table></div>
       <ul class='notes'>
+        <li><b>2022–26 is the headline.</b> In 2021-22 (about half of all 2021-26 bets, near break-even) the model had just
+            started (2020-21 had no history), so its cutoff is the least like today's. 2022-26 is higher partly because it
+            leaves that season out; its opening-line number is thin (no 2022-23 opening lines, few 2023-24 flags).</li>
         <li><b>Open</b> = betting the first line books post; <b>close</b> = the final line before puck drop. Counts differ
             because lines move into or out of 6 / 6.5 during the day.</li>
         <li>53–55% wins; uncertainty about ±3–4% ROI, so the past edge is small and not proven. Line shopping added about
             <b>+2.2 pts</b> on the same picks. Goalie ratings are calibrated to match how goalies actually play.</li>
-        <li>Includes team skating speed (fitted on these same seasons, so its small gain is slightly optimistic). 2023-24 had
-            very few flags, so its ROI is mostly noise.</li>
+        <li><b>Fitted on these same seasons</b>, so the backtest is somewhat optimistic: the SLAM / 1U rule (chosen on 2021-26)
+            and its tier cutoffs (2024-26), team speed (2022-26), back-to-back factors (2022-24), the 'other goals' amount
+            (2021-26 average) and the late-season elimination factor (2021-26). 2023-24 had very few flags, so its ROI is
+            mostly noise.</li>
         <li>No 2022-23 opening lines in the data. With pre-2020 data the same rule was about break-even (2016–21).</li>
       </ul>"""
 
@@ -2224,7 +2232,7 @@ h2{margin:0 0 4px;font-size:21px;letter-spacing:-.01em}
 .scroll{overflow-x:auto}table{border-collapse:collapse;width:100%;font-size:14px}
 th,td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}
 th{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:700}
-.num{text-align:right;font-variant-numeric:tabular-nums}tr.total td{font-weight:800}
+.num{text-align:right;font-variant-numeric:tabular-nums}tr.total td{font-weight:800}tr.sub-total td{font-weight:500}
 .pos{color:var(--pos)}.neg{color:var(--neg)}td.matchup{display:flex;align-items:center;gap:4px}.d-short{display:none}
 table th.fm-sd,table td.fm-sd{text-align:center}
 /* rankings: group labels above the column names, a divider before each group, the Overview's stacked cells, Form's 'Right now' box */

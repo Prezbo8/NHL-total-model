@@ -66,6 +66,10 @@ Only data from the 2020-21 season onward is used.
 | At the closing line | 845 | about 55% | +3.1% |
 | Line shopping (best book) | | | about +2 pts more |
 
+Headline, 2022-26 (2021-22, about half the bets, was flagged against a cutoff from the cold-start 2020-21 season):
+411 bets at the close, +5.8%; 155 at the open, +12.0% (thin: no 2022-23 opening lines). Settings fitted on these same
+seasons (SLAM / 1U rule and tiers, speed, back-to-back, other goals, elimination) make both a little optimistic.
+
 The past edge is small (±3–4% uncertainty). The live paper-trading record decides whether it's real.
 Injury and lineup adjustments were backtested on who actually dressed (2021-26, research/studies/injury_backtest.py): they make projections more accurate and are about the right size.
 
