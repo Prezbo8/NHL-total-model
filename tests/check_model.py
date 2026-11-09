@@ -508,13 +508,12 @@ _root = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
 hung = [x for f in sorted(glob.glob(_root + "/src/*.py") + glob.glob(_root + "/.github/scripts/*.py")) for x in no_timeout(f)]
 check("every network call has a timeout (one without can hang a run until GitHub stops it at 45 min)", not hung, ", ".join(hung))
 
-print("AI game notes (src/notes.py; nothing is sent to Gemini here)")
+print("game notes (src/notes.py template)")
 import notes
 nf = {"game": "OTT @ BUF", "call": "PASS", "projected_total": "6.67", "line": "6.5", "chance_of_7_plus_goals": "53%",
       "over_flag_needs": "both teams 3.10+ projected goals and a line of 6 or 6.5",
       "how_calls_like_this_did_2021_26": "Flagged games like this went over only 47% of the time in 2021-26.",
       "why_this_call": "PASS: both teams project at least 3.10 goals (OTT 3.30, BUF 3.38), but neither is great at 5-on-5.",
-      "how_to_read": notes.READ,
       "teams": {"OTT": {"record": "9-6-1", "last10_record": "4-5-1", "streak": "L1", "projected_goals": "3.30", "vs_an_average_team": "+0.13",
                         "five_on_five": {"rating": "good", "projected_goals": "2.12", "attack": {"goals_a_game": "2.20", "rank": 11},
                                          "opponent_defense": {"goals_allowed_a_game": "2.15", "rank": 17}},
@@ -545,111 +544,46 @@ nf = {"game": "OTT @ BUF", "call": "PASS", "projected_total": "6.67", "line": "6
                                           "defense_allowed_stats": "Goals 3.05 (#18)"},
                         "form_by_window": {"season": {"rank": 13, "net": "+0.10", "games": 14}, "last_30_days": "same games as the season",
                                            "last_14_days": {"rank": 4, "net": "+0.60", "games": 7}, "last_7_days": {"rank": 2, "net": "+0.85", "games": 3}}}}}
-good = ("Buffalo has won 4 straight and sits 7-4-3, 7-2-1 over its last 10, while Ottawa is 9-6-1 and 4-5-1, and the model "
-        "keeps this one a PASS. It projects 6.67 goals against a 6.5 line with a 53% chance of 7 or more: Ottawa 3.30, Buffalo "
-        "3.38. At 5-on-5 Ottawa is good at 2.12 projected goals, its #11 attack against Buffalo's #17 defense, while Buffalo is "
-        "bad at 1.90, its #9 attack running into Ottawa's #2 defense. On the power play Ottawa is great at 0.67 and Buffalo "
-        "good at 0.61: Ottawa's #12 unit meets Buffalo's #22 penalty kill, and Buffalo's #20 unit meets Ottawa's #21. Buffalo "
-        "shoots at Samuel Ersson, a Trash goalie with a grade of 1 who has allowed 14 goals on 11.5 expected over his last 5 "
-        "games, worth +0.21 to its projection, while Ottawa faces Colten Ellis, an OK goalie at grade 35. Ottawa ranks #6 in "
-        "total offense and #3 in total defense, Buffalo #10 and #14. In the Form view Buffalo has climbed from #13 over the "
-        "season to #4 over the last 14 days and #2 over the last 7, while Ottawa has slid from #5 to #19. Neither team is "
-        "great at 5-on-5, so there is no team to carry the over, and the streak is context, not a reason to bet.")
-topic = max(notes.leads(nf))[2]
-longer = good + " " + good[:good.index(" At 5-on-5")]  # 268 words: over the 230 asked for, under the 300 accepted
-check("game notes: a note covering both teams' records, last 10, projection, 5-on-5 / power play, goalies and rankings with "
-      "only the model's numbers passes the check (also a long one, up to 300 words)",
-      notes.check(good, nf, "STOP", topic) == "" and notes.check(longer, nf, "STOP", topic) == "",
-      notes.check(good, nf, "STOP", topic) + " | " + notes.check(longer, nf, "STOP", topic))
-call_topic = "the model's call and the matchup behind it"
-bad = {"invented number": good.replace("11.5", "12.5"), "another call": good.replace("keeps this one a PASS", "keeps this one a SLAM, not a PASS"),
-       "no call": good.replace("PASS", "pass"), "cut off": good[:good.index(", and the streak")],
-       "no record": good.replace("sits 7-4-3, ", "sits "), "too long": good + " " + good,
-       "jargon": good.replace("Neither team is great", "Both clear the cutoff, yet neither team is great"),
-       "lowercase start": good[0].lower() + good[1:], "field name": good.replace("53% chance", "53% chance_of_7_plus_goals"),
-       "copied topic": "The model's call and the matchup behind it agree here. " + good}
-why_bad = {k: notes.check(t, nf, "STOP", call_topic if k == "copied topic" else topic) for k, t in bad.items()}
-why_bad["out of tokens"] = notes.check(good, nf, "MAX_TOKENS", topic)  # complete-looking text, but Gemini says it stopped early
-check("game notes: an invented number, another call, a missing call, a note cut off mid-sentence (with Gemini's reason), a "
-      "missing record, one far too long, 'cutoff', a lowercase start, a field name or a copied opening topic is rejected "
-      "(one retry, then the template stays)",
-      "12.5" in why_bad["invented number"] and "SLAM" in why_bad["another call"] and "PASS" in why_bad["no call"]
-      and "mid-sentence" in why_bad["cut off"] and "MAX_TOKENS" in why_bad["out of tokens"] and "7-4-3" in why_bad["no record"]
-      and "under 230" in why_bad["too long"] and "cutoff" in why_bad["jargon"]
-      and "capital" in why_bad["lowercase start"] and "field names" in why_bad["field name"]
-      and "the model's call and" in why_bad["copied topic"], str(why_bad))
+note = notes.write(nf)
+nums = lambda t: sorted(re.findall(r"(?<![\w.])[+\-−]?\d+(?:\.\d+)?(?:-\d+){0,2}%?", t))
+fact_text = json.dumps(nf)
+stray = [x for x in nums(note) if x not in fact_text and x not in ("5", "7", "10")]
+check("game notes: the template says the call, the line, the projected total and chance of 7+, both teams' records, last 10, "
+      "projected goals, 5-on-5 / power play with ranks and the goalie each shoots at, opens on the most unusual fact "
+      "(BUF's W4 streak) and uses only the model's numbers",
+      all(x in note for x in ("PASS", "6.5", "6.67", "53%", "9-6-1", "4-5-1", "7-4-3", "7-2-1", "3.30", "3.38", "#11 attack",
+                              "BUF's #22 penalty kill", "Samuel Ersson", "Colten Ellis", "11.5 expected"))
+      and note.startswith("Buffalo") and "4" in note.split(".")[0] and not stray and "cutoff" not in note,
+      f"stray {stray}: {note}")
 from collections import Counter
 reasons = [notes.plain(t).split(" At 5-on-5,")[0] for t in texts if "no full reasoning" not in t and "not available" not in t]
 plain_r = [notes.plain_reason(x) for x in reasons]
 left = [p for p in plain_r if re.search(r"cutoff|high-scoring|\bslam\b", p)]
 check("game notes: the model's reason reaches the AI in plain words (no 'cutoff' / 'high-scoring'), same numbers, every logged game",
-      not left and all(notes.numbers(a) == notes.numbers(b) for a, b in zip(reasons, plain_r)),
+      not left and all(nums(a) == nums(b) for a, b in zip(reasons, plain_r)),
       left[0] if left else f"{len(reasons)} games: " + ", ".join(f"{c} {n}" for c, n in sorted(Counter(x.split(':')[0] for x in reasons).items())))
-def shown(call_then=None, **x):  # a real game with a saved AI note (in memory only; nothing is written): (HTML, its call now)
-    r = next(pd.DataFrame([{**row0, **x}]).itertuples())
-    fl = dashboard._is(r.flag)
-    c = dashboard.call(r, fl)
-    dashboard._NOTES.clear()
-    dashboard._NOTES[r.date] = {"notes": {f"{r.away}@{r.home}": {"text": "A test note.", "call": call_then or c, "run": "12:17 PM", "at": "12:21 PM"}}}
-    return dashboard.game_notes(r, fl), c
-today_s = datetime.date.today().isoformat()
-ai_shown = {"today": "ai-note" in shown(date=today_s, final_total=nan)[0],
-            "past day": "ai-note" in shown(date=(datetime.date.today() - datetime.timedelta(days=1)).isoformat(), final_total=nan)[0],
-            "today, final": "ai-note" in shown(date=today_s, final_total=6.0, away_score=3.0, home_score=3.0)[0]}
-same, now_call = shown(date=today_s, final_total=nan)
-old_call = next(c for c in notes.CALLS if c != now_call)
-changed = shown(old_call, date=today_s, final_total=nan)[0]
-dashboard._NOTES.clear()
-check("game notes: the last AI note stays up for today's games until they're final, with a notice when the call has changed "
-      "since (past days and finished games: the template)",
-      ai_shown == {"today": True, "past day": False, "today, final": False} and "AI · 12:17 PM" in changed
-      and f"Written at 12:17 PM when the call was {old_call}; it's now {now_call}." in changed and "it's now" not in same,
-      f"{ai_shown} | {changed[:240]}")
-et = lambda h, m: pd.Timestamp(f"2026-11-05 {h:02d}:{m:02d}", tz="America/New_York")
-ai_runs = {f"{h}:{m:02d} {t}": notes.ai_run(et(h, m), t) for h, m, t in
-           ((12, 20, "hourly"), (15, 24, "schedule"), (18, 40, "retry"), (20, 18, "hourly"), (13, 20, "hourly"),
-            (11, 20, "hourly"), (0, 3, "hourly"), (18, 45, "pregame"), (12, 25, "stats"), (15, 30, "manual"))}
-check("game notes: only the 12:17, 3:17, 6:17 and 8:17 PM runs (or a retry of one) write new notes; pre-game, stats-started, "
-      "12:01 AM, manual and the other hourly runs keep the last ones",
-      list(ai_runs.values()) == ["12:17 PM", "3:17 PM", "6:17 PM", "8:17 PM", None, None, None, None, None, None], str(ai_runs))
 fx_crash, fx_n, unowned = "", 0, []
 for r in dashboard.current(real).itertuples():
     try:
         fx = notes.facts(r, dashboard._is(r.flag), {})
         if fx:
-            json.dumps(fx); notes.allowed(fx); notes.colors(fx); notes.signature(fx); notes.leads(fx)
+            json.dumps(fx); notes.colors(fx); notes.leads(fx); notes.write(fx)
             fx_n += 1
             unowned += [f"{r.away}@{r.home}: {x['goalie_faced']}" for t, x in fx["teams"].items()  # whose goalie, for each team
                         if f"({r.home if t == r.away else r.away}'s goalie)" not in x["goalie_faced"]]
     except Exception as ex:
         fx_crash = f"{r.away}@{r.home} {r.date}: {type(ex).__name__}: {ex}"
 check("game notes: the fact sheet (matchup ranks, Team rankings, Form windows, goalies named with the team they play for) "
-      "builds for every logged game", not fx_crash and fx_n > 0 and not unowned, fx_crash or (unowned[:1] or [f"{fx_n} games"])[0])
-def fake_ask(model, system, prompt):  # the first model times out, the second answers
-    asked.append(model)
-    if model == notes.MODELS[0]:
-        raise TimeoutError("The read operation timed out")
-    return "A note.", "STOP"
-asked, real_ask, real_sleep = [], notes.ask, notes.time.sleep
-notes.ask, notes.time.sleep = fake_ask, (lambda s: None)
-try:
-    got = notes.gemini("system", "prompt")
-    try:  # out of time for this note: no model is asked, the note gives up
-        notes.gemini("system", "prompt", deadline=notes.time.time() - 1)
-        late = "no error"
-    except TimeoutError:
-        late = "gave up"
-except Exception as ex:
-    got, late = (f"{type(ex).__name__}: {ex}",), "?"
-finally:
-    notes.ask, notes.time.sleep = real_ask, real_sleep
-q = (notes.quota('{"error": {"code": 429, "message": "Quota exceeded for metric: generate_content_free_tier_requests, limit: 20",'
-                  ' "status": "RESOURCE_EXHAUSTED", "details": [{"quotaId": "GenerateRequestsPerDayPerProjectPerModel-FreeTier"}]}}'),
-     notes.quota('{"error": {"code": 503, "message": "The model is overloaded. Please try again later.", "status": "UNAVAILABLE"}}'))
-check("game notes: a Gemini model that doesn't answer in time hands over to the next one (the game isn't skipped); past "
-      "the note's time limit no model is asked; the log says which free limit a 429 hit, or that a model is overloaded",
-      got[-1] == notes.MODELS[1] and asked == notes.MODELS[:2] and late == "gave up"
-      and q == ("(out of free requests: per-day limit 20)", "(overloaded)"), f"{got} after {asked}; late: {late}; {q}")
+      "and the note build for every logged game", not fx_crash and fx_n > 0 and not unowned, fx_crash or (unowned[:1] or [f"{fx_n} games"])[0])
+def shown(**x):  # a real logged game, moved to another date / result in memory only
+    r = next(pd.DataFrame([{**row0, **x}]).itertuples())
+    return dashboard.game_notes(r, dashboard._is(r.flag))
+today_s = datetime.date.today().isoformat()
+note_shown = {"today": "ai-note" in shown(date=today_s, final_total=nan),
+              "past day": "ai-note" in shown(date=(datetime.date.today() - datetime.timedelta(days=1)).isoformat(), final_total=nan),
+              "today, final": "ai-note" in shown(date=today_s, final_total=6.0, away_score=3.0, home_score=3.0)}
+check("game notes: shown for today's games until they're final (past days and finished games: the breakdown)",
+      note_shown == {"today": True, "past day": False, "today, final": False}, str(note_shown))
 hcols = notes.colors(nf)
 chips = notes.colorize("BUF gets +0.21 from Ersson, loses -0.14, 5-on-5 at 2.12, a 53% chance, 7-2-1 <b> (6.55), "
                        "its #11 attack, the OTT #2 defense, net +0.85", hcols)
@@ -658,10 +592,7 @@ check("game notes: numbers get the dashboard's colors (breakdown tiers, matchup 
       "<span class='nv t-great'>+0.21</span>" in chips and "<span class='nv t-trash'>-0.14</span>" in chips and "<span class='nv t-good'>2.12</span>" in chips
       and "<span class='nv t-good'>53%</span>" in chips and "<span class='nv hot'>7-2-1</span>" in chips and "<span class='nv t-good'>#11</span>" in chips
       and "the OTT #2 defense" in chips and "<span class='nv t-great'>+0.85</span>" in chips and "&lt;b&gt;" in chips and "(6.55)" in chips, chips)
-moved = json.loads(json.dumps(nf)); moved["teams"]["OTT"]["projected_goals"] = "3.31"
-check("game notes: rewritten when the facts change (call), not for a hundredth of a goal; the lead is the game's most unusual fact",
-      notes.signature(nf) == notes.signature(moved) and notes.signature(nf) != notes.signature({**nf, "call": "1U"})
-      and "streak (W4)" in max(notes.leads(nf))[2], max(notes.leads(nf))[2])
+check("game notes: the lead is the game's most unusual fact", "streak (W4)" in max(notes.leads(nf))[2], max(notes.leads(nf))[2])
 
 print("team rankings page (Overview, Offense, Defense, Form)")
 rk_html = dashboard.rankings(real)

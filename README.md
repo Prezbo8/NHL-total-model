@@ -134,20 +134,14 @@ projections** (the hourly run), each with ✓ or ⚠.
   `_skaters`, `_meta`). (Nov 3, 2026: MoneyPuck served ~30 KB/s and every run that downloaded it timed out.)
   When it brings in new data it **starts a model run right away**, so the dashboard and projections use the
   new data within minutes instead of at the next hourly run (that model run never starts a stats run back).
-- **Game notes, written by AI** (`src/notes.py`, Google Gemini's free tier, GitHub secret `GEMINI_API_KEY`): each of
-  today's games gets a paragraph (about 150-230 words) written before it starts from the model's and the dashboard's
-  numbers for both teams: record and last-10 record, the projection (each team, the total vs the line, the chance of
-  7+), 5-on-5 and power play (rating, projected goals, attack rank vs the opposing defense's), the goalie each faces
-  (tag, grade, his season and last-5 numbers), the Team rankings (total offense / defense, the nine stats) and Form over
-  the season and the last 30 / 14 / 7 days, and the model's call and reasons. Each note opens on a different angle, so
-  they don't all read alike. Today's slate only: the Tomorrow preview tab, finished games and past days show the fixed
-  template. A check rejects any note that leaves out a team's record, last-10 record or projected goals or the total,
-  uses a number not in the facts, names a different call, says "cutoff" or copies the topic it was given to open on.
-  New paragraphs come only from the 12:17, 3:17, 6:17 and 8:17 PM runs (or a retry of one), and there only for games
-  whose numbers changed since their last one; in between, the last paragraph stays up (marked with the run it's from)
-  until the game is final, with a one-line notice if the call has changed since. Numbers are colored as the dashboard
-  colors them (breakdown tiers, matchup ranks, Form numbers; last 10 records and streaks hot / cold). Without the key,
-  or when Gemini fails, the fixed template shows, as before.
+- **Game notes** (`src/notes.py`): each of today's games gets a paragraph written by a template that follows the
+  structure of the AI (Gemini) notes used Nov 5-9 2026: it opens on the game's most unusual fact (a streak, a hot or
+  cold last 10, the goalie, a Form move, the biggest factor, injuries or a line move), then the call with the projected
+  total, the line, the chance of 7+ and why, then for each team its record, last 10, total offense / defense ranks,
+  5-on-5 and power play (rating, projected goals, attack rank vs the opposing defense's) and the goalie it shoots at.
+  Built with every dashboard build from that run's numbers, so it's always current and every number is exact (no AI,
+  no waiting, no free-tier limits). Numbers are colored as the dashboard colors them. Today's slate only: the Tomorrow
+  preview tab, finished games and past days show the breakdown.
 - **Every run ends with a Summary step**: what the job is for, what it did (✓ done, ✗ failed, – nothing
   to do) and the final result. It's the last step in the log and is also shown on the run's page on the
   Actions tab (under the job diagram). Steps add their lines with `health.note()` (Python) or `echo ... >> "$RUN_SUMMARY"`;
