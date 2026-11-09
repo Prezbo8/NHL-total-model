@@ -25,7 +25,7 @@ LOG = paths.data("paper_trades.csv")
 COLS = ["date", "away", "home", "proj", "proj_away", "proj_home", "cutoff", "flag", "p7",
         "away_goalie", "home_goalie", "open_total", "open_over", "bet_total", "bet_over", "bet_under", "best_book", "best_total", "best_over", "best_under",
         "logged_at", "flagged_at",
-        "close_total", "close_over", "close_under", "away_score", "home_score", "final_total",
+        "close_total", "close_over", "close_under", "close_src", "away_score", "home_score", "final_total",
         "result", "profit", "clv", "result_best", "profit_best",
         # context for the dashboard: back-to-backs, latest starters, projection breakdown
         "away_b2b", "home_b2b", "away_goalie_now", "home_goalie_now", "updated_at",
@@ -41,7 +41,7 @@ COLS = ["date", "away", "home", "proj", "proj_away", "proj_home", "cutoff", "fla
 BREAKDOWN = [f"{s}_{c}" for s in ("away", "home") for c in ("ev", "pp", "oth", "gadj", "b2badj", "spd", "inj", "elim")]
 # latest run's numbers for games that haven't started (what the dashboard shows); the columns above
 # stay as first logged, which is the paper bet
-NOW_BASE = ["proj", "proj_away", "proj_home", "p7", "cutoff", "flag", "bet_total", "bet_over", "call"] + BREAKDOWN
+NOW_BASE = ["proj", "proj_away", "proj_home", "p7", "cutoff", "flag", "bet_total", "bet_over", "bet_under", "call"] + BREAKDOWN
 NOW = [f"{c}_now" for c in NOW_BASE]
 COLS += NOW
 
@@ -62,7 +62,7 @@ def read_log():
     for c in ("result", "result_best", "best_book", "away_goalie_now", "home_goalie_now", "updated_at", "flagged_at",
               "away_goalie", "home_goalie", "away_out", "home_out", "away_dtd", "home_dtd", "away_lineup", "home_lineup",
               "h2h_last", "trend_lean", "start_utc", "away_goalie_src", "home_goalie_src", "away_goalie_actual", "home_goalie_actual",
-              "call", "call_now"):
+              "call", "call_now", "close_src"):
         d[c] = d[c].astype(object)
     return d
 
@@ -213,11 +213,9 @@ def settle():
             k = (d.at[i, "away"], d.at[i, "home"])
             g = scores.get(k)
             if not pd.isna(d.at[i, "final_total"]):  # already settled: only the closing line (and a bet's CLV) was missing
-                if k in closing:
-                    c = closing[k]
-                    d.loc[i, ["close_total", "close_over", "close_under"]] = [c["total"], c["over"], c["under"]]
-                    if not pd.isna(d.at[i, "result"]) and not pd.isna(d.at[i, "bet_under"]):
-                        d.at[i, "clv"] = clv(d.at[i, "bet_total"], d.at[i, "bet_over"], d.at[i, "bet_under"], c)
+                c = set_close(d, i, closing.get(k))
+                if c and not pd.isna(d.at[i, "result"]) and not pd.isna(d.at[i, "bet_under"]):
+                    d.at[i, "clv"] = clv(d.at[i, "bet_total"], d.at[i, "bet_over"], d.at[i, "bet_under"], c)
                 continue
             if g and g.get("gameScheduleState") in POSTPONED:  # never played on this date: a void bet
                 postponed.append(i)
@@ -227,16 +225,14 @@ def settle():
             a, h = g["awayTeam"]["score"], g["homeTeam"]["score"]  # NHL final score counts the shootout goal
             d.loc[i, ["away_score", "home_score", "final_total"]] = [a, h, a + h]
             newly += 1
-            if k in closing:
-                c = closing[k]
-                d.loc[i, ["close_total", "close_over", "close_under"]] = [c["total"], c["over"], c["under"]]
+            c = set_close(d, i, closing.get(k))
             if d.at[i, "flag"] and not pd.isna(d.at[i, "bet_total"]) and not pd.isna(d.at[i, "bet_over"]):
                 bt, bo = d.at[i, "bet_total"], d.at[i, "bet_over"]
                 res = "W" if a + h > bt else "P" if a + h == bt else "L"
                 d.at[i, "result"] = res
                 bets.append(f"{k[0]}@{k[1]} {res}")
                 d.at[i, "profit"] = {"W": float(grade.payout(bo)), "P": 0.0, "L": -1.0}[res]
-                if k in closing and not pd.isna(d.at[i, "bet_under"]):
+                if c and not pd.isna(d.at[i, "bet_under"]):
                     d.at[i, "clv"] = clv(bt, bo, d.at[i, "bet_under"], c)
                 if not pd.isna(d.at[i, "best_total"]):  # same bet at the best sportsbook price
                     bbt, bbo = d.at[i, "best_total"], d.at[i, "best_over"]
@@ -246,6 +242,10 @@ def settle():
     if postponed:  # the game gets logged again on its new date
         print("(postponed / cancelled, removed from the log: " + ", ".join(f"{d.at[i, 'date']} {d.at[i, 'away']}@{d.at[i, 'home']}" for i in postponed) + ")")
         d = d.drop(index=postponed)
+    fixed = recheck_closes(d)
+    if fixed:
+        print("(closing lines replaced by the last pre-game line: " + ", ".join(fixed) + ")")
+        health.note(f"• Closing lines checked: {len(fixed)} replaced by the last pre-game line ({', '.join(fixed)})")
     record_actual_starters(d)
     d.to_csv(LOG, index=False)
     import store  # mirror finals and paper results to Supabase (skipped when not configured)
@@ -253,6 +253,60 @@ def settle():
     print(f"settled through {todo.date.max() if len(todo) else 'n/a'}")
     health.note(f"✓ Settled {health.plural(newly, 'finished game')}" + (f"; bets: {', '.join(bets)}" if bets else "; no bets among them") if newly
                 else "– Settling: no newly finished games yet" if len(todo) else "✓ Settling: nothing new to settle")
+
+
+def sane(c):
+    """A closing line someone could have bet before the game: both prices -100 or longer, a normal bookmaker margin, and
+    no side priced like a long shot (fair over chance 38-62%; a pre-game NHL total is rarely past -150). The odds feed sometimes keeps the last IN-GAME line for a finished game (Oct 14 2026
+    DAL@COL: 5.5, over +181 / under -231, after 6.0 -115 fifteen minutes before puck drop)."""
+    o, u = c.get("over"), c.get("under")
+    if pd.isna(c.get("total")) or pd.isna(o) or pd.isna(u) or abs(o) < 100 or abs(u) < 100:
+        return False
+    po, pu = float(grade.implied(o)), float(grade.implied(u))
+    return 1.0 < po + pu < 1.12 and 0.38 <= po / (po + pu) <= 0.62  # -165 / +140 is about 0.62
+
+
+def official_close(r, c):
+    """(closing line, source) for a finished game: the odds feed's close when it's a pre-game line (sane, and within half a
+    goal of the last line our runs saw before puck drop), else that last pre-game line (bet_*_now, saved 15 minutes
+    before the game). (None, 'rejected') when the feed's line can't be used and there's no pre-game line."""
+    snap = None
+    if not pd.isna(r.get("bet_total_now")) and not pd.isna(r.get("bet_over_now")):
+        snap = {"total": r["bet_total_now"], "over": r["bet_over_now"], "under": r.get("bet_under_now")}
+    if c and sane(c) and (snap is None or abs(c["total"] - snap["total"]) <= 0.5):
+        return c, "feed"
+    if snap:
+        return snap, "pre-game"
+    return None, "rejected" if c else None
+
+
+def set_close(d, i, c):
+    """Write the official closing line (official_close) into row i; returns it (None when there isn't one)."""
+    c, src = official_close(d.loc[i], c)
+    if src:
+        d.at[i, "close_src"] = src
+    if c:
+        d.loc[i, ["close_total", "close_over", "close_under"]] = [c["total"], c["over"], c.get("under")]
+    return c
+
+
+def recheck_closes(d):
+    """Check every settled game's closing line once (rows without close_src): an in-game line is replaced by the last
+    pre-game one, and a flagged pick's CLV is recomputed. ['DAL@COL 2026-10-14', ...] for the lines it replaced."""
+    fixed = []
+    for i in d.index[d.final_total.notna() & d.close_total.notna() & d.close_src.isna()]:
+        feed = {"total": d.at[i, "close_total"], "over": d.at[i, "close_over"], "under": d.at[i, "close_under"]}
+        c, src = official_close(d.loc[i], feed)
+        d.at[i, "close_src"] = src
+        if src == "feed":
+            continue
+        was = f"{d.at[i, 'close_total']:g} {int(d.at[i, 'close_over']):+d}" if not pd.isna(d.at[i, "close_over"]) else "?"
+        now = f"{c['total']:g} {int(c['over']):+d}" if c else "dropped (no pre-game line)"
+        fixed.append(f"{d.at[i, 'away']}@{d.at[i, 'home']} {d.at[i, 'date']}: {was} -> {now}")
+        d.loc[i, ["close_total", "close_over", "close_under"]] = [c["total"], c["over"], c.get("under")] if c else [np.nan] * 3
+        if c and not pd.isna(d.at[i, "result"]) and not pd.isna(d.at[i, "bet_under"]) and not pd.isna(c.get("under")):
+            d.at[i, "clv"] = clv(d.at[i, "bet_total"], d.at[i, "bet_over"], d.at[i, "bet_under"], c)
+    return fixed
 
 
 def clv(bet_total, bet_over, bet_under, c):
