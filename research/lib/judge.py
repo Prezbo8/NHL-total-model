@@ -8,6 +8,8 @@ at the opening and closing line). A variant is only worth adopting if it is bett
 noise(live_p, variant_p, games) adds error bars (Nov 2026): a bootstrap over game NIGHTS (games on one night share
 conditions) of 'variant minus live' for every column; row(..., ci=noise(...)) marks each difference '*' (better beyond
 noise), '~' (within noise: the middle 90% of the resampled differences includes 0) or 'x' (worse beyond noise).
+Caveat: when a variant changes only a handful of bets (e.g. 6), the units range is narrow because the same few games
+decide every resample: '*' then means those few bets went well, not that the change has a proven edge.
 """
 import os as _os
 import sys as _sys
