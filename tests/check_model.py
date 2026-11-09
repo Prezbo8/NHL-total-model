@@ -459,6 +459,13 @@ tr_ = dashboard.team_over_rows(sl) if len(sl) else None
 check("Team over records: SLAM + 1U by team counts each pick for both teams (units = 2x the SLAM + 1U record)",
       tr_ is None or (tr_.n.sum() == 2 * len(sl) and abs(tr_.units.sum() - 2 * sl.units.sum()) < 1e-9),
       "" if tr_ is None else f"{tr_.n.sum()} vs {2 * len(sl)}")
+fake_t = pd.DataFrame({"team": list(dashboard.TEAMS)[:32], "n": 10, "o": 5, "u": 5, "p": 0, "over": .5,
+                       "units": [32 - i for i in range(32)], "vs": 0.0})
+tb = dashboard.team_over_table(fake_t, "Games")
+shown_t = [t for t in fake_t.team if f"> {t}</td>" in tb]
+check("Team over records: Top 10 + Bottom 10 only, best first, no team twice (18 teams: top 10 + the other 8)",
+      shown_t == list(fake_t.team[:10]) + list(fake_t.team[-10:]) and "Top 10" in tb and "Bottom 10" in tb
+      and "Bottom 8" in dashboard.team_over_table(fake_t.head(18), "Games"), str(shown_t))
 shutil.copy(paths.data("paper_trades.csv"), SP + "real_log.csv")
 paper.LOG, os.environ["RUN_SUMMARY"] = SP + "real_log.csv", SP + "report_summary.txt"
 with contextlib.redirect_stdout(io.StringIO()):
