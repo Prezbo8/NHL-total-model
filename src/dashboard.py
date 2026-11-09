@@ -25,7 +25,7 @@ BACKTEST = [  # season, open bets, open ROI, close bets, close ROI
     ("2024-25", 45, 17.7, 47, 20.8), ("2025-26", 106, 10.2, 120, 7.4),
 ]
 BACKTEST_TOTAL = (585, 2.8, 845, 3.1)  # 2021-26: open bets, open ROI, close bets, close ROI
-BACKTEST_HEADLINE = (0, 0.0, 0, 0.0)  # 2022-26, the headline: 2021-22's cutoff comes from the cold-start season (no history)
+BACKTEST_HEADLINE = (155, 12.0, 411, 5.8)  # 2022-26, the headline: 2021-22's cutoff comes from the cold-start season (no history)
 
 SCALE = 4.5  # projected-goal bars run 0 -> 4.5 goals
 
