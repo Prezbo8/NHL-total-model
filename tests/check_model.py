@@ -706,6 +706,17 @@ check(f"no look-ahead: every game before {_cut} gets the same projection and fla
       f"max difference {_d.max():.2e}; first game that changed: {_first} "
       + (str(_a.loc[_first[0], ['gameDate', 'home', 'away']].to_dict()) if _first else ""))
 
+_bad = [x for x in history.bad_lines() if x[0] >= 20200801 and not any(pd.isna(v) for v in x[4:])]  # 2020-21 on, real prices
+_fl = history.flagged(_full)
+_fl = set(zip(_fl[_fl.both].gameDate, _fl[_fl.both].away, _fl[_fl.both].home))
+_graded = history.lines()
+_left = [pre for pre in ("open", "close") if not history._sane(_graded, pre).all()]
+check("historical lines: every open / close the backtest grades is a pre-game line (impossible prices dropped)",
+      not _left and len(_bad) < 200,
+      f"{len(_bad)} dropped, {sum((d, a, h) in _fl for d, a, h, *_ in _bad)} of them flagged games: "
+      + "; ".join(f"{d} {a}@{h} {p} {t:g} {o:+.0f}/{u:+.0f}{' FLAGGED' if (d, a, h) in _fl else ''}"
+                  for d, a, h, p, t, o, u in _bad))
+
 print("team rankings page (Overview, Offense, Defense, Form)")
 rk_html = dashboard.rankings(real)
 misaligned = []
