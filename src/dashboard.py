@@ -78,7 +78,7 @@ TIPS = {
     "1U": "Flagged over where one team is great at 5-on-5 (above 2.19) but the other isn't good. Went over 58% (opening line) / 59% (closing line) in 2021-26.",
     "PASS": "Flagged over, but neither team is great at 5-on-5 and they aren't both good. No bet: these went over only 47% in 2021-26.",
     "AVOID": "Not flagged, or flagged but both teams face a Strong or Good goalie. These went over only 47-49% in 2021-26.",
-    "Paper bet": "The paper-trading record's pick: flagged at the last model run before puck drop, graded at the closing consensus total and over price.",
+    "Paper bet": "The paper-trading record's pick: flagged at the last model run before puck drop, graded at the closing consensus total and over price (6 or 6.5 closes only).",
     "Near miss": "{team} missed the {cutoff:.2f}-goal high-scoring cutoff by only {gap:.3f}. Not a bet: the over rule needs both teams over the cutoff (and a 6 or 6.5 line). Shown so close calls are easy to spot.",
     "B2B tag": "Played yesterday: the model cuts this team's scoring ~8% and raises its opponent's ~6.5%.",
 }
@@ -816,7 +816,7 @@ def day_table(g):
                 outcome = {"W": "<span class='res W'>✓ under</span>", "L": "<span class='res L'>✗ went over</span>"}.get(res, "<span class='res P'>push</span>")
             else:
                 outcome = f"<span class='res {res}'>{res}</span>"
-            if flagged and not pd.isna(r.close_total) and not pd.isna(r.close_over):  # paper pick, graded at the close
+            if flagged and r.close_total in (6.0, 6.5) and not pd.isna(r.close_over):  # paper pick, graded at the close (6 / 6.5 only)
                 pr = "W" if r.final_total > r.close_total else "L" if r.final_total < r.close_total else "P"
                 pu = float(grade.payout(r.close_over)) if pr == "W" else -1.0 if pr == "L" else 0.0
                 outcome += f"<br><span class='muted small'>{tip('paper', TIPS['Paper bet'])} {pr} {pu:+.2f}u</span>"
@@ -1093,7 +1093,7 @@ def closing_bets(d, keep_retro=False):
     graded at the closing consensus total and over price. Retroactive days never count toward the record
     (keep_retro=True for a day's own summary)."""
     g = current(d if keep_retro else d[~retro(d)])
-    g = g[g.flag & g.final_total.notna() & g.close_total.notna() & g.close_over.notna()].copy()
+    g = g[g.flag & g.final_total.notna() & g.close_total.isin([6.0, 6.5]) & g.close_over.notna()].copy()  # bets are 6 / 6.5 only
     g["res"] = np.where(g.final_total > g.close_total, "W", np.where(g.final_total < g.close_total, "L", "P"))
     g["units"] = np.where(g.res == "W", grade.payout(g.close_over), np.where(g.res == "L", -1.0, 0.0))
     return g
@@ -1215,7 +1215,9 @@ def record(d):
       {type_table(by_type)}{tracked_table(tr)}
       <ul class='notes'>
         <li><b>Closing information only.</b> A flagged pick counts if the game was still flagged at the last model run before
-        puck drop. Everything is graded at the closing consensus total and price, 1 unit per pick.</li>
+        puck drop. Everything is graded at the closing consensus total and price, 1 unit per pick; picks count only when
+        the close is 6 or 6.5 (the lines bet). When the odds feed's closing line is an in-game line (a long-shot price, or
+        more than half a goal off), the last line before puck drop is used instead.</li>
         <li><b>Top total / Top P(7+):</b> each day's single highest game, flagged or not. <b>P(7+) over 50%:</b> every such game.</li>
         <li><b>AVOID:</b> every AVOID game; its units are for betting the under at the closing under price.</li>
         <li>Retroactive days are left out of everything here.</li>

@@ -87,6 +87,27 @@ paper.urllib.request.urlopen, paper.odds.day_games = real_open, real_day
 s3 = paper.read_log().iloc[0]
 check("settle: missed closing line filled later, score + result kept, CLV scored",
       not crash and s3.close_total == 6.5 and s3.close_over == -130 and s3.final_total == 7 and s3.result == "W" and s3.clv == 1, crash or str(s3[["close_total", "clv"]].to_dict()))
+snap = {"bet_total_now": 6.0, "bet_over_now": -115, "bet_under_now": -105}
+oc = {k: paper.official_close(r_, c_)[1] for k, r_, c_ in (
+    ("in-game price", snap, {"total": 5.5, "over": 181, "under": -231}),          # Oct 14 2026 DAL@COL
+    ("normal close", snap, {"total": 6.0, "over": -120, "under": 100}),
+    ("half-goal move", snap, {"total": 6.5, "over": 105, "under": -125}),
+    ("a goal off", snap, {"total": 7.0, "over": -110, "under": -110}),
+    ("no pre-game line, bad", {}, {"total": 5.5, "over": 305, "under": -400}),
+    ("no pre-game line, fine", {}, {"total": 6.5, "over": -110, "under": -110}))}
+check("closing lines: the odds feed's close is used when it's a pre-game line (sane prices, within half a goal of the last "
+      "line before puck drop); an in-game line is replaced by that last pre-game line, or dropped if there is none",
+      oc == {"in-game price": "pre-game", "normal close": "feed", "half-goal move": "feed", "a goal off": "pre-game",
+             "no pre-game line, bad": "rejected", "no pre-game line, fine": "feed"}, str(oc))
+bad = miss.copy()
+bad[["close_total", "close_over", "close_under", "bet_total_now", "bet_over_now", "bet_under_now", "clv"]] = [5.5, 181, -231, 6.5, -120, 100, -1]
+bad["close_src"] = None
+fx_ = paper.recheck_closes(bad)
+again = paper.recheck_closes(bad)
+b0 = bad.iloc[0]
+check("closing lines: a settled pick's in-game close is replaced once (CLV recomputed: 6.5 -110 -> 6.5 -120 = +1), then left alone",
+      len(fx_) == 1 and again == [] and b0.close_total == 6.5 and b0.close_over == -120 and b0.close_src == "pre-game" and b0.clv == 1,
+      f"{fx_} {again} {b0[['close_total', 'close_over', 'close_src', 'clv']].to_dict()}")
 _log = paper.LOG  # on a copy: the Supabase checks below sync this log's settled game
 shutil.copy(_log, SP + "ppd_log.csv"); paper.LOG = SP + "ppd_log.csv"
 paper.remove_games(s3.date, {("XXX", "YYY")})
@@ -481,6 +502,16 @@ rep = open(SP + "report_summary.txt", encoding="utf-8").read()
 want = f"{(cb.res == 'W').sum()}-{(cb.res == 'L').sum()}-{(cb.res == 'P').sum()}"
 check("the daily Report's paper record is the dashboard's (closing line), not the first-logged bets",
       f"Paper record (closing line, as on the dashboard): {want} " in rep and f"{cb.units.sum():+.2f}u" in rep, rep.strip())
+rl = paper.read_log()
+rec_before = dashboard.closing_bets(rl)
+changed = paper.recheck_closes(rl)
+rec_after = dashboard.closing_bets(rl)
+odd = rl[rl.final_total.notna() & rl.close_total.notna() & rl.flag & ~rl.close_total.isin([6.0, 6.5])]
+rec_line = lambda b: f"{(b.res == 'W').sum()}-{(b.res == 'L').sum()}-{(b.res == 'P').sum()} {b.units.sum():+.2f}u"
+check("closing lines on the real log: every settled game checked; the record is graded only at 6 / 6.5 closes",
+      rl[rl.final_total.notna() & rl.close_total.notna()].close_src.notna().all() and rec_after.close_total.isin([6.0, 6.5]).all(),
+      f"replaced: {changed or 'none'} | flagged games not at 6/6.5: {[f'{r.away}@{r.home} {r.date} {r.close_total:g}' for r in odd.itertuples()] or 'none'}"
+      f" | record before (old closes) {rec_line(rec_before)}, after {rec_line(rec_after)}")
 calls_of = lambda d: [dashboard.call(r, True) for r in dashboard.closing_bets(d).itertuples()]
 before = calls_of(paper.read_log())  # on the real log's copy
 paper.fill_calls()
