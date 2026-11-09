@@ -29,8 +29,26 @@ def flagged(proj):
     return pd.concat(out)
 
 
-def lines():
-    """One row per game: open/close total + over/under prices. SBR through 2021-22, Action Network after."""
+def _sane(d, pre):
+    """True per row when that row's open / close line is one someone could have bet before the game (paper.sane: both
+    prices -100 or longer, a normal margin, fair over chance 38-62%); rows without that line count as fine."""
+    import paper
+    t, o, u = d[f"{pre}_total"], d[f"{pre}_over"], d[f"{pre}_under"]
+    return pd.Series([pd.isna(a) or paper.sane({"total": a, "over": b, "under": c}) for a, b, c in zip(t, o, u)], index=d.index)
+
+
+def bad_lines():
+    """The open / close lines lines() drops: [(gameDate, away, home, 'open' / 'close', total, over, under)]."""
+    raw = lines(clean=False)
+    return [(r.gameDate, r.away, r.home, pre, getattr(r, f"{pre}_total"), getattr(r, f"{pre}_over"), getattr(r, f"{pre}_under"))
+            for pre in ("open", "close") for r in raw[~_sane(raw, pre)].itertuples()]
+
+
+def lines(clean=True):
+    """One row per game: open/close total + over/under prices. SBR through 2021-22, Action Network after.
+    clean (default): a line nobody could have bet before the game (an in-game line kept by the feed, a broken consensus
+    pair or a typo; paper.sane) is dropped (set to empty), so no bet is graded at it (Nov 2026 audit: e.g. 2024-11-15
+    DET@ANA 6.5, over +350)."""
     s = pd.read_csv(sbr.SBR)
     s = s[s.gameDate < 20220801]
     s["final"] = s.away_final + s.home_final
@@ -47,7 +65,11 @@ def lines():
         parts.append(o[["gameDate", "home", "away", "total", "over", "under"]]
                      .rename(columns={"total": f"{pre}_total", "over": f"{pre}_over", "under": f"{pre}_under"}))
     a = parts[0].merge(parts[1], on=["gameDate", "home", "away"], how="outer")
-    return pd.concat([s, a], ignore_index=True)
+    out = pd.concat([s, a], ignore_index=True)
+    if clean:
+        for pre in ("open", "close"):
+            out.loc[~_sane(out, pre), [f"{pre}_total", f"{pre}_over", f"{pre}_under"]] = np.nan
+    return out
 
 
 def bet_results(d, when):

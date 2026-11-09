@@ -853,7 +853,7 @@ def today(day=None, preview=False):
     print("\n(goalie % = share of expected goals stopped beyond average; higher = better)")
     print("OVER FLAG = both teams high-scoring (marked +) and the line is 6 or 6.5. Overs only, never 5.5.")
     print("Always bet the 'best over' book: line shopping added ~+2 pts ROI in the backtest.")
-    print("Model uses 2020-21 onward only. Tested 2021-26: +2.6% ROI at open, +3.0% at close, 54-55% wins"
+    print("Model uses 2020-21 onward only. Tested 2021-26: +2.6% ROI at open, +3.1% at close, 54-55% wins"
           " (+2 pts more with line shopping). Small, unproven edge: judge it on live paper trading.")
     print("\nTODAY'S FLAGS: " + ("; ".join(flagged) if flagged else "none"))
     what = f"{health.plural(len(log_rows), 'game')} for {date.fromisoformat(day):%a, %b %-d}" if log_rows else f"no NHL games on {date.fromisoformat(day):%a, %b %-d}"

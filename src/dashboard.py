@@ -22,9 +22,9 @@ OUT = os.path.join(paths.DOCS_DIR, "index.html")
 # push and fails when the model no longer matches (Nov 4 2026: this table still showed Oct 3's numbers)
 BACKTEST = [  # season, open bets, open ROI, close bets, close ROI
     ("2021-22", 425, -0.9, 428, 0.4), ("2022-23", None, None, 235, 3.2), ("2023-24", 4, -4.2, 9, -25.0),
-    ("2024-25", 45, 17.7, 47, 20.8), ("2025-26", 106, 10.2, 121, 6.6),
+    ("2024-25", 45, 17.7, 47, 20.8), ("2025-26", 106, 10.2, 120, 7.4),
 ]
-BACKTEST_TOTAL = (580, 2.6, 840, 3.0)  # 2021-26: open bets, open ROI, close bets, close ROI
+BACKTEST_TOTAL = (580, 2.6, 839, 3.1)  # 2021-26: open bets, open ROI, close bets, close ROI
 
 SCALE = 4.5  # projected-goal bars run 0 -> 4.5 goals
 
