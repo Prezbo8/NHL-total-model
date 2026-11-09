@@ -859,24 +859,27 @@ def today(day=None, preview=False):
         import store  # run history in Supabase (skipped when not configured; never stops the run)
         store.record_run(day, log_rows, sources={"dailyfaceoff": bool(dfo), "lines": bool(lines), "sportsbooks": bool(shop),
                                                  "lineups": bool(lineup_info), "injuries": bool(inj)})
+        def warn(msg):  # a side feature failed: shown in the run's Summary, never a retry (the projections are saved)
+            print(f"({msg})")
+            health.note(f"⚠ {msg}")
         rk = None
         try:  # team rankings for the dashboard (each team vs a league-average opponent)
             rk = sm.team_rankings(project, set(games[games.season >= season - 1].home), season, games)
             rk.to_csv(paths.data("team_rankings.csv"), index=False)
             sm.save_rankings_day(rk, day)
         except Exception as e:
-            print(f"(team rankings not saved: {e})")
+            warn(f"Team rankings not saved ({type(e).__name__}: {e}): the dashboard keeps the last ones")
         try:  # over / under performance vs the model and vs xG + schedule faced, season + last 30/14/7 days (dashboard 'Form', context only)
             trends.team_form(proj, games, day, season, rk).to_csv(paths.data("team_form.csv"), index=False)
         except Exception as e:
-            print(f"(team form not saved: {e})")
+            warn(f"Team form not saved ({type(e).__name__}: {e}): the Form view keeps the last one")
         try:  # records, last 10, streaks, starters' season / last-5 numbers for the game notes (src/notes.py), frozen at puck drop
             import notes
             now_utc = pd.Timestamp.now(tz="UTC")
             notes.form_snapshot(day, standings, starters, {t["abbrev"] for g in todays if pd.Timestamp(g["startTimeUTC"]) <= now_utc
                                                            for t in (g["homeTeam"], g["awayTeam"])}, season)
         except Exception as e:
-            print(f"(form for the game notes not saved: {type(e).__name__}: {e})")
+            warn(f"Form for the game notes not saved ({type(e).__name__}: {e})")
         try:  # each team's top 5 attackers / defenders and whether they play (dashboard 'Key players')
             rost = {t: (lineup_info.get(t) or {}).get("names") or {p: n for p, n, _ in lineups.nhl_roster(t)} for t in playing}
             kp = injuries.key_players({t: list(v) for t, v in rost.items()}, injured, lineup_info, season,
@@ -896,14 +899,14 @@ def today(day=None, preview=False):
             with open(path, "w") as f:
                 json.dump({"date": day, "teams": kp, "baseline": base, "changes": changes}, f, separators=(",", ":"))
         except Exception as e:
-            print(f"(key players not saved: {e})")
+            warn(f"Key players not saved ({type(e).__name__}: {e}): the dashboard keeps the last ones")
         try:  # how each game's projection moved today (dashboard 'How the projection moved'), frozen at puck drop
             import moves
             now_utc = pd.Timestamp.now(tz="UTC")
             moves.record(day, log_rows, {f"{g['awayTeam']['abbrev']}@{g['homeTeam']['abbrev']}" for g in todays
                                          if pd.Timestamp(g["startTimeUTC"]) <= now_utc})
         except Exception as e:
-            print(f"(projection moves not saved: {e})")
+            warn(f"Projection moves not saved ({type(e).__name__}: {e})")
         try:  # games already under way: record who actually started (NHL box score)
             paper.update_actual_starters()
         except Exception as e:

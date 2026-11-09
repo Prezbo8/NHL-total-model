@@ -33,17 +33,10 @@ jobs:
             data/moneypuck_games.csv.modified
           key: moneypuck-${{ github.run_id }}
           restore-keys: moneypuck-
-      - name: Download MoneyPuck game data (not stored in the repo; skipped when the cached copy is current)
-        run: python -c "import sys, os; sys.path.insert(0, 'src'); import model; assert model.refresh_data() or os.path.exists(model.DATA)"
-      - name: Save MoneyPuck data (only when this run downloaded a new version)
-        if: ${{ hashFiles('data/moneypuck_games.csv.modified') != '' && steps.mp.outputs.cache-matched-key != format('moneypuck-{0}', hashFiles('data/moneypuck_games.csv.modified')) }}
-        continue-on-error: true   # a cache problem must not fail the tests
-        uses: actions/cache/save@v6
-        with:
-          path: |
-            data/moneypuck_games.csv
-            data/moneypuck_games.csv.modified
-          key: moneypuck-${{ hashFiles('data/moneypuck_games.csv.modified') }}
+      # Tests use the copy the once-a-day stats run saved and never save one: only that run brings in new MoneyPuck data
+      # (a big, slow download, posted once a morning), so a Tests run can't swap the file under the hourly runs.
+      - name: Download MoneyPuck game data (only if there's no saved copy at all)
+        run: python -c "import sys, os; sys.path.insert(0, 'src'); import model; os.path.exists(model.DATA) or model.refresh_data(); assert os.path.exists(model.DATA)"
       - name: Static check
         id: static-check
         run: |
