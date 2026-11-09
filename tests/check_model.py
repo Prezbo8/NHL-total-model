@@ -462,11 +462,11 @@ check("Team over records: SLAM + 1U by team counts each pick for both teams (uni
 fake_t = pd.DataFrame({"team": list(dashboard.TEAMS)[:32], "n": 10, "o": 5, "u": 5, "p": 0, "over": .5,
                        "units": [32 - i for i in range(32)], "vs": 0.0})
 tb = dashboard.team_over_table(fake_t, "Games")
-shown_t = [re.search(r"</picture> (\w+)</td>", x).group(1) for x in tb.split("<tr class='tor-row'")[1:] if not x.startswith(" hidden")]
-check("Team over records: every team in the table but only Top 10 + Bottom 10 shown, best first (18 teams: top 10 + the other 8; sortable)",
-      shown_t == list(fake_t.team[:10]) + list(fake_t.team[-10:]) and "Top 10" in tb and "Bottom 10" in tb
-      and "Bottom 8" in dashboard.team_over_table(fake_t.head(18), "Games") and tb.count("tor-row'") == 32
-      and "data-sort='4'" in tb, str(shown_t))
+tiers = re.findall(r"<tr class='tor-row t-(\w+)'", tb)
+check("Team over records: every team shown, rows shaded by fifths of the graded column (best = great, worst = trash, ties share)",
+      len(tiers) == 32 and "hidden" not in tb and tiers[0] == "great" and tiers[-1] == "trash"
+      and [tiers.count(t) for t in ("great", "good", "mid", "bad", "trash")] == [7, 6, 7, 6, 6]
+      and dashboard.team_tiers(pd.Series([1, 1, 0])) == ["great", "great", "bad"] and "data-sort='4'" in tb, str(tiers))
 t7 = dashboard.team_7_rows(pd.DataFrame({"away": ["A", "A", "B"], "home": ["B", "C", "C"], "final_total": [7, 5, 9],
                                           "close_total": [5.5, 6.5, 6.0]}))
 check("Team over records: games over 6.5 = 7+ goals whatever the line (A 1-1, B 2-0, C 1-1; best % first)",
