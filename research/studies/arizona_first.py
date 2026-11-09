@@ -1,9 +1,10 @@
-"""Arizona -> Utah and the first season's starting averages (Nov 2026 audit, items 1.2, 1.3, 1.4), each alone and together:
+"""Arizona -> Utah and the first season's starting averages (Nov 2026 audit, items 1.2, 1.3, 1.4). Verdicts Nov 10 2026:
+1.2 and 1.3 rejected, 1.4 adopted (research/README.md).
   carry_franchise : Utah starts 2024-25 from Arizona's ratings (live: a league-average team, its code is new)
   speed_carry_fix : Arizona's speed moves to Utah only from 2024-25 (live: also for 2022-24, so Arizona's own games
                     in 2022-23 and 2023-24 got no speed)
-  first_both      : 2020-21's starting league averages from home AND away teams (live: home only, ~3% high at 5v5, ~7%
-                    on the power play)
+  first_both      : 2020-21's starting league averages from home AND away teams (ADOPTED Nov 10 2026; before: home only,
+                    ~3% high at 5v5, ~7% on the power play). Shown here as the old way, first_both=False.
 Prints the shared scorecard (research/lib/judge.py), team-goal deviance in the games each item touches (Utah's first 20
 games of 2024-25; Arizona's 2022-24 games; 2020-21 and 2021-22), and the backtest by season.
 
@@ -22,8 +23,8 @@ import history
 import split_model as sm
 
 VARIANTS = {"live": {}, "+ Utah carries Arizona": {"carry_franchise": True}, "+ Arizona speed 2022-24": {"speed_carry_fix": True},
-            "+ first season both teams": {"first_both": True},
-            "all three": {"carry_franchise": True, "speed_carry_fix": True, "first_both": True}}
+            "first season home only (old)": {"first_both": False},
+            "live + both rejected": {"carry_franchise": True, "speed_carry_fix": True}}
 
 
 def backtest(p):

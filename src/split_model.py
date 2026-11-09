@@ -183,7 +183,7 @@ def season_of(day):
 
 def walk_split(games, k=m.K, w=m.W_GOALS, regress=m.REGRESS, known_starters=True, with_projector=False, roster_w=0.0,
                live_season=None, use_speed=True, record_detail=False, guess="mode", damp=1.0, pp_k=m.K_PP, pp_regress=None, w_def=0.0,
-               league_now=False, carry_franchise=False, speed_carry_fix=False, first_both=False):
+               league_now=False, carry_franchise=False, speed_carry_fix=False, first_both=True):
     """live_season: the season being projected. If it's newer than the data (e.g. opening day, before any
     of its games exist), last season's ratings are rolled over into this season's starting ratings.
     guess (known_starters=False): "mode" = the team's most common starter in its last 10 games;
@@ -197,9 +197,10 @@ def walk_split(games, k=m.K, w=m.W_GOALS, regress=m.REGRESS, known_starters=True
     league_now (research, research/studies/league_avg.py): divide each matchup by the mean of this season's teams'
     CURRENT ratings instead of last season's league rate (Rate.lg, the live model). Rejected Nov 10 2026: the math is
     cleaner, but accuracy is worse in both halves and SLAM+1U units fall.
-    carry_franchise / speed_carry_fix / first_both (research, research/studies/arizona_first.py): Utah starts 2024-25
-    from Arizona's ratings; Arizona's speed carries to Utah only from 2024-25 (not into Arizona's own 2022-24 games); the
-    first season's starting league averages use home AND away teams (live: home only).
+    carry_franchise / speed_carry_fix (research, research/studies/arizona_first.py; rejected Nov 10 2026): Utah starts
+    2024-25 from Arizona's ratings; Arizona's speed carries to Utah only from 2024-25 (not into Arizona's own 2022-24
+    games). first_both: the first season's starting league averages use home AND away teams (live from Nov 10 2026;
+    False = home only, the model before).
 """
     starter, by_game, gg = m.load_goalies()
     # goalie history only from seasons that are part of this run (nothing before games' first season)
