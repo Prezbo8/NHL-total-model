@@ -975,23 +975,23 @@ def team_over_table(t, games):
 
 
 def team_records(d):
-    """Team over records at the closing line (every game that closed at 6 or 6.5) and SLAM + 1U records by team."""
-    g = d[d.final_total.notna() & d.close_total.notna() & d.close_over.notna() & (d.close_total >= 6)].copy()
+    """Team over records at the closing line (every game that closed at 6.5) and SLAM + 1U records by team (6.5 closes only)."""
+    g = d[d.final_total.notna() & d.close_total.notna() & d.close_over.notna() & (d.close_total == 6.5)].copy()
     if g.empty:
         return "<p class='muted'>No finished games yet.</p>"
     g["res"] = np.where(g.final_total > g.close_total, "W", np.where(g.final_total < g.close_total, "L", "P"))
     g["units"] = np.where(g.res == "W", grade.payout(g.close_over), np.where(g.res == "L", -1.0, 0.0))
     s = closing_bets(d)
-    s = s[[call(r, True) in ("SLAM", "1U") for r in s.itertuples()]]
+    s = s[[call(r, True) in ("SLAM", "1U") and r.close_total == 6.5 for r in s.itertuples()]]
     picks = (team_over_table(team_over_rows(s), "Picks") if len(s) else "<p class='muted'>No SLAM or 1U picks have settled yet.</p>")
     return f"""<div class='acc-grid'>
-        <div><h3>Over record · 6 / 6.5 closing lines</h3>{team_over_table(team_over_rows(g), "Games")}</div>
-        <div><h3>🔨 SLAM + 1U picks by team</h3>{picks}</div>
+        <div><h3>Over record · 6.5 closing lines</h3>{team_over_table(team_over_rows(g), "Games")}</div>
+        <div><h3>🔨 SLAM + 1U picks by team · 6.5</h3>{picks}</div>
       </div>
-      <ul class='notes'><li><b>Closing line.</b> Every game that closed at 6 or 6.5 ({len(g)} so far, {g.date.min()} to {g.date.max()}),
+      <ul class='notes'><li><b>Closing line.</b> Every game that closed at 6.5 ({len(g)} so far, {g.date.min()} to {g.date.max()}),
       graded as an over at the closing consensus total and price, 1 unit each. A game counts for both teams.
       Each table shows the best 10 teams by units, then the worst 10.</li>
-      <li><b>SLAM + 1U</b> are the flagged picks in the paper record below, by team (a pick counts for both teams).</li>
+      <li><b>SLAM + 1U</b> are the flagged picks in the paper record below that closed at 6.5, by team (a pick counts for both teams).</li>
       <li>About 15 games a team is a small sample: early-season team records are mostly noise.</li></ul>"""
 
 
