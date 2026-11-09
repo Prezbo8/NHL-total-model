@@ -257,13 +257,13 @@ def settle():
 
 def sane(c):
     """A closing line someone could have bet before the game: both prices -100 or longer, a normal bookmaker margin, and
-    no side priced like a long shot. The odds feed sometimes keeps the last IN-GAME line for a finished game (Oct 14 2026
+    no side priced like a long shot (fair over chance 38-62%; a pre-game NHL total is rarely past -150). The odds feed sometimes keeps the last IN-GAME line for a finished game (Oct 14 2026
     DAL@COL: 5.5, over +181 / under -231, after 6.0 -115 fifteen minutes before puck drop)."""
     o, u = c.get("over"), c.get("under")
     if pd.isna(c.get("total")) or pd.isna(o) or pd.isna(u) or abs(o) < 100 or abs(u) < 100:
         return False
     po, pu = float(grade.implied(o)), float(grade.implied(u))
-    return 1.0 < po + pu < 1.12 and 0.33 <= po / (po + pu) <= 0.67
+    return 1.0 < po + pu < 1.12 and 0.38 <= po / (po + pu) <= 0.62  # -165 / +140 is about 0.62
 
 
 def official_close(r, c):
@@ -300,7 +300,9 @@ def recheck_closes(d):
         d.at[i, "close_src"] = src
         if src == "feed":
             continue
-        fixed.append(f"{d.at[i, 'away']}@{d.at[i, 'home']} {d.at[i, 'date']}")
+        was = f"{d.at[i, 'close_total']:g} {int(d.at[i, 'close_over']):+d}" if not pd.isna(d.at[i, "close_over"]) else "?"
+        now = f"{c['total']:g} {int(c['over']):+d}" if c else "dropped (no pre-game line)"
+        fixed.append(f"{d.at[i, 'away']}@{d.at[i, 'home']} {d.at[i, 'date']}: {was} -> {now}")
         d.loc[i, ["close_total", "close_over", "close_under"]] = [c["total"], c["over"], c.get("under")] if c else [np.nan] * 3
         if c and not pd.isna(d.at[i, "result"]) and not pd.isna(d.at[i, "bet_under"]) and not pd.isna(c.get("under")):
             d.at[i, "clv"] = clv(d.at[i, "bet_total"], d.at[i, "bet_over"], d.at[i, "bet_under"], c)
