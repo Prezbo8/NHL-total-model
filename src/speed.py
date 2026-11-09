@@ -18,7 +18,8 @@ SPEED = paths.data("team_speed.csv")
 SPEED_DETAIL = "https://api-web.nhle.com/v1/edge/team-skating-speed-detail/{}/{}/2"
 TEAMS_URL = "https://api.nhle.com/stats/rest/en/team"
 TEAMS_NOW = 32  # NHL teams (2024-25 on); a season's speed counts as downloaded only with all of them
-CARRY = {"ARI": "UTA"}  # franchise moves: last season's speed belongs to the new team
+CARRY = {"ARI": "UTA"}
+CARRY_FROM = 2024  # Utah's first season: Arizona's speed belongs to Utah only from then on  # franchise moves: last season's speed belongs to the new team
 
 
 def refresh(season):
@@ -56,8 +57,10 @@ def refresh(season):
             health.note(f"⚠ Team speed {season}: {n} of {TEAMS_NOW} teams downloaded; the rest are tried again next run")
 
 
-def z_prev(games):
-    """{(season, team): z-score of that team's PREVIOUS season speed} for every season in the speed file + 1."""
+def z_prev(games, carry_from=None):
+    """{(season, team): z-score of that team's PREVIOUS season speed} for every season in the speed file + 1.
+    carry_from (research, research/studies/arizona_first.py): move a relocated team's speed to its new code only from
+    that season on; None (live) moves it for every season, so Arizona's 2022-23 / 2023-24 games get none."""
     if not os.path.exists(SPEED):
         return {}
     sp = pd.read_csv(SPEED)
@@ -67,4 +70,5 @@ def z_prev(games):
     sp["n"] = sp.n.fillna(82)
     sp["fast"] = (sp.bursts22 + sp.bursts20_22) / sp.n
     sp["z"] = sp.groupby("season").fast.transform(lambda v: (v - v.mean()) / v.std())
-    return {(s + 1, CARRY.get(t, t)): float(z) for s, t, z in zip(sp.season, sp.team, sp.z)}
+    code = lambda s, t: CARRY.get(t, t) if carry_from is None or s + 1 >= carry_from else t
+    return {(s + 1, code(s, t)): float(z) for s, t, z in zip(sp.season, sp.team, sp.z)}
