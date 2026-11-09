@@ -372,7 +372,7 @@ def _team(t, x, opp):
     ranks = (f" ranks #{tr['total_offense_rank']} in total offense and #{tr['total_defense_rank']} in total defense"
              if "total_offense_rank" in tr else "")
     head = f"{n} ({rec})" if rec else n
-    out.append(f"{head}{ranks or ' projects'}" + (f" and projects {x['projected_goals']} goals." if ranks else f" {x['projected_goals']} goals."))
+    out.append(f"{head}{ranks}." if ranks else f"{head}:")  # its projected goals are in the call sentence
     parts = []
     for key, label, against, unit in (("five_on_five", "5-on-5", "opponent_defense", "defense"),
                                       ("power_play", "power play", "opponent_penalty_kill", "penalty kill")):
@@ -389,7 +389,7 @@ def _team(t, x, opp):
         g = f"It shoots at {gname}" + (f", {gdesc}" if gdesc else "")
         l5 = x.get("goalie_faced_numbers", {}).get("last_5_games")
         if l5:
-            g += f"; over his last 5 games he allowed {l5.split(', ', 1)[1].split(':')[0]}"
+            g += f"; over his last 5 games he allowed {l5.split(', ', 1)[1].split(':')[0].replace(' goals allowed on', ' goals on')}"
         out.append(g + ".")
     return " ".join(out)
 

@@ -552,14 +552,14 @@ check("game notes: the template says the call, the line, the projected total and
       "projected goals, 5-on-5 / power play with ranks and the goalie each shoots at, opens on the most unusual fact "
       "(BUF's W4 streak) and uses only the model's numbers",
       all(x in note for x in ("PASS", "6.5", "6.67", "53%", "9-6-1", "4-5-1", "7-4-3", "7-2-1", "3.30", "3.38", "#11 attack",
-                              "BUF's #22 penalty kill", "Samuel Ersson", "Colten Ellis", "11.5 expected"))
+                              "BUF's #22 penalty kill", "Samuel Ersson", "Colten Ellis", "allowed 14 goals on 11.5 expected"))
       and note.startswith("Buffalo") and "4" in note.split(".")[0] and not stray and "cutoff" not in note,
       f"stray {stray}: {note}")
 from collections import Counter
 reasons = [notes.plain(t).split(" At 5-on-5,")[0] for t in texts if "no full reasoning" not in t and "not available" not in t]
 plain_r = [notes.plain_reason(x) for x in reasons]
 left = [p for p in plain_r if re.search(r"cutoff|high-scoring|\bslam\b", p)]
-check("game notes: the model's reason reaches the AI in plain words (no 'cutoff' / 'high-scoring'), same numbers, every logged game",
+check("game notes: the model's reason is in plain words (no 'cutoff' / 'high-scoring'), same numbers, every logged game",
       not left and all(nums(a) == nums(b) for a, b in zip(reasons, plain_r)),
       left[0] if left else f"{len(reasons)} games: " + ", ".join(f"{c} {n}" for c, n in sorted(Counter(x.split(':')[0] for x in reasons).items())))
 fx_crash, fx_n, unowned = "", 0, []
