@@ -1022,7 +1022,7 @@ def team_records(d):
       </div>
       <ul class='notes'><li><b>Games over 6.5:</b> every finished game ({len(g)} so far, {g.date.min()} to {g.date.max()}), over = 7+ goals,
       whatever the game's line was. Best 10 teams by over %, then the worst 10. A game counts for both teams.</li>
-      <li><b>Sort:</b> click a column header to sort by it (highest first); click again to flip it. Each table always shows that column's top 10 and bottom 10.</li>
+      <li><b>Sort:</b> click a column header to sort by it (highest first; ties go to the higher Avg goals, or vs close in the SLAM + 1U table); click again to flip it. Each table always shows that column's top 10 and bottom 10.</li>
       <li><b>SLAM + 1U</b> are the flagged picks in the paper record below that closed at 6.5, graded at the closing price
       (1 unit each), by team: best 10 by units, then the worst.</li>
       <li>About 15 games a team is a small sample: early-season team records are mostly noise.</li></ul>"""
@@ -2006,7 +2006,13 @@ SCRIPT = """<script>
     var lt = body.querySelector('tr.tor-top'), lb = body.querySelector('tr.tor-bot');
     function sort(i, rev){
       var rows = Array.prototype.slice.call(body.querySelectorAll('tr.tor-row')), n = rows.length, nb = Math.max(0, Math.min(TOP, n - TOP));
-      rows.sort(function(a, b){ var c = parseFloat(b.cells[i].dataset.k) - parseFloat(a.cells[i].dataset.k); return rev ? -c : c; });
+      var last = ths.length - 1;  // ties: broken by the last column (Avg goals; vs close in the SLAM + 1U table), then the order on load
+      rows.forEach(function(r, k){ if (r.dataset.o === undefined) r.dataset.o = k; });
+      rows.sort(function(a, b){
+        var k = function(r, j){ return parseFloat(r.cells[j].dataset.k); };
+        var c = (k(b, i) - k(a, i)) || (k(b, last) - k(a, last));
+        return (rev ? -c : c) || (a.dataset.o - b.dataset.o);
+      });
       body.appendChild(lt);
       rows.forEach(function(r, k){
         if (k === n - nb && lb) body.appendChild(lb);
