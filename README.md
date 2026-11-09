@@ -63,7 +63,7 @@ Only data from the 2020-21 season onward is used.
 | | Bets | Win % | ROI |
 |---|---|---|---|
 | At the opening line | 580 | 53.7% | +2.6% |
-| At the closing line | 840 | 55.1% | +3.0% |
+| At the closing line | 839 | about 55% | +3.1% |
 | Line shopping (best book) | | | about +2 pts more |
 
 The past edge is small (±3–4% uncertainty). The live paper-trading record decides whether it's real.
