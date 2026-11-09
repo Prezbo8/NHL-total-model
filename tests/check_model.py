@@ -454,6 +454,11 @@ print("paper record + network calls")
 cb = dashboard.closing_bets(real)
 check("record tiles cover every flagged pick (SLAM + 1U + PASS + AVOID = the record)",
       {dashboard.call(r, True) for r in cb.itertuples()} <= set(dashboard.RECORD_CALLS), str(dashboard.RECORD_CALLS))
+sl = cb[[dashboard.call(r, True) in ("SLAM", "1U") for r in cb.itertuples()]]
+tr_ = dashboard.team_over_rows(sl) if len(sl) else None
+check("Team over records: SLAM + 1U by team counts each pick for both teams (units = 2x the SLAM + 1U record)",
+      tr_ is None or (tr_.n.sum() == 2 * len(sl) and abs(tr_.units.sum() - 2 * sl.units.sum()) < 1e-9),
+      "" if tr_ is None else f"{tr_.n.sum()} vs {2 * len(sl)}")
 shutil.copy(paths.data("paper_trades.csv"), SP + "real_log.csv")
 paper.LOG, os.environ["RUN_SUMMARY"] = SP + "real_log.csv", SP + "report_summary.txt"
 with contextlib.redirect_stdout(io.StringIO()):

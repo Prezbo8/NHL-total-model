@@ -943,6 +943,50 @@ def yesterday(d):
       · <a href='days/{e(day)}.html'>day page →</a></p>{day_view(g)}"""
 
 
+def team_over_rows(x):
+    """One row per team: games, over-under-push vs the closing total, over %, units betting the over at the closing over price
+    (x needs res/units), average goals vs the close. Best units first. A game counts for both of its teams."""
+    rows = []
+    for t in sorted(set(x.away) | set(x.home)):
+        y = x[(x.away == t) | (x.home == t)]
+        o, u = int((y.res == "W").sum()), int((y.res == "L").sum())
+        rows.append((t, len(y), o, u, len(y) - o - u, o / (o + u) if o + u else float("nan"), y.units.sum(),
+                     (y.final_total - y.close_total).mean()))
+    return pd.DataFrame(rows, columns=["team", "n", "o", "u", "p", "over", "units", "vs"]).sort_values(["units", "over"], ascending=False)
+
+
+def team_over_table(t, games):
+    body = "".join(f"<tr><td>{logo(r.team, 18)} {e(r.team)}</td><td class='c'>{r.n}</td><td class='c'>{r.o}-{r.u}-{r.p}</td>"
+                   f"<td class='c'>{f'{r.over:.0%}' if r.over == r.over else '–'}</td>"
+                   f"<td class='r {'pos' if r.units > 0 else 'neg' if r.units < 0 else ''}'>{r.units:+.2f}u</td>"
+                   f"<td class='r'>{r.vs:+.2f}</td></tr>" for r in t.itertuples())
+    return (f"<div class='scroll'><table class='rec-t type-t'><thead><tr><th>Team</th><th class='c'>{games}</th>"
+            f"<th class='c'>{tip('O-U-P', 'Over-under-push: final goals vs the closing total.', 'tr')}</th><th class='c'>Over %</th>"
+            f"<th class='r'>{tip('Units', 'Betting the over at the closing consensus over price, 1 unit each game.', 'tr')}</th>"
+            f"<th class='r'>{tip('vs close', 'Average goals scored above (+) or below (−) the closing total.', 'tr')}</th></tr></thead>"
+            f"<tbody>{body}</tbody></table></div>")
+
+
+def team_records(d):
+    """Team over records at the closing line (every game that closed at 6 or 6.5) and SLAM + 1U records by team."""
+    g = d[d.final_total.notna() & d.close_total.notna() & d.close_over.notna() & (d.close_total >= 6)].copy()
+    if g.empty:
+        return "<p class='muted'>No finished games yet.</p>"
+    g["res"] = np.where(g.final_total > g.close_total, "W", np.where(g.final_total < g.close_total, "L", "P"))
+    g["units"] = np.where(g.res == "W", grade.payout(g.close_over), np.where(g.res == "L", -1.0, 0.0))
+    s = closing_bets(d)
+    s = s[[call(r, True) in ("SLAM", "1U") for r in s.itertuples()]]
+    picks = (team_over_table(team_over_rows(s), "Picks") if len(s) else "<p class='muted'>No SLAM or 1U picks have settled yet.</p>")
+    return f"""<div class='acc-grid'>
+        <div><h3>Over record · 6 / 6.5 closing lines</h3>{team_over_table(team_over_rows(g), "Games")}</div>
+        <div><h3>🔨 SLAM + 1U picks by team</h3>{picks}</div>
+      </div>
+      <ul class='notes'><li><b>Closing line.</b> Every game that closed at 6 or 6.5 ({len(g)} so far, {g.date.min()} to {g.date.max()}),
+      graded as an over at the closing consensus total and price, 1 unit each. A game counts for both teams.</li>
+      <li><b>SLAM + 1U</b> are the flagged picks in the paper record below, by team (a pick counts for both teams).</li>
+      <li>About 15 games a team is a small sample: early-season team records are mostly noise.</li></ul>"""
+
+
 def accuracy(d):
     """How the projections did: summary tiles, then by projected total and by call (last pre-game projection)."""
     s = current(d[d.final_total.notna()])
@@ -2363,6 +2407,8 @@ def build():
 <section><h2>Today's slate</h2>{slate(d)}</section>
 
 <section><h2>Yesterday's results</h2>{yesterday(d)}</section>
+
+<section><h2>Team over records</h2><div class="panel">{team_records(d)}</div></section>
 
 <section><h2>Paper trading record</h2>{record(d)}</section>
 
