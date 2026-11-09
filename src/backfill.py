@@ -33,7 +33,7 @@ def backfill(day):
     proj, project = sm.walk_split(games, known_starters=False, with_projector=True, live_season=season)
     cal = m.fit_calibration(proj[proj.season.between(2022, season - 1)])
     prev = proj[proj.season == season - 1]
-    cutoff = np.quantile(np.r_[prev.lam_h, prev.lam_a], m.HIGH_Q)
+    cutoff = m.flag_cutoff(prev)
     sched = [g for g in J(f"https://api-web.nhle.com/v1/score/{day}")["games"] if g["gameType"] == 2]
     tired = {g[s]["abbrev"] for g in J(f"https://api-web.nhle.com/v1/score/{d0 - timedelta(days=1)}")["games"]
              if g["gameType"] in (2, 3) and g.get("gameScheduleState", "OK") == "OK" for s in ("homeTeam", "awayTeam")}
@@ -61,7 +61,7 @@ def backfill(day):
         lh, la, det = project(h, a, hp, ap, h in tired, a in tired, detail=True, season=season)
         x, gap = lh + la, abs(lh - la)
         o = opens.get((h, a))
-        flag = bool(lh >= cutoff and la >= cutoff and o is not None and o["total"] in (6.0, 6.5))
+        flag = bool(m.both_high(lh, la, cutoff)) and o is not None and o["total"] in m.FLAG_LINES
         best = None
         for bk, t, ov, un in shop.get((h, a), []):  # NOTE: per-book lines here are closing lines
             if t in (6.0, 6.5):
