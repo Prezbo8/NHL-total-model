@@ -583,6 +583,15 @@ Trash: below 0.46'>Proj</span></th></tr></thead><tbody><tr><td class='mu-tm'><pi
         var p = body.querySelector('tr.rk-detail[data-team="' + r.dataset.team + '"]');
         r.classList.toggle('alt', k % 2 === 1); body.appendChild(r); if (p) body.appendChild(p);
       });
+      if (t.classList.contains('ov-t')) {  // Overview: # = rank in the sorted column (ties share a rank; # itself = Offense)
+        var c = i === 0 ? 2 : i, asc = rev ? rows.slice().reverse() : rows, last = null, rk = 0;
+        asc.forEach(function(r, k){
+          var cell = r.cells[c];
+          if (cell.classList.contains('muted')) { r.cells[0].textContent = '–'; return; }
+          if (cell.dataset.k !== last) { rk = k + 1; last = cell.dataset.k; }
+          r.cells[0].textContent = rk;
+        });
+      }
       Array.prototype.forEach.call(ths, function(h, j){ h.classList.toggle('sorted', j === i); h.classList.toggle('rev', j === i && rev); });
       t.dataset.sort = i; t.dataset.rev = rev ? '1' : '';
     }
