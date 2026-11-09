@@ -706,6 +706,10 @@ check(f"no look-ahead: every game before {_cut} gets the same projection and fla
       f"max difference {_d.max():.2e}; first game that changed: {_first} "
       + (str(_a.loc[_first[0], ['gameDate', 'home', 'away']].to_dict()) if _first else ""))
 
+_lvl = {int(k): v for k, v in (_full.groupby("season").proj.mean() - _full.groupby("season").total.mean()).items()}
+_done = {k: v for k, v in _lvl.items() if k < max(_lvl)}  # finished seasons (the current one is partial)
+check("season level: every finished season's mean projected total is within 0.3 goals of its mean actual goals",
+      all(abs(v) <= 0.3 for v in _done.values()), ", ".join(f"{k}-{str(k + 1)[2:]} {v:+.3f}" for k, v in _done.items()))
 _bad = [x for x in history.bad_lines() if x[0] >= 20200801 and not any(pd.isna(v) for v in x[4:])]  # 2020-21 on, real prices
 _fl = history.flagged(_full)
 _fl = set(zip(_fl[_fl.both].gameDate, _fl[_fl.both].away, _fl[_fl.both].home))

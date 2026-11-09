@@ -90,18 +90,21 @@ jobs:
               rows.append((f"{s}-{str(s + 1)[2:]}", len(o) or None, roi(o), len(c), roi(c)))
           o, c = history.bet_results(d, "open"), history.bet_results(d, "close")
           total = (len(o), roi(o), len(c), roi(c))
+          o2, c2 = history.bet_results(d[d.season >= 2022], "open"), history.bet_results(d[d.season >= 2022], "close")
+          head = (len(o2), roi(o2), len(c2), roi(c2))  # 2022-26: the headline (2021-22's cutoff comes from the cold-start season)
           print("per season (season, open bets, open ROI %, close bets, close ROI %):")
           for r in rows: print("  ", r)
           print("2021-26:", total)
+          print("2022-26:", head)
           # bets within 1 and ROI within 0.15 pts (small MoneyPuck revisions); None = no opening lines that season
           near = lambda a, b: a == b or (None not in (a, b) and not isinstance(a, str) and abs(a - b) <= (1 if isinstance(a, int) else 0.15))
           same = lambda x, y: len(x) == len(y) and all(near(a, b) for a, b in zip(x, y))
           assert len(rows) == len(dashboard.BACKTEST) and all(same(r, b) for r, b in zip(rows, dashboard.BACKTEST)) \
-              and same(total, dashboard.BACKTEST_TOTAL), \
-              f"the dashboard's Backtest tab no longer matches the model: set dashboard.BACKTEST = {rows} and BACKTEST_TOTAL = {total}"
+              and same(total, dashboard.BACKTEST_TOTAL) and same(head, dashboard.BACKTEST_HEADLINE), \
+              f"the dashboard's Backtest tab no longer matches the model: set dashboard.BACKTEST = {rows}, BACKTEST_TOTAL = {total} and BACKTEST_HEADLINE = {head}"
           open(os.environ["RUN_SUMMARY"], "a", encoding="utf-8").write(
               f"✓ Backtest unchanged: {total[0]} bets at the opening line ROI {total[1]:+.1f}%, {total[2]} at the close {total[3]:+.1f}% "
-              f"(= the dashboard's Backtest tab, every season)\n")
+              f"(2022-26: {head[0]} / {head[1]:+.1f}%, {head[2]} / {head[3]:+.1f}%; = the dashboard's Backtest tab, every season)\n")
           PY
       - name: Summary (what passed and how the run ended; also on the run's page)
         if: ${{ always() }}
