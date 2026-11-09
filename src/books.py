@@ -14,6 +14,12 @@ BOOKS = paths.data("odds_books.csv")
 
 
 NOT_BOOKS = {15, 30}  # Action Network's consensus and opening lines, not bettable
+MINE = ("DK", "DraftKings", "FanDuel", "BetRivers", "BetMGM", "Caesars")  # the books the owner bets (Nov 9 2026)
+
+
+def mine(name):
+    """True for one of MINE ('DK NJ', 'BetMGM NJ', ...): 'Best over' only considers these."""
+    return str(name).split(" ")[0] in MINE
 
 
 def book_names():

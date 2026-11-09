@@ -698,7 +698,9 @@ def today(day=None, preview=False):
         if r["book"] in books.NOT_BOOKS:
             continue
         key = (grade.ABBR.get(r["home"], r["home"]), grade.ABBR.get(r["away"], r["away"]))
-        shop.setdefault(key, []).append((names.get(r["book"], str(r["book"])), r["total"], int(r["over"]), int(r["under"])))
+        name = names.get(r["book"], str(r["book"]))
+        if books.mine(name):  # only the books the owner bets
+            shop.setdefault(key, []).append((name, r["total"], int(r["over"]), int(r["under"])))
     import confirm  # second and third sources for starting goalies (+ Rotowire injuries)
     if preview:  # both only list today's games: their starters would be wrong for another day
         (rw_goalies, rw_injuries), gp_goalies = ({}, {}), {}

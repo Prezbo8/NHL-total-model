@@ -17,13 +17,14 @@ import paths
 SPEED = paths.data("team_speed.csv")
 SPEED_DETAIL = "https://api-web.nhle.com/v1/edge/team-skating-speed-detail/{}/{}/2"
 TEAMS_URL = "https://api.nhle.com/stats/rest/en/team"
+TEAMS_NOW = 32  # NHL teams (2024-25 on); a season's speed counts as downloaded only with all of them
 CARRY = {"ARI": "UTA"}  # franchise moves: last season's speed belongs to the new team
 
 
 def refresh(season):
     """Download one season's team speed (NHL EDGE) into data/team_speed.csv (idempotent)."""
     have = pd.read_csv(SPEED) if os.path.exists(SPEED) else pd.DataFrame(columns=["season", "team"])
-    if (have.season == season).sum() >= 30:
+    if (have.season == season).sum() >= TEAMS_NOW:  # every team: done for the season
         return
     ids = {t["triCode"]: t["id"] for t in json.load(urllib.request.urlopen(m.fetch(TEAMS_URL), timeout=30))["data"]}
     try:  # only teams that exist now (the NHL team list also has defunct franchises)
@@ -45,7 +46,14 @@ def refresh(season):
             print(f"  (speed: skipped {abbr} {season}: {e})")
         time.sleep(0.2)
     if rows:
-        pd.concat([have[have.season != season], pd.DataFrame(rows)], ignore_index=True).to_csv(SPEED, index=False)
+        got = {r["team"] for r in rows}
+        keep = have[(have.season != season) | ~have.team.isin(got)]  # a team fetched earlier but skipped now stays
+        out = pd.concat([keep, pd.DataFrame(rows)], ignore_index=True)
+        out.to_csv(SPEED, index=False)
+        n = int((out.season == season).sum())
+        if n < TEAMS_NOW:  # the rest are tried again at the next stats run (until then a missing team counts as average)
+            import health
+            health.note(f"⚠ Team speed {season}: {n} of {TEAMS_NOW} teams downloaded; the rest are tried again next run")
 
 
 def z_prev(games):
