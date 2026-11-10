@@ -403,7 +403,7 @@ def _team(t, x, opp):
 def write(f):
     """The note for one game (facts() -> plain text)."""
     (a, xa), (h, xh) = f["teams"].items()
-    why = re.sub(r"^\w+: ", "", f["why_this_call"]).strip()
+    why = re.sub(r"^(?:🔨\s*)?\w+:\s*", "", f["why_this_call"]).strip()  # drop the call label ('PASS:', '🔨 SLAM:')
     why = why[0].upper() + why[1:] if why else ""
     line = f" on the {f['line']} line" if f.get("line") else " (no line yet)"
     call = _pick([f"The call is {f['call']}{line}: the model projects {f['projected_total']} goals ({a} {xa['projected_goals']}, "

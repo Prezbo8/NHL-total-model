@@ -1198,14 +1198,19 @@ def record(d):
     calls = [call(r, True) for r in s.itertuples()]
     s["call"] = calls
     by = {c: s[s.call == c] for c in RECORD_CALLS}  # AVOID = flagged, but both teams faced strong goalies (Nov 1 2026: MIN@WSH)
+    bets = s[s.call.isin(["SLAM", "1U"])]  # what the owner actually bets (PASS / AVOID are not bets)
+    off = cur[cur.flag & cur.final_total.notna() & cur.close_total.notna() & ~cur.close_total.isin([6.0, 6.5])]
     tiles = [
-        ("Flagged picks", f"{len(f)}", f"{len(s)} settled"),
+        ("Flagged picks", f"{len(f)}", f"{len(s)} settled · {len(off)} closed off 6/6.5"),
         ("Record", f"{w}-{l}-{p}" if len(s) else "–", f"{(dec.res == 'W').mean():.1%} wins" if len(dec) else "no results yet"),
         ("ROI · closing line", pct(s.units.mean() * 100) if len(s) else "–", f"{s.units.sum():+.2f}u" if len(s) else "&nbsp;"),
+        ("Bets · SLAM + 1U", f"{(bets.res == 'W').sum()}-{(bets.res == 'L').sum()}-{(bets.res == 'P').sum()}" if len(bets) else "–",
+         f"{bets.units.sum():+.2f}u · ROI {pct(bets.units.mean() * 100)}" if len(bets) else "&nbsp;"),
     ] + [(f"{'🔨 ' if c == 'SLAM' else ''}{c}", f"{(x.res == 'W').sum()}-{(x.res == 'L').sum()}-{(x.res == 'P').sum()}" if len(x) else "–",
           f"{x.units.sum():+.2f}u" if len(x) else "&nbsp;") for c, x in by.items()]
-    rec_tips = {"Flagged picks": "Live OVER FLAG picks: games still flagged at the last model run before puck drop (retroactive days excluded).",
-                "Record": "Wins-losses-pushes of those flagged overs at the closing consensus total.",
+    rec_tips = {"Flagged picks": "Live OVER FLAG picks: games still flagged at the last model run before puck drop (retroactive days excluded). A pick whose line closed off 6 / 6.5 (5.5 or 7) is not graded: counted here.",
+                "Record": "Wins-losses-pushes of every flagged over at the closing consensus total, including PASS and AVOID calls (not bets). Your bets: the SLAM + 1U tile.",
+                "Bets · SLAM + 1U": "The picks that are bets (SLAM and 1U), at the closing consensus line and price, 1 unit each.",
                 "ROI · closing line": "Profit per unit risked at the closing consensus over price. Break-even at −110 needs 52.4% wins.",
                 "🔨 SLAM": "Flagged picks the last pre-game call made a SLAM, at the closing line.",
                 "1U": "Flagged picks the last pre-game call made a 1U, at the closing line.",
@@ -2016,6 +2021,9 @@ def backtest():
             each team's projection before the cutoff test; with injuries from who actually dressed (the best case: live
             only knows the projected lineup) the live rule went 817 bets <b>+3.5%</b> at the close and 562 +3.7% at the open
             in 2021-26, within noise of the table (research/studies/flag_injuries.py, Nov 10 2026).</li>
+        <li><b>Settings chosen with these results.</b> Most research studies judged ideas on accuracy and on these same
+            seasons' units, and a few were kept or rejected partly on units, which makes the table somewhat optimistic.
+            New studies are judged on accuracy first, with units shown with error bars.</li>
         <li><b>Fitted on these same seasons</b>, so the backtest is somewhat optimistic: the SLAM / 1U rule (chosen on 2021-26)
             and its tier cutoffs (2024-26), team speed (2022-26), back-to-back factors (2022-24), the 'other goals' amount
             (2021-26 average) and the late-season elimination factor (2021-26). 2023-24 had very few flags, so its ROI is
