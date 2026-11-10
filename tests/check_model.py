@@ -21,7 +21,7 @@ def offline(ex):
     if isinstance(ex, urllib.error.HTTPError):
         return ex.code >= 500 or ex.code == 429
     return isinstance(ex, (OSError, TimeoutError))
-def live(name, fn, tries=3, wait=10):
+def live(name, fn, tries=3, wait=10, quiet=False):
     """fn() from a real website, retried; None (and a SKIP) when the site stays unreachable."""
     import time
     for i in range(tries):
@@ -33,11 +33,12 @@ def live(name, fn, tries=3, wait=10):
             err = f"{type(ex).__name__}: {str(ex)[:100]}"
             if i < tries - 1:
                 time.sleep(wait)
-    skip(name, err)
-def skip(name, why):
+    skip(name, err, quiet)
+def skip(name, why, quiet=False):
     skipped.append(name)
-    print(f"  SKIP  {name}  -- site unreachable ({why}); not a code failure")
-    print(f"::warning::check skipped, site unreachable: {name} ({why})")
+    if not quiet:
+        print(f"  SKIP  {name}  -- site unreachable ({why}); not a code failure")
+        print(f"::warning::check skipped, site unreachable: {name} ({why})")
 
 print("paper log")
 real = paper.read_log()
@@ -783,7 +784,7 @@ def _reset():
     _n["k"] += 1
     raise ConnectionResetError(104, "Connection reset by peer")
 _sk = len(skipped)
-_got = live("(self-test) a site that keeps resetting", _reset, tries=2, wait=0)
+_got = live("(self-test) a site that keeps resetting", _reset, tries=2, wait=0, quiet=True)
 _tries = _n["k"]
 skipped.pop()  # the self-test's own skip doesn't count
 from urllib.error import HTTPError as _HTTPError
