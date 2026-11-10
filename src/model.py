@@ -39,7 +39,7 @@ B2B_TIRED = 0.92     # tired team scores ~8% fewer goals than projected
 B2B_VS_TIRED = 1.065  # its opponent scores ~6.5% more
 # team skating speed (previous season's 20+ mph bursts per game, z-score), fitted on 2022-26 (5,248 games)
 SPEED_OWN = 0.020    # +2.0% own scoring per SD of own speed (±0.6%)
-SPEED_OPP = -0.017   # -1.7% to the opponent's scoring per SD (±0.6%); net on a total +0.4% per SD
+SPEED_OPP = -0.017   # -1.7% to the opponent's scoring per SD (±0.6%); net about +0.3% per SD (research/studies/speed_fit.py)
 
 
 def load_goalies():

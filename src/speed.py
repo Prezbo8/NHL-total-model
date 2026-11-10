@@ -2,7 +2,8 @@
 
 Each team's rating for a season is its PREVIOUS season's bursts per game, as a z-score vs the league
 (known before every game; Arizona's carries over to Utah). Fitted on 2022-26 (5,248 games): a team
-scores +2.0% per SD of its own speed and its opponent -1.7% (net +0.4% on the game total per SD).
+scores +2.0% per SD of its own speed and its opponent -1.7% (net about +0.3% per SD). Reproduced by
+research/studies/speed_fit.py (Nov 10 2026): both parts beyond noise, the net within noise.
 """
 import json
 import os
