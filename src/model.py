@@ -427,8 +427,10 @@ def flag_cutoff(prev):
 
 
 def both_high(lam_h, lam_a, cutoff):
-    """Both teams projected high-scoring (numbers or pandas columns)."""
-    return (lam_h >= cutoff) & (lam_a >= cutoff)
+    """Both teams projected high-scoring (numbers or pandas columns), compared at 3 decimals: the precision the paper
+    log stores and the dashboard shows, so a team shown at the cutoff is always counted as high (Nov 7 2026 NYR@SEA:
+    SEA 3.0955 vs 3.0962 showed both HIGH but wasn't flagged)."""
+    return (np.round(lam_h, 3) >= np.round(cutoff, 3)) & (np.round(lam_a, 3) >= np.round(cutoff, 3))
 
 
 def check_daily_stats(health):
@@ -800,7 +802,7 @@ def today(day=None, preview=False):
         p7 = p_from(cal, 7, x, gap)
         ln = lines.get((h, a), {})
         cur = ln.get("now") or ln.get("open")
-        high_h, high_a = lh >= cutoff, la >= cutoff
+        high_h, high_a = bool(both_high(lh, lh, cutoff)), bool(both_high(la, la, cutoff))  # same 3-decimal test as the flag
         flag = bool(both_high(lh, la, cutoff)) and cur is not None and cur["total"] in FLAG_LINES
         star = "  *** OVER FLAG ***" if flag else ""
         print(f"{a:>3} @ {h:<3}  proj {x:4.2f} ({a} {la:.2f}{'+' if high_a else ''}, {h} {lh:.2f}{'+' if high_h else ''})"
@@ -853,7 +855,7 @@ def today(day=None, preview=False):
     print("\n(goalie % = share of expected goals stopped beyond average; higher = better)")
     print("OVER FLAG = both teams high-scoring (marked +) and the line is 6 or 6.5. Overs only, never 5.5.")
     print("Always bet the 'best over' book: line shopping added ~+2 pts ROI in the backtest.")
-    print("Model uses 2020-21 onward only. Tested 2021-26: +2.8% ROI at open, +3.1% at close, 54-55% wins"
+    print("Model uses 2020-21 onward only. Tested 2021-26: +2.8% ROI at open, +3.0% at close, 54-55% wins"
           " (+2 pts more with line shopping). Small, unproven edge: judge it on live paper trading.")
     print("\nTODAY'S FLAGS: " + ("; ".join(flagged) if flagged else "none"))
     what = f"{health.plural(len(log_rows), 'game')} for {date.fromisoformat(day):%a, %b %-d}" if log_rows else f"no NHL games on {date.fromisoformat(day):%a, %b %-d}"
