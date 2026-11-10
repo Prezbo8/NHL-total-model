@@ -23,18 +23,24 @@ def scoreboard(d):
         return json.load(f)
 
 
+def _p(odds):
+    return 100 / (odds + 100) if odds > 0 else -odds / (-odds + 100)
+
+
 def totals(g):
     """{book id: (total, over price, under price)} for one v2 game: each book's main game total (markets -> book ->
-    event -> total: an over and an under at the same value; live and alternate lines skipped)."""
+    event -> total: an over and an under at the same value). Live, alternate and suspended lines (line_status other
+    than 'normal') are skipped; if a book still has several totals, its main one is the pair priced closest to even."""
     out = {}
     for book, mk in (g.get("markets") or {}).items():
         ts = [o for o in ((mk or {}).get("event") or {}).get("total") or []
-              if not o.get("is_live") and not o.get("is_alt_market") and o.get("odds") is not None and o.get("value") is not None]
+              if not o.get("is_live") and not o.get("is_alt_market") and o.get("line_status") in (None, "normal")
+              and o.get("odds") is not None and o.get("value") is not None]
         under = {o["value"]: o["odds"] for o in ts if o.get("side") == "under"}
-        for o in ts:
-            if o.get("side") == "over" and o["value"] in under:
-                out[int(book)] = (float(o["value"]), int(o["odds"]), int(under[o["value"]]))
-                break
+        pairs = [(float(o["value"]), int(o["odds"]), int(under[o["value"]])) for o in ts
+                 if o.get("side") == "over" and o["value"] in under]
+        if pairs:  # the main line: fair over chance closest to 50%
+            out[int(book)] = min(pairs, key=lambda x: abs(_p(x[1]) / (_p(x[1]) + _p(x[2])) - 0.5))
     return out
 
 

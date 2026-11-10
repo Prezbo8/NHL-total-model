@@ -70,25 +70,33 @@ oct1 = real[real.date == "2026-10-01"].copy()
 for c in ("away_score", "home_score", "final_total", "close_total", "close_over", "close_under", "result", "profit", "clv", "result_best", "profit_best"):
     oct1[c] = None
 oct1.to_csv(paper.LOG, index=False)
-for _try in range(3):  # reads the real NHL score feed + Action Network; settle() skips a day it can't read
-    os.environ["RUN_SUMMARY"] = SP + "settle_summary.txt"
-    open(SP + "settle_summary.txt", "w").close()
+# from saved responses (tests/fixtures: the NHL score feed and Action Network's v2 scoreboard for Oct 1 2026), so the
+# exact result can't change because a website stops serving or changes old dates
+import io as _io
+_fxdir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures")
+_load = lambda name: json.load(open(os.path.join(_fxdir, name), encoding="utf-8"))
+_real_open0, _real_board0 = paper.urllib.request.urlopen, paper.odds.scoreboard
+def _saved_open(req, *a, **k):
+    u = str(getattr(req, "full_url", req))
+    if u.endswith("/score/2026-10-01"):
+        return _io.BytesIO(json.dumps(_load("nhl_score_20261001.json")).encode())
+    raise OSError(f"no saved response for {u}")
+paper.urllib.request.urlopen = _saved_open
+paper.odds.scoreboard = lambda d: _load(f"an_v2_{d:%Y%m%d}.json")
+os.environ["RUN_SUMMARY"] = SP + "settle_summary.txt"
+try:
     paper.settle()
-    os.environ.pop("RUN_SUMMARY")
-    settle_note = open(SP + "settle_summary.txt", encoding="utf-8").read().strip()
-    if "Couldn't settle" not in settle_note:
-        break
-    import time; time.sleep(10)
+finally:
+    paper.urllib.request.urlopen, paper.odds.scoreboard = _real_open0, _real_board0
+os.environ.pop("RUN_SUMMARY")
+settle_note = open(SP + "settle_summary.txt", encoding="utf-8").read().strip()
 s = paper.read_log()
 fs = s[s.flag].iloc[0]
-if "Couldn't settle" in settle_note:
-    skip("settling Oct 1 from the real score feed and odds (5 checks)", settle_note)
-else:
-    check("Oct 1 re-settles: all 8 finals", s.final_total.notna().sum() == 8)
-    check("settle: the run's summary says what it settled", settle_note == "✓ Settled 8 finished games; bets: FLA@SJS W", settle_note)
-    check("Oct 1 totals match the real scores", list(s.final_total.astype(int)) == list(real[real.date == "2026-10-01"].final_total.astype(int)))
-    check("flagged FLA@SJS: W +1.02 at consensus, best-book scored too", fs.result == "W" and abs(fs.profit - 1.02) < 1e-9 and not pd.isna(fs.profit_best))
-    check("unflagged games not scored as bets", s[~s.flag].result.isna().all())
+check("Oct 1 re-settles (saved responses): all 8 finals", s.final_total.notna().sum() == 8)
+check("settle: the run's summary says what it settled", settle_note == "✓ Settled 8 finished games; bets: FLA@SJS W", settle_note)
+check("Oct 1 totals match the real scores", list(s.final_total.astype(int)) == list(real[real.date == "2026-10-01"].final_total.astype(int)))
+check("flagged FLA@SJS: W +1.02 at consensus, best-book scored too", fs.result == "W" and abs(fs.profit - 1.02) < 1e-9 and not pd.isna(fs.profit_best))
+check("unflagged games not scored as bets", s[~s.flag].result.isna().all())
 # offline: a postponed game leaves the log; a score-feed outage skips that day without failing the step
 import io
 two = oct1.iloc[:2].copy()
@@ -257,11 +265,26 @@ check("Action Network v2 (saved real responses): finished games' consensus close
       and any(r["total"] == 5.5 and r["over"] == -141 for r in _open)
       and {r["book"] for r in _shop} >= {15, 30, 68, 69, 71} and all(isinstance(r["over"], int) for r in _shop),
       f"{len(_done)} finished, {len(_now)} now, {len(_open)} open, {len(_shop)} book lines; EDM {_edm}")
-rows = live("closing lines parse (Action Network)", lambda: odds.day_games(datetime.date(2026, 10, 1), 15))
-if rows is not None:
-    check("closing lines parse", len(rows) == 8, f"{len(rows)} games")
-    abbrs = {grade.ABBR.get(x, x) for r in rows for x in (r["home"], r["away"])}
-    check("sportsbook team codes match NHL codes", abbrs <= set(g.home), str(sorted(abbrs - set(g.home))))
+rows = odds.day_games(datetime.date(2026, 10, 1), 15, data=_fx("20261001"))  # saved response
+check("closing lines parse (Oct 1, saved)", len(rows) == 8, f"{len(rows)} games")
+abbrs = {grade.ABBR.get(x, x) for r in rows for x in (r["home"], r["away"])}
+check("sportsbook team codes match NHL codes", abbrs <= set(g.home), str(sorted(abbrs - set(g.home))))
+_today = live("Action Network: today's v2 scoreboard parses (live)",
+              lambda: odds.day_games(datetime.date.today(), 15, completed_only=False))
+if _today is not None:
+    check("Action Network: today's v2 scoreboard parses (live; a changed API fails here)",
+          isinstance(_today, list) and all({"total", "over", "under"} <= set(r) for r in _today), f"{len(_today)} games today")
+_mk = lambda *outs: {"markets": {"15": {"event": {"total": [dict(zip(("side", "value", "odds"), o), **x) for o, x in outs]}}}}
+_n = {}
+_two = odds.totals(_mk((("over", 6, -150), {}), (("under", 6, 125), {}), (("over", 6.5, -105), {}), (("under", 6.5, -115), {})))
+_sus = odds.totals(_mk((("over", 7, 105), {"line_status": "suspended"}), (("under", 7, -125), {"line_status": "suspended"}),
+                       (("over", 6.5, -110), _n), (("under", 6.5, -110), _n)))
+_one = odds.totals(_mk((("over", 6.5, -110), {}),))
+_alt = odds.totals(_mk((("over", 5.5, -180), {"is_alt_market": True}), (("under", 5.5, 150), {"is_alt_market": True}),
+                       (("over", 6.5, 100), {"is_live": True}), (("under", 6.5, -120), {"is_live": True})))
+check("Action Network v2 edge cases: two totals -> the one priced closest to even; suspended, live and alternate lines "
+      "skipped; a lone over isn't a line; text book ids become numbers",
+      _two == {15: (6.5, -105, -115)} and _sus == {15: (6.5, -110, -110)} and _one == {} and _alt == {}, f"{_two} {_sus} {_one} {_alt}")
 
 print("source retries + alerts (fake sources, nothing real is called)")
 import health
