@@ -320,9 +320,15 @@ def _pick(options, key):
     return options[sum(map(ord, key)) % len(options)]
 
 
+TWO_WORD = ("Blue Jackets", "Red Wings", "Maple Leafs", "Golden Knights")  # nicknames of two words
+
+
 def _name(t):
+    """The city: 'Buffalo Sabres' -> 'Buffalo', 'Toronto Maple Leafs' -> 'Toronto', 'New York Rangers' -> 'New York'."""
     from teams import TEAMS
-    return " ".join(TEAMS.get(t, t).split()[:-1]) or t  # 'Buffalo Sabres' -> 'Buffalo'
+    full = TEAMS.get(t, t)
+    cut = 2 if full.endswith(TWO_WORD) else 1
+    return " ".join(full.split()[:-cut]) or t
 
 
 def hook(f):

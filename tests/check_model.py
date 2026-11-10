@@ -639,6 +639,10 @@ check("game notes: numbers get the dashboard's colors (breakdown tiers, matchup 
       "<span class='nv t-great'>+0.21</span>" in chips and "<span class='nv t-trash'>-0.14</span>" in chips and "<span class='nv t-good'>2.12</span>" in chips
       and "<span class='nv t-good'>53%</span>" in chips and "<span class='nv hot'>7-2-1</span>" in chips and "<span class='nv t-good'>#11</span>" in chips
       and "the OTT #2 defense" in chips and "<span class='nv t-great'>+0.85</span>" in chips and "&lt;b&gt;" in chips and "(6.55)" in chips, chips)
+_cities = {t: notes._name(t) for t in ("TOR", "CBJ", "DET", "VGK", "NYR", "STL", "BUF", "UTA")}
+check("game notes: team names become cities (two-word nicknames like Maple Leafs too)",
+      _cities == {"TOR": "Toronto", "CBJ": "Columbus", "DET": "Detroit", "VGK": "Vegas", "NYR": "New York", "STL": "St. Louis",
+                  "BUF": "Buffalo", "UTA": "Utah"}, str(_cities))
 check("game notes: the lead is the game's most unusual fact", "streak (W4)" in max(notes.leads(nf))[2], max(notes.leads(nf))[2])
 
 print("early goalies, ESPN fallback, last game's lineup")
