@@ -1147,7 +1147,8 @@ def tracked_bets(d):
     avoid = cur[[call(r, bool(r.flag)) == "AVOID" for r in cur.itertuples()]]
     picks.append(avoid.assign(kind="AVOID", side="u"))
     t = pd.concat(picks) if picks else cur.assign(kind="", side="")
-    t = t[t.final_total.notna() & t.close_total.notna() & t.close_over.notna() & t.close_under.notna()].copy()
+    priced = np.where(t.side == "o", t.close_over.notna(), t.close_under.notna())  # the price of the side graded
+    t = t[t.final_total.notna() & t.close_total.notna() & priced].copy()
     if t.empty:
         return t.assign(res=[], units=[])
     over = np.sign(t.final_total - t.close_total) * np.where(t.side == "o", 1, -1)
