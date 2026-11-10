@@ -69,6 +69,8 @@ jobs:
           echo "✓ Component checks: $(tail -1 /tmp/checks.txt)" >> "$RUN_SUMMARY"
       - name: Projection run for tomorrow (never logged)
         id: projection-run
+        env:
+          NHL_RETRY_BUDGET: "120"   # a smoke test: 2 min of source retries, not the live run's 15 (just after midnight ET tomorrow's slate isn't posted yet)
         run: |
           set -o pipefail   # without it a crash here would still pass (tail succeeds)
           python src/model.py today "$(date -d tomorrow +%F)" | tail -8
