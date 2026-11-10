@@ -165,13 +165,15 @@ def moneypuck_newer():
         raise
 
 
-def load_games(refresh=False, xg="xGoals"):
+def load_games(refresh=False, xg="xGoals", first_season=2020):
+    """One row per regular-season game from the MoneyPuck team file, 2020-21 on (the data rule; the live model and the
+    backtest use split_model.load_split, which reads this)."""
     if refresh:
         refresh_data()
     d = pd.read_csv(DATA, usecols=["season", "gameId", "playerTeam", "opposingTeam", "home_or_away",
                                    "gameDate", "situation", "goalsFor", "goalsAgainst",
                                    f"{xg}For", f"{xg}Against", "playoffGame"])
-    d = d[(d.situation == "all") & (d.playoffGame == 0) & (d.home_or_away == "HOME")]
+    d = d[(d.situation == "all") & (d.playoffGame == 0) & (d.home_or_away == "HOME") & (d.season >= first_season)]
     # older MoneyPuck seasons use "L.A" etc.; match the NHL API's abbreviations
     d = d.replace({"playerTeam": MP_ABBR, "opposingTeam": MP_ABBR})
     g = d.rename(columns={"playerTeam": "home", "opposingTeam": "away", "goalsFor": "hg",

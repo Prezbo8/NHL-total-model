@@ -858,6 +858,28 @@ except _HTTPError:
 check("live-site checks: a connection reset is retried then SKIPPED (not a failure); a 404 (changed API) still fails",
       _got is None and _tries == 2 and len(skipped) == _sk and _api == "failed", f"{_got} {_tries} {_api}")
 
+_gs, _gg, _get = goalies.STARTS, goalies.GOALIE_GAMES, goalies.get
+goalies.STARTS, goalies.GOALIE_GAMES = SP + "starts.csv", SP + "goalie_games.csv"
+pd.DataFrame({"season": 2026, "gameId": range(100), "team": "BOS", "playerId": 1, "name": "A", "started": 1}).to_csv(goalies.STARTS, index=False)
+pd.DataFrame({"playerId": 1, "season": 2026, "gameId": range(100), "gameDate": 0, "name": "A", "xGoals": 1.0, "goals": 1}).to_csv(goalies.GOALIE_GAMES, index=False)
+goalies.get = lambda url, tries=4: json.dumps({"data": []}).encode()  # the feed answers, with nothing
+try:
+    goalies.refresh([2026]); _kept = len(pd.read_csv(goalies.STARTS))
+finally:
+    goalies.STARTS, goalies.GOALIE_GAMES, goalies.get = _gs, _gg, _get
+check("goalie starts: an empty answer from the NHL feed keeps the saved season (with a warning) instead of wiping it",
+      _kept == 100, f"{_kept} rows kept")
+_mt = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".github", "workflows", "monthly.yml"), encoding="utf-8").read()
+check("monthly check: uses the stats run's MoneyPuck copy (downloads only if there's none); old loader is 2020+ only",
+      "os.path.exists(model.DATA) or model.refresh_data()" in _mt and "assert model.refresh_data() or" not in _mt
+      and m.load_games().season.min() >= 2020, str(m.load_games().season.min()))
+
+import retune
+_tl, _ = retune.tier_section(2026)
+_row = next((l for l in _tl if l.startswith("| 5v5")), "")
+check("October tier report: a 'Rule (two previous seasons)' column (2024-26 = the live cutoffs) beside the drift view",
+      any("Rule (two previous seasons)" in l for l in _tl) and _row.split("|")[3].strip() == "1.83 / 1.94 / 2.05 / 2.19", _row)
+
 print("team rankings page (Overview, Offense, Defense, Form)")
 rk_html = dashboard.rankings(real)
 misaligned = []

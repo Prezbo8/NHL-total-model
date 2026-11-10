@@ -42,23 +42,27 @@ def tier_section(season):
     p = sm.walk_split(sm.load_split(), known_starters=False, record_detail=True, live_season=season)
     p = p[p.season.between(season - 2, season)]
     lines = ["## 1. Tier cutoffs (trash | bad | mid | good | great boundaries)", "",
-             f"Recomputed from {len(p) * 2:,} team-games ({season - 2}-{str(season - 1)[2:]} to now, "
-             f"{(p.season == season).sum() * 2} from this season).", "",
-             "| Stat | Dashboard now | Recomputed | Drifted? |", "|---|---|---|---|"]
+             f"**Rule** = quintiles of the two previous seasons only ({season - 2}-{str(season - 1)[2:]} and "
+             f"{season - 1}-{str(season)[2:]}): the cutoffs to apply at the start of a season (dashboard.TIERS). "
+             f"**With this season** adds this season's {(p.season == season).sum() * 2} team-games so far: drift information only.", "",
+             "| Stat | Dashboard now | Rule (two previous seasons) | With this season | Drifted? |", "|---|---|---|---|---|"]
     drift = []
-    for col, name, pct in STATS:
-        v = pd.concat([p[f"home_{col}"], p[f"away_{col}"]]).dropna()
+
+    def cuts(x, col):
+        v = pd.concat([x[f"home_{col}"], x[f"away_{col}"]]).dropna()
         if col == "spd":
             v = v[v != 0]  # seasons without speed data
-        new = tuple(np.quantile(v, [0.2, 0.4, 0.6, 0.8])) if len(v) else ()
+        return tuple(np.quantile(v, [0.2, 0.4, 0.6, 0.8])) if len(v) else ()
+    for col, name, pct in STATS:
+        rule, new = cuts(p[p.season < season], col), cuts(p, col)
         old = dashboard.TIERS[col]
         gap = np.mean(np.diff(old))
         moved = bool(new) and any(abs(a - b) > 0.5 * gap for a, b in zip(old, new))
         if moved:
             drift.append(name)
-        lines.append(f"| {name} | {' / '.join(fmt(x, pct) for x in old)} | "
-                     f"{' / '.join(fmt(x, pct) for x in new) if new else 'n/a'} | {'**yes**' if moved else 'no'} |")
-    lines += ["", "A cutoff 'drifts' when it moved more than half a tier's width."]
+        show = lambda t: " / ".join(fmt(x, pct) for x in t) if t else "n/a"
+        lines.append(f"| {name} | {show(old)} | {show(rule)} | {show(new)} | {'**yes**' if moved else 'no'} |")
+    lines += ["", "A cutoff 'drifts' when the 'with this season' value moved more than half a tier's width from the dashboard's."]
     return lines, drift
 
 
