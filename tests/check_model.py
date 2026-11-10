@@ -684,8 +684,8 @@ check("Best over: only the owner's books (DraftKings, FanDuel, BetRivers, BetMGM
       all(_bk.mine(b) for b in ("DK NJ", "FanDuel NJ", "BetRivers NJ", "BetMGM NJ", "Caesars NJ"))
       and not any(_bk.mine(b) for b in ("bet365 NJ", "Parx", "Bovada", "Kalshi", "Parx NJ")))
 _dsrc = open(dashboard.__file__, encoding="utf-8").read()
-check("site: the stale-run warning uses 2.5 h in game hours and 12 h overnight; the backtest call rates say they're in-sample",
-      "? 2.5 : 12" in _dsrc and all("not a fair test" in dashboard.CALL_HISTORY[c] for c in dashboard.CALL_HISTORY))
+check("site: the stale-run warning uses 2.5 h in game hours and 12 h overnight; the backtest call rates say how their tier cutoffs were cut",
+      "? 2.5 : 12" in _dsrc and all("cut only from the two seasons before" in dashboard.CALL_HISTORY[c] for c in dashboard.CALL_HISTORY))
 
 print("no look-ahead (the backtest projects every game from earlier games only)")
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "research", "lib"))

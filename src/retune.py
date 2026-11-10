@@ -7,7 +7,8 @@
 4. Goalie predictions: how often the goalie the projection used actually started.
 
 Report only: nothing in the model changes by itself (a new cutoff changes which games are SLAMs, so that's
-a decision). The report is saved to data/monthly/YYYY-MM.md and posted as a GitHub issue.
+a decision). Rule (Nov 10 2026): at the start of each season the cutoffs become the quintiles of the two previous
+full seasons; the October report gives them, and they're applied then. The report is saved to data/monthly/YYYY-MM.md and posted as a GitHub issue.
 
   python3 src/retune.py            # write this month's report
   python3 src/retune.py --issue    # ... and post it as a GitHub issue (needs GH_TOKEN)
@@ -28,8 +29,8 @@ import paths
 import split_model as sm
 
 OUT_DIR = paths.data("monthly")
-# 2021-26 backtest, closing lines (what the dashboard's history sentences quote)
-BACKTEST = {"SLAM": 0.568, "1U": 0.585, "PASS": 0.452, "AVOID": 0.49}
+# 2021-26 backtest, closing lines (what the dashboard's history sentences quote; fair cutoffs, Nov 10 2026)
+BACKTEST = {"SLAM": 0.578, "1U": 0.614, "PASS": 0.489, "AVOID": 0.49}  # tier cutoffs from earlier seasons (walk_forward_tiers.py)
 STATS = (("ev", "5v5", False), ("pp", "PP", False), ("gadj", "Gl", True), ("spd", "Spd", True))
 
 
