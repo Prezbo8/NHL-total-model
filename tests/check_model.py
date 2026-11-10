@@ -843,6 +843,15 @@ for t in re.findall(r"<table class='gt rk-t[^']*'.*?</table>", rk_html, re.S):  
     body = re.search(r"<tr class='rk-row'[^>]*>(.*?)</tr>", t, re.S)
     if body and names.count("<th") != body.group(1).count("<td"):
         misaligned.append(f"{names.count('<th')} column names vs {body.group(1).count('<td')} cells")
+_tpl = re.findall(r"<template id='rkg-([A-Z]+)'>", rk_html)
+check("rankings page: each team's game-by-game panel is written once (a template copied in when its row opens), not once per table",
+      len(_tpl) == len(set(_tpl)) and len(_tpl) >= 30 and rk_html.count("class='rk-games'") == 2 * len(_tpl)
+      and "<template id='rkg-none'>" in rk_html, f"{len(_tpl)} templates, {rk_html.count(chr(39) + 'rk-games' + chr(39))} panel slots")
+_tips = re.findall(r"data-tip='([^']*)'", rk_html + dashboard.day_table(real[real.date == real.date.max()]))
+check("tooltips are plain text (no HTML tags, raw or escaped)", not any("<" in t or "&lt;" in t for t in _tips),
+      next((t[:120] for t in _tips if "<" in t or "&lt;" in t), ""))
+check("flag rule compares at 3 decimals (what the page shows): 3.0958 vs a 3.0962 cutoff is high, 3.0954 isn't",
+      bool(m.both_high(3.0958, 3.2, 3.0962)) and not bool(m.both_high(3.0954, 3.2, 3.0962)))
 views = re.findall(r"data-show='(\w+)'", rk_html)
 check("rankings page: Overview first, then Offense / Defense / Form; each table's column names line up with its rows (sorting); "
       "Form has group labels, the 'Right now' box and one-line schedule cells (no Chg columns)",

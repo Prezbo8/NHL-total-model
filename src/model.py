@@ -427,8 +427,10 @@ def flag_cutoff(prev):
 
 
 def both_high(lam_h, lam_a, cutoff):
-    """Both teams projected high-scoring (numbers or pandas columns)."""
-    return (lam_h >= cutoff) & (lam_a >= cutoff)
+    """Both teams projected high-scoring (numbers or pandas columns), compared at 3 decimals: the precision the paper
+    log stores and the dashboard shows, so a team shown at the cutoff is always counted as high (Nov 7 2026 NYR@SEA:
+    SEA 3.0955 vs 3.0962 showed both HIGH but wasn't flagged)."""
+    return (np.round(lam_h, 3) >= np.round(cutoff, 3)) & (np.round(lam_a, 3) >= np.round(cutoff, 3))
 
 
 def check_daily_stats(health):
@@ -800,7 +802,7 @@ def today(day=None, preview=False):
         p7 = p_from(cal, 7, x, gap)
         ln = lines.get((h, a), {})
         cur = ln.get("now") or ln.get("open")
-        high_h, high_a = lh >= cutoff, la >= cutoff
+        high_h, high_a = bool(both_high(lh, lh, cutoff)), bool(both_high(la, la, cutoff))  # same 3-decimal test as the flag
         flag = bool(both_high(lh, la, cutoff)) and cur is not None and cur["total"] in FLAG_LINES
         star = "  *** OVER FLAG ***" if flag else ""
         print(f"{a:>3} @ {h:<3}  proj {x:4.2f} ({a} {la:.2f}{'+' if high_a else ''}, {h} {lh:.2f}{'+' if high_h else ''})"
