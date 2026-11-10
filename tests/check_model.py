@@ -683,6 +683,14 @@ import books as _bk
 check("Best over: only the owner's books (DraftKings, FanDuel, BetRivers, BetMGM, Caesars)",
       all(_bk.mine(b) for b in ("DK NJ", "FanDuel NJ", "BetRivers NJ", "BetMGM NJ", "Caesars NJ"))
       and not any(_bk.mine(b) for b in ("bet365 NJ", "Parx", "Bovada", "Kalshi", "Parx NJ")))
+_day = real[real.date == real[real.away_ev.notna()].date.max()].copy()
+_plain = dashboard.day_table(_day)
+for c in ("home_elim", "home_elim_now"):
+    _day.loc[_day.index[0], c] = 0.044
+_late = dashboard.day_table(_day)
+check("Elim column: only on days with an eliminated team (tooltip, 8 breakdown columns on desktop and phone, the +4.4% shown)",
+      ">Elim<" not in _plain and "colspan='7'>Projection breakdown" in _plain and _late.count(">Elim<") >= 2
+      and "colspan='8'>Projection breakdown" in _late and "+4.4%" in _late, f"{_plain.count('>Elim<')} / {_late.count('>Elim<')}")
 _dsrc = open(dashboard.__file__, encoding="utf-8").read()
 check("site: the stale-run warning uses 2.5 h in game hours and 12 h overnight; the backtest call rates say how their tier cutoffs were cut",
       "? 2.5 : 12" in _dsrc and all("cut only from the two seasons before" in dashboard.CALL_HISTORY[c] for c in dashboard.CALL_HISTORY))
