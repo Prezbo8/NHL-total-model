@@ -30,8 +30,11 @@ import split_model as sm
 K, SECS = injuries.K, injuries.SKATER_SECONDS
 
 
-def missing_effects(games, dressed):
-    """{(gameId, team): (d_off list, d_def list)} for every team-game, from who didn't dress."""
+def missing_effects(games, dressed, table=None, positions=False):
+    """{(gameId, team): (d_off list, d_def list)} for every team-game, from who didn't dress. table: player_table
+    (research overrides; default live). positions: also return {(gameId, team): ['D' / 'F' per missing player]}."""
+    table = table or players.player_table
+    pos_out = {}
     dz = dressed[dressed.pos != "G"]
     by_game = {k: set(v) for k, v in dz.groupby(["gameId", "team"]).playerId}
     sk = pd.read_csv(players.SKATERS)
@@ -46,7 +49,7 @@ def missing_effects(games, dressed):
         if g.season != season_prev:
             last10.clear(); season_prev = g.season
         if g.season not in tables:
-            pt = players.player_table(g.season - 1).set_index("playerId")  # seasons before this one only
+            pt = table(g.season - 1).set_index("playerId")  # seasons before this one only
             last = sk[sk.season == g.season - 1].set_index("playerId")
             tables[g.season] = (pt, last)
         pt, last = tables[g.season]
@@ -55,7 +58,7 @@ def missing_effects(games, dressed):
             if tonight is None:
                 continue
             hist = last10[team]
-            d_off, d_def = [], []
+            d_off, d_def, pos = [], [], []
             if len(hist) >= 5:
                 counts = defaultdict(int)
                 for s in hist:
@@ -73,13 +76,15 @@ def missing_effects(games, dressed):
                     share = r.toi_pg / SECS if r.toi_pg else 0.0
                     d_off.append(share * (r.f - players.REPLACEMENT[0]) * in_rating)
                     d_def.append(share * (players.REPLACEMENT[1] - r.a) * in_rating)
+                    pos.append("D" if r.position == "D" else "F")
             out[(g.gameId, team)] = (d_off, d_def)
+            pos_out[(g.gameId, team)] = pos
             hist.append(tonight)
             team_n[(g.season, team)] += 1
             for p in tonight:
                 played_for[(g.season, team)][p] += 1
                 last_team[p] = team
-    return out
+    return (out, pos_out) if positions else out
 
 
 def adjusted(base, eff, scale=1.0, clamp=False, min_effect=0.002):

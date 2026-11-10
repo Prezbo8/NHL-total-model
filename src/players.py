@@ -44,12 +44,15 @@ OFFENSE = {"OnIce_F_xGoals": 0.5, "OnIce_F_goals": 1 / 6, "I_F_goals": 1 / 6, "I
 DEFENSE = {"OnIce_A_xGoals": 0.5, "OnIce_A_shotsOnGoal": 0.5}
 
 
-def player_table(season, min_season=2020, season_w=(1.0, 0.7, 0.4), offense=None, defense=None, shrink_min=None):
+def player_table(season, min_season=2020, season_w=(1.0, 0.7, 0.4), offense=None, defense=None, shrink_min=None,
+                 by_position=False):
     """One row per skater: offense/defense ratios vs league average (1.0 = average, same 50% advanced /
     50% regular formula as roster_ratings, shrunk toward replacement for low minutes), plus games
     played and ice time per game this season and last. Uses seasons season-2..season (never before
     min_season), INCLUDING the current season - this is for live use, not backtests.
-    season_w / offense / defense / shrink_min: research overrides (research/studies/player_weights.py); defaults = live."""
+    season_w / offense / defense / shrink_min: research overrides (research/studies/player_weights.py); defaults = live.
+    by_position (research, research/studies/injury_position.py): rate forwards against forwards and defensemen against
+    defensemen (each group's own league average) instead of all skaters together (live)."""
     offense, defense = offense or OFFENSE, defense or DEFENSE
     shrink_min = SHRINK_MIN if shrink_min is None else shrink_min
     sk = pd.read_csv(SKATERS)
@@ -57,9 +60,15 @@ def player_table(season, min_season=2020, season_w=(1.0, 0.7, 0.4), offense=None
     past = sk[sk.season.between(first, season)].copy()
     past["w"] = past.season.map({season - i: w for i, w in enumerate(season_w)})
     stats = list(dict.fromkeys(list(offense) + list(defense)))
-    lg = {c: past[c].sum() / past.icetime.sum() for c in stats}
     wt = past.assign(**{c: past[c] * past.w for c in stats + ["icetime"]})
     agg = wt.groupby("playerId")[stats + ["icetime"]].sum()
+    if by_position:  # each player's own group's league rates (D vs forwards)
+        grp = past.sort_values("season").groupby("playerId").position.last().eq("D").map({True: "D", False: "F"})
+        past["grp"] = past.playerId.map(grp)
+        by = {gname: {c: x[c].sum() / x.icetime.sum() for c in stats} for gname, x in past.groupby("grp")}
+        lg = {c: grp.reindex(agg.index).map(lambda gname, c=c: by[gname][c]) for c in stats}
+    else:
+        lg = {c: past[c].sum() / past.icetime.sum() for c in stats}
     shrink = shrink_min * 60
     agg["f"] = sum(w * (agg[c] + shrink * lg[c] * REPLACEMENT[0]) / (agg.icetime + shrink) / lg[c] for c, w in offense.items())
     agg["a"] = sum(w * (agg[c] + shrink * lg[c] * REPLACEMENT[1]) / (agg.icetime + shrink) / lg[c] for c, w in defense.items())
