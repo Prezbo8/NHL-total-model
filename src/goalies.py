@@ -39,8 +39,14 @@ def refresh(seasons):
         data = json.loads(get(NHL_LOG.format(f"{s}{s + 1}")))["data"]
         rows += [{"season": s, "gameId": d["gameId"], "team": d["teamAbbrev"], "playerId": d["playerId"],
                   "name": d["goalieFullName"], "started": d["gamesStarted"]} for d in data]
-    new = pd.DataFrame(rows)
+    new = pd.DataFrame(rows, columns=["season", "gameId", "team", "playerId", "name", "started"])
     if len(old):
+        for s in seasons:  # an empty / much shorter answer is an outage, not the season: keep the saved starts
+            had, got = int((old.season == s).sum()), int((new.season == s).sum())
+            if had and got < 0.8 * had:
+                import health
+                health.note(f"⚠ NHL goalie starts {s}: the feed returned {got} rows (saved copy has {had}); kept the saved copy")
+                new = pd.concat([new[new.season != s], old[old.season == s]])
         new = pd.concat([old[~old.season.isin(seasons)], new])
     new.to_csv(STARTS, index=False)
 

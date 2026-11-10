@@ -54,10 +54,10 @@ jobs:
           key: moneypuck-${{ github.run_id }}
           restore-keys: moneypuck-
 
-      - name: Download game data (skipped when the cached copy is current)
+      - name: Game data (the copy the once-a-day stats run saved; downloaded only if there's no copy at all)
         id: download-data
         if: steps.need.outputs.run == 'true'
-        run: python -c "import sys; sys.path.insert(0, 'src'); import model; assert model.refresh_data() or __import__('os').path.exists(model.DATA)"
+        run: python -c "import sys, os; sys.path.insert(0, 'src'); import model; os.path.exists(model.DATA) or model.refresh_data(); assert os.path.exists(model.DATA)"
 
       - name: Build the report and post it as an issue
         id: build-report
