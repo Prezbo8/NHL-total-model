@@ -75,10 +75,10 @@ TIPS = {
     "Projected": "Starter not announced yet: DailyFaceoff's guess, or this team's usual recent starter.",
     "OVER FLAG": "The model's pick: both teams projected high-scoring and the line is 6 or 6.5. Bet the OVER at the 'Best over' book. These are the picks that count in the record.",
     "Lineups": "Projected lineup source (DailyFaceoff line combinations, checked against the official NHL roster). A reporter name = tonight's lineup; 'last game's lineup' = not updated for tonight yet. Regulars missing from the lineup are treated as out (scratch).",
-    "SLAM": "Flagged over where both teams are good or great at 5-on-5. Went over 55% (opening line) / 56.5% (closing line) in 2021-26 (the seasons the rule was built on, so not a fair test).",
-    "1U": "Flagged over where one team is great at 5-on-5 (above 2.19) but the other isn't good. Went over 58% (opening line) / 59% (closing line) in 2021-26 (the seasons the rule was built on, so not a fair test).",
-    "PASS": "Flagged over, but neither team is great at 5-on-5 and they aren't both good. No bet: these went over only 47% in 2021-26 (the seasons the rule was built on, so not a fair test).",
-    "AVOID": "Not flagged, or flagged but both teams face a Strong or Good goalie. These went over only 47-49% in 2021-26 (the seasons the rule was built on, so not a fair test).",
+    "SLAM": "Flagged over where both teams are good or great at 5-on-5. Went over 56% (opening line) / 58% (closing line) in 2021-26 (tier cutoffs cut only from the two seasons before each one; the rule itself was chosen on 2021-26).",
+    "1U": "Flagged over where one team is great at 5-on-5 (above 2.19) but the other isn't good. Went over 63% (opening line) / 61% (closing line) in 2021-26 (tier cutoffs cut only from the two seasons before each one; the rule itself was chosen on 2021-26).",
+    "PASS": "Flagged over, but neither team is great at 5-on-5 and they aren't both good. No bet: these went over only 47.5% (opening line) / 49% (closing line) in 2021-26 (tier cutoffs cut only from the two seasons before each one; the rule itself was chosen on 2021-26).",
+    "AVOID": "Not flagged, or flagged but both teams face a Strong or Good goalie. These went over only 47% (opening line) / 49% (closing line) in 2021-26 (tier cutoffs cut only from the two seasons before each one; the rule itself was chosen on 2021-26).",
     "Paper bet": "The paper-trading record's pick: flagged at the last model run before puck drop, graded at the closing consensus total and over price (6 or 6.5 closes only).",
     "Near miss": "{team} missed the {cutoff:.2f}-goal high-scoring cutoff by only {gap:.3f}. Not a bet: the over rule needs both teams over the cutoff (and a 6 or 6.5 line). Shown so close calls are easy to spot.",
     "B2B tag": "Played yesterday: the model cuts this team's scoring ~8% and raises its opponent's ~6.5%.",
@@ -87,6 +87,8 @@ TIPS = {
 
 # Breakdown tiers (scoring side; higher = better for an over): trash/bad/mid/good/great cutoffs.
 # 5v5, PP, Gl, Spd = quintiles of 2024-26 team-games; B2B is discrete; Inj is a judgment call (live log only).
+# RULE (Nov 10 2026, research/studies/walk_forward_tiers.py): each season's cutoffs = quintiles of the TWO SEASONS BEFORE it
+# (2026-27: 2024-26). Each October the monthly check (src/retune.py) reports the new ones; apply them then.
 TIERS = {"ev": (1.83, 1.94, 2.05, 2.19), "pp": (0.46, 0.53, 0.59, 0.65), "gadj": (-0.052, -0.030, -0.014, 0.004),
          "spd": (-0.019, -0.006, 0.005, 0.018), "inj": (-0.02, -0.005, 0.005, 0.015)}
 TIER_NAMES = ("trash", "bad", "mid", "good", "great")
@@ -117,10 +119,10 @@ def tier(stat, v):
 
 
 def call(r, flagged):
-    """'SLAM' / '1U' / 'PASS' / 'AVOID' for a game. Tested 2021-26 at 6/6.5 lines (over %, open / close):
-    flagged + both teams good/great at 5v5 55% / 56.5%; flagged + one team great at 5v5 58% / 59%;
-    other flagged (PASS) 46.5% / 46.5%; flagged but both teams facing strong goalies (Gl bad/trash) 47% / 47%;
-    not flagged 47% / 49% (with PP/PK K = 25, Oct 16 2026)."""
+    """'SLAM' / '1U' / 'PASS' / 'AVOID' for a game. Over % at 6/6.5 lines, 2021-26, tier cutoffs from the two seasons before
+    each one (walk_forward_tiers.py, Nov 10 2026), open / close: SLAM (flagged + both teams good/great at 5v5) 56% / 58%;
+    1U (flagged + one team great at 5v5) 63% / 61%; PASS (other flagged) 47.5% / 49%; AVOID (not flagged, or both teams
+    facing strong goalies) 47% / 49%."""
     if not flagged:
         return "AVOID"
     saved = getattr(r, "call", None)  # paper-log rows: the call as made at the time (paper.py "call" / "call_now")
@@ -183,10 +185,10 @@ def call_result(r, flagged):
 
 GL_WORDS = {"great": "a Trash goalie", "good": "an OK goalie", "mid": "a Mid goalie",  # same names as the goalie tags (GOALIE_TAGS)
             "bad": "a Good goalie", "trash": "a Strong goalie"}
-CALL_HISTORY = {"SLAM": "Games like this went over 55% of the time at the opening line and 56.5% at the closing line in 2021-26 (the seasons the rule was built on, so not a fair test).",
-                "1U": "Games like this went over 58% of the time at the opening line and 59% at the closing line in 2021-26 (the seasons the rule was built on, so not a fair test).",
-                "PASS": "Flagged games like this went over only 47% of the time in 2021-26 (the seasons the rule was built on, so not a fair test).",
-                "AVOID": "Games like this went over only 47-49% of the time in 2021-26 (the seasons the rule was built on, so not a fair test)."}
+CALL_HISTORY = {"SLAM": "Games like this went over 56% of the time at the opening line and 58% at the closing line in 2021-26 (tier cutoffs cut only from the two seasons before each one; the rule itself was chosen on 2021-26).",
+                "1U": "Games like this went over 63% of the time at the opening line and 61% at the closing line in 2021-26 (tier cutoffs cut only from the two seasons before each one; the rule itself was chosen on 2021-26).",
+                "PASS": "Flagged games like this went over only 47.5% of the time at the opening line and 49% at the closing line in 2021-26 (tier cutoffs cut only from the two seasons before each one; the rule itself was chosen on 2021-26).",
+                "AVOID": "Games like this went over only 47% of the time at the opening line and 49% at the closing line in 2021-26 (tier cutoffs cut only from the two seasons before each one; the rule itself was chosen on 2021-26)."}
 
 
 _RANKS = {}
@@ -295,7 +297,7 @@ def reasoning(r, flagged):
                    "so there's no team to carry the over.")
     elif flagged:
         out.append(f"<b>AVOID:</b> both teams project as high-scoring ({both_proj}), but both face a Strong or Good goalie, "
-                   "and overs in that spot went only 47% in 2021-26.")
+                   "and overs in that spot went only 47.5% / 49% (open / close) in 2021-26.")
     else:
         why = []
         low = [(s_, x) for s_, x in S if not hot[s_]]
