@@ -580,6 +580,11 @@ ds = pd.DataFrame([{**row0, "date": "2026-10-20", "proj": 5.0, "proj_now": 7.0, 
 ds_line = dashboard.day_summary(ds)
 check("day summary: uses the last pre-game projection and the closing line (not the first-logged ones)",
       "projected 7.0" in ds_line and "0 of 1</b> went over the closing line" in ds_line, ds_line)
+_tb = dashboard.tracked_bets(real)
+check("tracked records: each side needs only its own closing price (a game with no under price still counts as an over pick)",
+      _tb[_tb.side == "u"].close_under.notna().all() and _tb[_tb.side == "o"].close_over.notna().all(),
+      f"{int((_tb.side == 'o').sum())} over rows ({int(((_tb.side == 'o') & _tb.close_under.isna()).sum())} without an under price), "
+      f"{int((_tb.side == 'u').sum())} under rows")
 calls_of = lambda d: [dashboard.call(r, True) for r in dashboard.closing_bets(d).itertuples()]
 before = calls_of(paper.read_log())  # on the real log's copy
 paper.fill_calls()
