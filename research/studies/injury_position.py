@@ -1,7 +1,9 @@
 """Injured defensemen (Nov 10 2026 audit, M1): the live injury adjustment rates every skater against ALL skaters
 (players.player_table) and one replacement level (0.90 offense / 1.10 defense). Half the offense rating is individual
 goals and points, so most defensemen rate below replacement and losing one RAISES his team's projected goals.
-Tested: rate forwards against forwards and defensemen against defensemen (player_table by_position=True).
+Tested: rate forwards against forwards and defensemen against defensemen (player_table by_position=True); then the live
+rating with the missing defensemen's effects shrunk (offense side x1/6 or x0; both sides x1/6), since the data says the
+defensemen's part is about 6x too big (slope +0.17).
 
 Same data and method as injury_backtest.py: who actually dressed 2021-26, players rated from seasons BEFORE the game,
 the live size (injuries.SCALE). Prints the rating spread by position, how well each position's adjustment explains
@@ -59,6 +61,12 @@ def fit_by_position(base, games, eff, pos):
     return beta[1], beta[2], t.D.mean(), (t.D != 0).mean()
 
 
+def shrink_d(eff, pos, k_off=1.0, k_def=1.0):
+    """The live effects with each missing defenseman's offense / defense effect multiplied by k_off / k_def."""
+    return {k: ([a * (k_off if p_ == "D" else 1.0) for a, p_ in zip(do, pos[k])],
+                [b * (k_def if p_ == "D" else 1.0) for b, p_ in zip(dd, pos[k])]) for k, (do, dd) in eff.items()}
+
+
 def main():
     games = sm.load_split()
     dressed = pd.read_csv(paths.data("dressed.csv"))
@@ -82,6 +90,13 @@ def main():
     ci = noise(live, new, games)
     print(row("by position", scorecard(new, games), w, ci=ci))
     print(ci_row(ci, w))
+    for label, k_off, k_def in (("D offense x1/6", 1 / 6, 1.0), ("D offense x0", 0.0, 1.0), ("D both sides x1/6", 1 / 6, 1 / 6)):
+        v = adjusted(base, shrink_d(live_eff, pos, k_off, k_def), scale=injuries.SCALE)
+        ci = noise(live, v, games)
+        print(row(label, scorecard(v, games), w, ci=ci))
+        print(ci_row(ci, w))
+        sf, sd, md, _ = fit_by_position(base, games, shrink_d(live_eff, pos, k_off, k_def), pos)
+        print(f"  {'':{w}s} forwards slope {sf:+.2f} | defensemen slope {sd:+.2f} (mean D effect {md:+.4f})")
     d_games = {gid for (gid, t), p_ in pos.items() if "D" in p_}
     only = dict.fromkeys(d_games, True)
     print(f"\nTeam-goal deviance in games with a defenseman out ({len(d_games)} games), lower = better:")
