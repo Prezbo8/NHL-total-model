@@ -234,6 +234,20 @@ lc = injuries.lineup_changes(bl, {"COL": {"off": [{"name": "A", "status": ""}, {
 check("lineup flag: no lineup posted is not a change, out -> in is", [c["name"] for c in lc.get("COL", [])] == ["B"])
 
 print("odds")
+_fx = lambda day: json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", f"an_v2_{day}.json"), encoding="utf-8"))
+_done = odds.day_games(datetime.date(2026, 11, 9), 15, data=_fx("20261109"))
+_open = odds.day_games(datetime.date(2026, 11, 10), 30, completed_only=False, data=_fx("20261110"))
+_now = odds.day_games(datetime.date(2026, 11, 10), 15, completed_only=False, data=_fx("20261110"))
+import books as _books
+_shop = _books.day_all_books(datetime.date(2026, 11, 10), completed_only=False, data=_fx("20261110"))
+_edm = next((r for r in _done if r["home"] == "EDM"), {})
+check("Action Network v2 (saved real responses): finished games' consensus closes, today's opening and current lines, "
+      "and every sportsbook's total parse (over / under at the same line, live and alternate lines skipped)",
+      len(_done) == 3 and (_edm.get("total"), _edm.get("over"), _edm.get("under")) == (6.5, -112, -106)
+      and len(_now) == len(_fx("20261110")["games"]) and len(_open) == len(_now)
+      and any(r["total"] == 5.5 and r["over"] == -141 for r in _open)
+      and {r["book"] for r in _shop} >= {15, 30, 68, 69, 71} and all(isinstance(r["over"], int) for r in _shop),
+      f"{len(_done)} finished, {len(_now)} now, {len(_open)} open, {len(_shop)} book lines; EDM {_edm}")
 rows = live("closing lines parse (Action Network)", lambda: odds.day_games(datetime.date(2026, 10, 1), 15))
 if rows is not None:
     check("closing lines parse", len(rows) == 8, f"{len(rows)} games")
