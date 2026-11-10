@@ -1230,7 +1230,7 @@ def record(d):
     else:
         table = "<p class='muted'>No live flagged picks have settled yet. Judge the rule after 50–75 flagged picks, not before.</p>"
     return f"""<h3 class='rec-h'>Flagged overs</h3>
-      <div class='tiles'>{tiles_html(tiles, rec_tips)}</div>{table}
+      <div class='tiles t4'>{tiles_html(tiles, rec_tips)}</div>{table}
       <h3 class='rec-h'>Record by type</h3>
       <p class='sub rec-sub'>Did the game go over the closing line? SLAM and 1U are the flagged picks above; the rest are not bets.</p>
       {type_table(by_type)}{tracked_table(tr)}
@@ -2248,7 +2248,7 @@ h2{margin:0 0 4px;font-size:21px;letter-spacing:-.01em}
 .pill{display:inline-block;font-size:12px;font-weight:800;padding:3px 10px;border-radius:999px;background:var(--ice);letter-spacing:.03em}
 .pill.over{background:var(--pos);color:#fff}.pill.under{background:var(--neg);color:#fff}.muted-pill{color:var(--muted)}
 .res.W{color:var(--pos)}.res.L{color:var(--neg)}
-.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:16px}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:16px}@media (min-width:760px){.tiles.t4{grid-template-columns:repeat(4,minmax(0,1fr))}}
 .tile{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
 .tile .label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
 .num-big{font-size:28px;font-weight:800;font-variant-numeric:tabular-nums}
