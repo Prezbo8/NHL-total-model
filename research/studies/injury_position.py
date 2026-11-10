@@ -10,6 +10,9 @@ the live size (injuries.SCALE). Prints the rating spread by position, how well e
 goals the model missed (slope 1.0 = right size; a negative slope = the wrong direction), the shared scorecard with
 error bars (research/lib/judge.py), and accuracy in team-games with a defenseman out.
 
+Verdict (Nov 10 2026): by_position rejected; defensemen's offense effect x1/6 ADOPTED (injuries.D_OFF). The rows
+labelled 'live' below are the formula before that (this study rebuilds effects itself, not through injuries._effect).
+
   python3 research/studies/injury_position.py      # needs data/dressed.csv (research/lib/lineups_hist.py download)
 """
 import os as _os

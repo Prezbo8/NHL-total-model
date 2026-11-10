@@ -30,6 +30,10 @@ OUT_STATUSES = {"Out", "Injured Reserve", "Suspension"}  # Day-To-Day players us
 SKATER_SECONDS = 5 * 3600
 K = m.K  # games of prior weight in the team ratings (same as the model)
 SCALE = 1.15  # size of the adjustment: the backtest measures ~1.2x; 1.15x improved accuracy in every season (Oct 10 2026, research/studies/injury_115.py)
+D_OFF = 1 / 6  # a missing DEFENSEMAN's effect on his own team's scoring, as a share of the formula's: rated against all
+#               skaters and one replacement level, most defensemen look below replacement on offense, so the full effect
+#               overstated goals when one sits ~6x (who-dressed slope +0.17 -> +1.12 at 1/6; Nov 10 2026,
+#               research/studies/injury_position.py)
 
 
 def fetch():
@@ -128,7 +132,7 @@ def adjustments(injured, season, team_games, team_gp=None):
 
 def _effect(p, team, n, gp=None):
     """(offense, defense) effect of one player sitting, before SCALE: ice-time share x distance from a replacement
-    player x in_rating. n = the team's games played this season; gp = his games for THIS team (NHL club stats) when
+    player x in_rating; a defenseman's offense effect x D_OFF. n = the team's games played this season; gp = his games for THIS team (NHL club stats) when
     known: MoneyPuck adds a traded player's games for both teams under his new team."""
     if gp is not None:
         w_cur = min(gp, n) / n if n else 0.0
@@ -137,7 +141,8 @@ def _effect(p, team, n, gp=None):
     w_last = min(p.gp_last / 82, 1.0) if p.team_last == team else 0.0
     in_rating = (K * w_last + n * w_cur) / (K + n)
     share = p.toi_pg / SKATER_SECONDS
-    return share * (p.f - players.REPLACEMENT[0]) * in_rating, share * (players.REPLACEMENT[1] - p.a) * in_rating
+    off = share * (p.f - players.REPLACEMENT[0]) * in_rating * (D_OFF if getattr(p, "position", "") == "D" else 1.0)
+    return off, share * (players.REPLACEMENT[1] - p.a) * in_rating
 
 
 def key_players(rosters, injured, lineup_info, season, team_games, top=5, team_gp=None, names=None):

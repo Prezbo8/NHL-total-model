@@ -220,6 +220,15 @@ check("nickname / dropped-letter names match on the same team (Joe = Joseph Vele
 tw = injuries.adjustments([{"team": "VAN", "name": "Elias N. Pettersson", "pos": "D", "status": "Out"}], 2026, tg)["VAN"]
 tf = injuries.adjustments([{"team": "VAN", "name": "Elias Pettersson", "pos": "C", "status": "Out"}], 2026, tg)["VAN"]
 check("two Elias Petterssons (VAN): the listed position picks the right one", tf["off"] < tw["off"], f"C x{tf['off']:.3f}, D x{tw['off']:.3f}")
+_d = pt[(pt.position == "D") & (pt.toi_pg > 0)].iloc[0]
+_fw = pt[(pt.position != "D") & (pt.toi_pg > 0)].iloc[0]
+_ed, _ef = injuries._effect(_d, _d.team_cur, 10, 10), injuries._effect(_fw, _fw.team_cur, 10, 10)
+def _raw(p_):  # the formula before D_OFF, for a player with 10 of his team's 10 games this season
+    w_last = min(p_.gp_last / 82, 1.0) if p_.team_last == p_.team_cur else 0.0
+    return p_.toi_pg / injuries.SKATER_SECONDS * (p_.f - players.REPLACEMENT[0]) * (injuries.K * w_last + 10) / (injuries.K + 10)
+check("injuries: a missing defenseman's offense effect counts at 1/6 (D_OFF), a forward's in full; the defense side is unchanged",
+      abs(_ed[0] - _raw(_d) * injuries.D_OFF) < 1e-12 and abs(_ef[0] - _raw(_fw)) < 1e-12 and injuries.D_OFF == 1 / 6,
+      f"D {_d['name']} {_ed[0]:+.5f}, F {_fw['name']} {_ef[0]:+.5f}")
 import lineups
 _lu = (lineups.team_slugs, lineups.projected_lineup, lineups.nhl_roster)
 lineups.team_slugs = lambda day: {"EDM": "x"}
