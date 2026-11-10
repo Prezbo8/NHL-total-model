@@ -12,6 +12,34 @@ results = []
 def check(name, ok, detail=""):
     results.append(ok); print(f"  {'PASS' if ok else 'FAIL'}  {name}{('  -- ' + detail) if detail else ''}")
 
+# A few checks read real websites (ESPN, Action Network, the NHL score feed). A site that's down or resets the
+# connection must not fail the code checks: it's retried, then those checks are SKIPPED with a warning. A site that
+# answers with a client error (4xx, e.g. a changed API) still fails, since that's a real problem.
+skipped = []
+def offline(ex):
+    import urllib.error
+    if isinstance(ex, urllib.error.HTTPError):
+        return ex.code >= 500 or ex.code == 429
+    return isinstance(ex, (OSError, TimeoutError))
+def live(name, fn, tries=3, wait=10, quiet=False):
+    """fn() from a real website, retried; None (and a SKIP) when the site stays unreachable."""
+    import time
+    for i in range(tries):
+        try:
+            return fn()
+        except Exception as ex:
+            if not offline(ex):
+                raise
+            err = f"{type(ex).__name__}: {str(ex)[:100]}"
+            if i < tries - 1:
+                time.sleep(wait)
+    skip(name, err, quiet)
+def skip(name, why, quiet=False):
+    skipped.append(name)
+    if not quiet:
+        print(f"  SKIP  {name}  -- site unreachable ({why}); not a code failure")
+        print(f"::warning::check skipped, site unreachable: {name} ({why})")
+
 print("paper log")
 real = paper.read_log()
 check("real log loads, flags are booleans", real.flag.dtype == bool and real.away_b2b.dtype == bool, f"{len(real)} rows")
@@ -42,17 +70,25 @@ oct1 = real[real.date == "2026-10-01"].copy()
 for c in ("away_score", "home_score", "final_total", "close_total", "close_over", "close_under", "result", "profit", "clv", "result_best", "profit_best"):
     oct1[c] = None
 oct1.to_csv(paper.LOG, index=False)
-os.environ["RUN_SUMMARY"] = SP + "settle_summary.txt"
-paper.settle()
-os.environ.pop("RUN_SUMMARY")
+for _try in range(3):  # reads the real NHL score feed + Action Network; settle() skips a day it can't read
+    os.environ["RUN_SUMMARY"] = SP + "settle_summary.txt"
+    open(SP + "settle_summary.txt", "w").close()
+    paper.settle()
+    os.environ.pop("RUN_SUMMARY")
+    settle_note = open(SP + "settle_summary.txt", encoding="utf-8").read().strip()
+    if "Couldn't settle" not in settle_note:
+        break
+    import time; time.sleep(10)
 s = paper.read_log()
 fs = s[s.flag].iloc[0]
-check("Oct 1 re-settles: all 8 finals", s.final_total.notna().sum() == 8)
-settle_note = open(SP + "settle_summary.txt", encoding="utf-8").read().strip()
-check("settle: the run's summary says what it settled", settle_note == "✓ Settled 8 finished games; bets: FLA@SJS W", settle_note)
-check("Oct 1 totals match the real scores", list(s.final_total.astype(int)) == list(real[real.date == "2026-10-01"].final_total.astype(int)))
-check("flagged FLA@SJS: W +1.02 at consensus, best-book scored too", fs.result == "W" and abs(fs.profit - 1.02) < 1e-9 and not pd.isna(fs.profit_best))
-check("unflagged games not scored as bets", s[~s.flag].result.isna().all())
+if "Couldn't settle" in settle_note:
+    skip("settling Oct 1 from the real score feed and odds (5 checks)", settle_note)
+else:
+    check("Oct 1 re-settles: all 8 finals", s.final_total.notna().sum() == 8)
+    check("settle: the run's summary says what it settled", settle_note == "✓ Settled 8 finished games; bets: FLA@SJS W", settle_note)
+    check("Oct 1 totals match the real scores", list(s.final_total.astype(int)) == list(real[real.date == "2026-10-01"].final_total.astype(int)))
+    check("flagged FLA@SJS: W +1.02 at consensus, best-book scored too", fs.result == "W" and abs(fs.profit - 1.02) < 1e-9 and not pd.isna(fs.profit_best))
+    check("unflagged games not scored as bets", s[~s.flag].result.isna().all())
 # offline: a postponed game leaves the log; a score-feed outage skips that day without failing the step
 import io
 two = oct1.iloc[:2].copy()
@@ -164,8 +200,9 @@ check("eliminated factors: out team x0.99, its opponent x1.044", elimination.fac
       and elimination.factors(False, False) == (1.0, 1.0) and abs(elimination.factors(True, True)[0] - 0.99 * 1.044) < 1e-12)
 
 print("injuries")
-inj = injuries.fetch()
-check("ESPN injury feed reads", len(inj) > 20, f"{len(inj)} skaters")
+inj = live("ESPN injury feed reads", injuries.fetch)
+if inj is not None:
+    check("ESPN injury feed reads", len(inj) > 20, f"{len(inj)} skaters")
 tg = injuries.team_games_this_season(g, 2026)
 mc = injuries.adjustments([{"team": "EDM", "name": "Connor McDavid", "pos": "C", "status": "Out"}], 2026, tg)["EDM"]
 check("McDavid out lowers EDM scoring ~5-12%", 0.88 < mc["off"] < 0.95, f"x{mc['off']:.3f}")  # ~9-10% once his current-season games count (skaters refreshed hourly; x0.897 on Oct 29)
@@ -197,10 +234,11 @@ lc = injuries.lineup_changes(bl, {"COL": {"off": [{"name": "A", "status": ""}, {
 check("lineup flag: no lineup posted is not a change, out -> in is", [c["name"] for c in lc.get("COL", [])] == ["B"])
 
 print("odds")
-rows = odds.day_games(datetime.date(2026, 10, 1), 15)
-check("closing lines parse", len(rows) == 8, f"{len(rows)} games")
-abbrs = {grade.ABBR.get(x, x) for r in rows for x in (r["home"], r["away"])}
-check("sportsbook team codes match NHL codes", abbrs <= set(g.home), str(sorted(abbrs - set(g.home))))
+rows = live("closing lines parse (Action Network)", lambda: odds.day_games(datetime.date(2026, 10, 1), 15))
+if rows is not None:
+    check("closing lines parse", len(rows) == 8, f"{len(rows)} games")
+    abbrs = {grade.ABBR.get(x, x) for r in rows for x in (r["home"], r["away"])}
+    check("sportsbook team codes match NHL codes", abbrs <= set(g.home), str(sorted(abbrs - set(g.home))))
 
 print("source retries + alerts (fake sources, nothing real is called)")
 import health
@@ -741,6 +779,23 @@ check("historical lines: every open / close the backtest grades is a pre-game li
       + "; ".join(f"{d} {a}@{h} {p} {t:g} {o:+.0f}/{u:+.0f}{' FLAGGED' if (d, a, h) in _fl else ''}"
                   for d, a, h, p, t, o, u in _bad))
 
+_n = {"k": 0}
+def _reset():
+    _n["k"] += 1
+    raise ConnectionResetError(104, "Connection reset by peer")
+_sk = len(skipped)
+_got = live("(self-test) a site that keeps resetting", _reset, tries=2, wait=0, quiet=True)
+_tries = _n["k"]
+skipped.pop()  # the self-test's own skip doesn't count
+from urllib.error import HTTPError as _HTTPError
+try:
+    live("(self-test) a changed API", lambda: (_ for _ in ()).throw(_HTTPError("u", 404, "Not Found", None, None)), tries=1)
+    _api = "skipped"
+except _HTTPError:
+    _api = "failed"
+check("live-site checks: a connection reset is retried then SKIPPED (not a failure); a 404 (changed API) still fails",
+      _got is None and _tries == 2 and len(skipped) == _sk and _api == "failed", f"{_got} {_tries} {_api}")
+
 print("team rankings page (Overview, Offense, Defense, Form)")
 rk_html = dashboard.rankings(real)
 misaligned = []
@@ -755,5 +810,5 @@ check("rankings page: Overview first, then Offense / Defense / Form; each table'
       views[:3] == ["overview", "offense", "defense"] and not misaligned and "class='rk-g'" in rk_html and "fm-now" in rk_html
       and "fm-dc" not in rk_html and "fm-stack" not in rk_html, f"{views} {misaligned[:2]}")
 
-print(f"\n{sum(results)}/{len(results)} checks passed")
+print(f"\n{sum(results)}/{len(results)} checks passed" + (f" ({len(skipped)} skipped: site unreachable)" if skipped else ""))
 sys.exit(0 if all(results) else 1)
