@@ -70,6 +70,9 @@ Headline, 2022-26 (2021-22, about half the bets, was flagged against a cutoff fr
 411 bets at the close, +5.8%; 155 at the open, +12.0% (thin: no 2022-23 opening lines). Settings fitted on these same
 seasons (SLAM / 1U rule and tiers, speed, back-to-back, other goals, elimination) make both a little optimistic.
 
+Live rule with injuries (the injury adjustment is applied before the cutoff test; who actually dressed, best case):
+817 bets at the close +3.5%, 562 at the open +3.7%, within noise of the table (research/studies/flag_injuries.py).
+
 The past edge is small (±3–4% uncertainty). The live paper-trading record decides whether it's real.
 Injury and lineup adjustments were backtested on who actually dressed (2021-26, research/studies/injury_backtest.py): they make projections more accurate and are about the right size.
 

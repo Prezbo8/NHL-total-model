@@ -2012,6 +2012,10 @@ def backtest():
             because lines move into or out of 6 / 6.5 during the day.</li>
         <li>53–55% wins; uncertainty about ±3–4% ROI, so the past edge is small and not proven. Line shopping added about
             <b>+2.2 pts</b> on the same picks. Goalie ratings are calibrated to match how goalies actually play.</li>
+        <li><b>Injuries in the flag.</b> The table above is the rule without injuries. Live, the injury adjustment is in
+            each team's projection before the cutoff test; with injuries from who actually dressed (the best case: live
+            only knows the projected lineup) the live rule went 817 bets <b>+3.5%</b> at the close and 562 +3.7% at the open
+            in 2021-26, within noise of the table (research/studies/flag_injuries.py, Nov 10 2026).</li>
         <li><b>Fitted on these same seasons</b>, so the backtest is somewhat optimistic: the SLAM / 1U rule (chosen on 2021-26)
             and its tier cutoffs (2024-26), team speed (2022-26), back-to-back factors (2022-24), the 'other goals' amount
             (2021-26 average) and the late-season elimination factor (2021-26). 2023-24 had very few flags, so its ROI is
