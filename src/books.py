@@ -28,20 +28,17 @@ def book_names():
         return {b["id"]: b["display_name"] for b in json.load(f)["books"]}
 
 
-def day_all_books(d, completed_only=True):
-    req = urllib.request.Request(odds.URL.format(d.strftime("%Y%m%d")), headers={"User-Agent": odds.UA})
-    with urllib.request.urlopen(req, timeout=30) as f:
-        data = json.load(f)
+def day_all_books(d, completed_only=True, data=None):
+    """Every book's total for each game (Action Network v2 scoreboard, odds.totals). data: an already-read scoreboard."""
+    data = odds.scoreboard(d) if data is None else data
     rows = []
     for g in data.get("games", []):
         if completed_only and g.get("status") != "complete":
             continue
         teams = {t["id"]: t["abbr"] for t in g["teams"]}
-        for o in g.get("odds", []):
-            if o.get("total") is None or o.get("over") is None or o.get("under") is None:
-                continue
+        for book, (total, over, under) in odds.totals(g).items():
             rows.append({"date": d.isoformat(), "home": teams[g["home_team_id"]], "away": teams[g["away_team_id"]],
-                         "book": o["book_id"], "total": o["total"], "over": o["over"], "under": o["under"]})
+                         "book": book, "total": total, "over": over, "under": under})
     return rows
 
 
