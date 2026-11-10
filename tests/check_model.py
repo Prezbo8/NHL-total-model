@@ -594,6 +594,13 @@ check("tracked records: each side needs only its own closing price (a game with 
       _tb[_tb.side == "u"].close_under.notna().all() and _tb[_tb.side == "o"].close_over.notna().all(),
       f"{int((_tb.side == 'o').sum())} over rows ({int(((_tb.side == 'o') & _tb.close_under.isna()).sum())} without an under price), "
       f"{int((_tb.side == 'u').sum())} under rows")
+_rec = dashboard.record(real)
+_cb = dashboard.closing_bets(real)
+_bt = _cb[[dashboard.call(r, True) in ("SLAM", "1U") for r in _cb.itertuples()]]
+_want = f"{(_bt.res == 'W').sum()}-{(_bt.res == 'L').sum()}-{(_bt.res == 'P').sum()}"
+check("record: a 'Bets · SLAM + 1U' tile with the SLAM + 1U record and units, and the flagged-picks tile counts picks closed off 6/6.5",
+      "Bets · SLAM + 1U" in _rec and f">{_want}<" in _rec and f"{_bt.units.sum():+.2f}u" in _rec and "closed off 6/6.5" in _rec,
+      f"bets {_want} {_bt.units.sum():+.2f}u")
 calls_of = lambda d: [dashboard.call(r, True) for r in dashboard.closing_bets(d).itertuples()]
 before = calls_of(paper.read_log())  # on the real log's copy
 paper.fill_calls()
@@ -709,6 +716,10 @@ _cities = {t: notes._name(t) for t in ("TOR", "CBJ", "DET", "VGK", "NYR", "STL",
 check("game notes: team names become cities (two-word nicknames like Maple Leafs too)",
       _cities == {"TOR": "Toronto", "CBJ": "Columbus", "DET": "Detroit", "VGK": "Vegas", "NYR": "New York", "STL": "St. Louis",
                   "BUF": "Buffalo", "UTA": "Utah"}, str(_cities))
+_slam = {**nf, "call": "SLAM", "why_this_call": "🔨 SLAM: both teams project at least 3.10 goals (OTT 3.30, BUF 3.38) and both are good at 5-on-5."}
+_sn = notes.write(_slam)
+check("game notes: a SLAM note drops the '🔨 SLAM:' label from the reason (as 'PASS:' is dropped)",
+      "SLAM:" not in _sn and "Both teams project at least 3.10" in _sn, _sn[:300])
 check("game notes: the lead is the game's most unusual fact", "streak (W4)" in max(notes.leads(nf))[2], max(notes.leads(nf))[2])
 
 print("early goalies, ESPN fallback, last game's lineup")
