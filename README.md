@@ -63,11 +63,11 @@ Only data from the 2020-21 season onward is used.
 | | Bets | Win % | ROI |
 |---|---|---|---|
 | At the opening line | 585 | about 54% | +2.8% |
-| At the closing line | 845 | about 55% | +3.1% |
+| At the closing line | 848 | about 55% | +3.0% |
 | Line shopping (best book) | | | about +2 pts more |
 
 Headline, 2022-26 (2021-22, about half the bets, was flagged against a cutoff from the cold-start 2020-21 season):
-411 bets at the close, +5.8%; 155 at the open, +12.0% (thin: no 2022-23 opening lines). Settings fitted on these same
+414 bets at the close, +5.5%; 155 at the open, +12.0% (thin: no 2022-23 opening lines). Settings fitted on these same
 seasons (SLAM / 1U rule and tiers, speed, back-to-back, other goals, elimination) make both a little optimistic.
 
 Live rule with injuries (the injury adjustment is applied before the cutoff test; who actually dressed, best case):
