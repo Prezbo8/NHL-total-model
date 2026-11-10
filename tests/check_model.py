@@ -639,6 +639,10 @@ check("game notes: numbers get the dashboard's colors (breakdown tiers, matchup 
       "<span class='nv t-great'>+0.21</span>" in chips and "<span class='nv t-trash'>-0.14</span>" in chips and "<span class='nv t-good'>2.12</span>" in chips
       and "<span class='nv t-good'>53%</span>" in chips and "<span class='nv hot'>7-2-1</span>" in chips and "<span class='nv t-good'>#11</span>" in chips
       and "the OTT #2 defense" in chips and "<span class='nv t-great'>+0.85</span>" in chips and "&lt;b&gt;" in chips and "(6.55)" in chips, chips)
+_cities = {t: notes._name(t) for t in ("TOR", "CBJ", "DET", "VGK", "NYR", "STL", "BUF", "UTA")}
+check("game notes: team names become cities (two-word nicknames like Maple Leafs too)",
+      _cities == {"TOR": "Toronto", "CBJ": "Columbus", "DET": "Detroit", "VGK": "Vegas", "NYR": "New York", "STL": "St. Louis",
+                  "BUF": "Buffalo", "UTA": "Utah"}, str(_cities))
 check("game notes: the lead is the game's most unusual fact", "streak (W4)" in max(notes.leads(nf))[2], max(notes.leads(nf))[2])
 
 print("early goalies, ESPN fallback, last game's lineup")
@@ -683,6 +687,14 @@ import books as _bk
 check("Best over: only the owner's books (DraftKings, FanDuel, BetRivers, BetMGM, Caesars)",
       all(_bk.mine(b) for b in ("DK NJ", "FanDuel NJ", "BetRivers NJ", "BetMGM NJ", "Caesars NJ"))
       and not any(_bk.mine(b) for b in ("bet365 NJ", "Parx", "Bovada", "Kalshi", "Parx NJ")))
+_day = real[real.date == real[real.away_ev.notna()].date.max()].copy()
+_plain = dashboard.day_table(_day)
+for c in ("home_elim", "home_elim_now"):
+    _day.loc[_day.index[0], c] = 0.044
+_late = dashboard.day_table(_day)
+check("Elim column: only on days with an eliminated team (tooltip, 8 breakdown columns on desktop and phone, the +4.4% shown)",
+      ">Elim<" not in _plain and "colspan='7'>Projection breakdown" in _plain and _late.count(">Elim<") >= 2
+      and "colspan='8'>Projection breakdown" in _late and "+4.4%" in _late, f"{_plain.count('>Elim<')} / {_late.count('>Elim<')}")
 _dsrc = open(dashboard.__file__, encoding="utf-8").read()
 check("site: the stale-run warning uses 2.5 h in game hours and 12 h overnight; the backtest call rates say how their tier cutoffs were cut",
       "? 2.5 : 12" in _dsrc and all("cut only from the two seasons before" in dashboard.CALL_HISTORY[c] for c in dashboard.CALL_HISTORY))

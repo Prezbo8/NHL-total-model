@@ -51,6 +51,7 @@ TIPS = {
     "B2B": "Tired legs: a team that played yesterday scores 8% less. A team whose opponent played yesterday scores 6.5% more.",
     "Spd": "How fast this team skates compared with the opponent (20+ mph bursts last season). Fast teams score a bit more and allow a bit less.",
     "Inj": "Injuries and scratches: this team's missing scorers (fewer goals) plus the other team's missing defenders (more goals).",
+    "Elim": "Late-season motivation (about March on): a team already eliminated from the playoffs allows ~4.4% more goals and scores ~1% fewer. Shown only on days with an eliminated team.",
     "Rank tag": "Team rankings as of this game day, against a league-average opponent: OFF = goals scored (1 = most), DEF = goals its skaters allow (1 = fewest). Goalies and back-to-backs not included. Full tables under Team rankings.",
     "Unit ranks": "Team ranks as of this game day, against a league-average opponent. 5v5 OFF = 5-on-5 goals scored, 5v5 DEF = 5-on-5 goals its skaters allow, PP OFF = power-play goals, PP DEF = power-play goals allowed (penalty kill × penalties taken). 1 = best of 32. Goalies and back-to-backs not included.",
     "5v5 OFF": "This team's 5-on-5 attack: goals a game against an average defense, and its rank of 32 (1 = most). Colored for this team's scoring.",
@@ -105,6 +106,7 @@ def _tier_lines(stat, pct):
 for _col, _stat, _pct in (("5v5", "ev", False), ("PP", "pp", False), ("Gl", "gadj", True), ("Spd", "spd", True), ("Inj", "inj", True)):
     TIPS[_col] += _tier_lines(_stat, _pct)
 TIPS["B2B"] += "\n\nGreat: +6.5% (opponent tired)\nMid: no back-to-back\nBad: −2% (both tired)\nTrash: −8% (this team tired)"
+TIPS["Elim"] += "\n\nGreat: +4.4% (opponent eliminated)\nGood: +3.4% (both eliminated)\nMid: neither\nBad: −1% (this team eliminated)"
 
 
 def tier(stat, v):
@@ -113,6 +115,8 @@ def tier(stat, v):
         return ""
     if stat == "b2badj":
         return "great" if v > 0.01 else "trash" if v < -0.05 else "bad" if v < -0.005 else "mid"
+    if stat == "elim":
+        return "great" if v > 0.04 else "good" if v > 0.005 else "bad" if v < -0.005 else "mid"
     if stat not in TIERS:
         return ""
     return TIER_NAMES[sum(v > c for c in TIERS[stat])]
@@ -728,6 +732,9 @@ def day_table(g):
     final_day = bool(len(g)) and g.final_total.notna().any()  # result layout once any game is final; the rest show as pending
     ranks = rank_tags(g.date.iloc[0]) if len(g) else {}  # the ranks teams had on game day
     kp = load_key_players(g.date.iloc[0]) if len(g) else {}
+    # Elim column only on days with an eliminated team (late season): until then every value is 0
+    elim = any(c in g and (g[c].abs() >= 0.0005).any() for c in ("away_elim", "home_elim"))
+    nb = 8 if elim else 7  # breakdown columns
     head = f"<th>{tip('Team', cls='tl')}</th>"
     if final_day:
         head += f"<th class='num'>{tip('G', 'Final goals for this team (shootout winner gets +1, as sportsbooks settle).')}</th>"
@@ -741,14 +748,14 @@ def day_table(g):
     head += (f"<th class='gcol'>{tip('Goalie', 'Starting goalie, checked against DailyFaceoff, Rotowire and GoaliePost: ✓ confirmed, Likely, Proj (not announced), ⚠ sources disagree. Hover the badge for which sources said what. On results: who actually started (NHL box score), ⇄ = not the goalie the projection used.')}</th>"
              f"<th class='num bcol'>{tip('5v5')}</th><th class='num'>{tip('PP')}</th>"
              f"<th class='num'>{tip('Gl', cls='tr')}</th><th class='num'>{tip('Oth', cls='tr')}</th><th class='num'>{tip('B2B', cls='tr')}</th><th class='num'>{tip('Spd', cls='tr')}</th>"
-             f"<th class='num'>{tip('Inj', cls='tr')}</th>")
+             f"<th class='num'>{tip('Inj', cls='tr')}</th>" + (f"<th class='num'>{tip('Elim', cls='tr')}</th>" if elim else ""))
     # fixed widths (%): Team (room for the OFF/DEF ranks) + Game/Result = 53.5 | Goalies 15.5 | Breakdown 31
     widths = ([15.5, 2.5, 5.5] if final_day else [18.5, 7]) \
-        + ([7.5, 4.5, 4, 6, 8] if final_day else [8, 6, 14]) + [15.5] + [4.4, 3.9, 5.2, 3.9, 4.8, 4.4, 4.4]
-    cols = "<colgroup>" + "".join(f"<col style='width:{w:.3f}%'>" for w in widths) + "</colgroup>"
+        + ([7.5, 4.5, 4, 6, 8] if final_day else [8, 6, 14]) + [15.5] + [4.4, 3.9, 5.2, 3.9, 4.8, 4.4, 4.4] + ([4.4] if elim else [])
+    cols = "<colgroup>" + "".join(f"<col style='width:{w * 100 / sum(widths):.3f}%'>" for w in widths) + "</colgroup>"
     sections = (f"<tr class='sec'><th colspan='{3 if final_day else 2}'>Team</th>"
                 f"<th class='gcol' colspan='{5 if final_day else 3}'>{'Result' if final_day else 'Game'}</th>"
-                f"<th class='gcol'>Goalies</th><th class='bcol' colspan='7'>Projection breakdown</th></tr>")
+                f"<th class='gcol'>Goalies</th><th class='bcol' colspan='{nb}'>Projection breakdown</th></tr>")
     body, mcards = [], []
     for i, r in enumerate(g.itertuples()):
         flagged, final = bool(r.flag), not pd.isna(r.final_total)
@@ -777,7 +784,7 @@ def day_table(g):
                     return "<span class='muted' title='Not part of the model yet on this date'>n/a</span>"
                 return "–" if abs(v) < 0.0005 else f"{v * 100:+.1f}%"
             if pd.isna(g_("ev")):
-                return "<td class='num muted bcol' colspan='7'>n/a</td>"
+                return f"<td class='num muted bcol' colspan='{nb}'>n/a</td>"
             def td(stat, text, extra=""):
                 t = tier(stat, g_(stat))
                 if text == "–":  # ~0% (no adjustment): left uncolored
@@ -785,7 +792,7 @@ def day_table(g):
                 return f"<td class='num{extra}{' t-' + t if t else ''}'{f' title={chr(39)}{t}{chr(39)}' if t else ''}>{text}</td>"
             return (td("ev", f"{g_('ev'):.2f}", " bcol") + td("pp", f"{g_('pp'):.2f}") + td("gadj", adj(g_("gadj")))
                             + td("oth", f"{g_('oth'):.2f}") + td("b2badj", adj(g_("b2badj"))) + td("spd", adj(g_("spd")))
-                            + td("inj", adj(g_("inj"))))
+                            + td("inj", adj(g_("inj"))) + (td("elim", adj(g_("elim"))) if elim else ""))
 
         c = call(r, flagged)
         st = start_time(getattr(r, "start_utc", None))
@@ -841,7 +848,7 @@ def day_table(g):
         mu += moves_html(r)
         ctx = f"<div class='why-text'>{lu[0] if lu else ''}{mu}{game_notes(r, flagged)}</div>"
         mcards.append(mobile_card(r, final, callpill, st, f"{vs} {outcome}" if final_day else ln,
-                                  breakdown_cells, cls, ranks, key_players(r, kp, phone=True)))
+                                  breakdown_cells, cls, ranks, key_players(r, kp, phone=True), elim))
         away = team("away", r.away, r.proj_away, r.away_score if final else None) + game + detail("away")
         home = team("home", r.home, r.proj_home, r.home_score if final else None) + detail("home")
         body.append(f"<tbody class='game {cls}'><tr class='away'>{away}</tr><tr class='home'>{home}</tr>"
@@ -850,11 +857,12 @@ def day_table(g):
     return (f"{key}<div class='gtable'><table class='gt'>{cols}<thead>{sections}<tr>{head}</tr></thead>{''.join(body)}</table></div>"
             f"<div class='mcards'>{''.join(mcards)}</div>"
             "<p class='muted small legend tbl-only'>Two rows per game (away, then home). <span style='color:var(--accent)'>●</span> = team projected "
-            "high-scoring. Proj = (5v5 + PP + Oth) × goalie (Gl) × back-to-back (B2B) × team speed (Spd) × injuries (Inj). "
+            "high-scoring. Proj = (5v5 + PP + Oth) × goalie (Gl) × back-to-back (B2B) × team speed (Spd) × injuries (Inj)"
+            + (" × elimination (Elim). " if elim else ". ") +
             "Hover or tap any underlined label for an explanation.</p>")
 
 
-def mobile_card(r, final, callpill, st, status, breakdown_cells, cls, ranks, kpt=""):
+def mobile_card(r, final, callpill, st, status, breakdown_cells, cls, ranks, kpt="", elim=False):
     """Phone layout (shown under 760px wide instead of the table): one card per game with the same
     call, line/result, teams, goalies, tier-colored breakdown and reasoning."""
     def team(side, abbr, proj, score):
@@ -868,7 +876,8 @@ def mobile_card(r, final, callpill, st, status, breakdown_cells, cls, ranks, kpt
                 + f"<div class='mc-gl'>{goalie_compact(g_('goalie'), g_('goalie_now'), g_('goalie_src'), g_('goalie_actual'), getattr(r, f"{'home' if side == 'away' else 'away'}_gadj", float('nan')), r.home if side == 'away' else r.away)}</div></div>")
     total = (f"<span class='big-total'>{int(r.final_total)}</span> goals · proj {r.proj:.2f}" if final
              else f"Proj total <b>{r.proj:.2f}</b>")
-    head = "".join(f"<th class='num'>{tip(h, cls='tr' if i > 3 else '')}</th>" for i, h in enumerate(("5v5", "PP", "Gl", "Oth", "B2B", "Spd", "Inj")))
+    head = "".join(f"<th class='num'>{tip(h, cls='tr' if i > 3 else '')}</th>"
+                   for i, h in enumerate(("5v5", "PP", "Gl", "Oth", "B2B", "Spd", "Inj") + (("Elim",) if elim else ())))
     bd = (f"<table class='gt mc-bd'><thead><tr><th></th>{head}</tr></thead><tbody>"
           f"<tr><td>{e(r.away)}</td>{breakdown_cells('away')}</tr><tr><td>{e(r.home)}</td>{breakdown_cells('home')}</tr></tbody></table>")
     return (f"<article class='mc {cls}'><div class='mc-top'>{f'<span class=gtime>{st} ET</span>' if st else ''}"
