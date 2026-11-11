@@ -28,6 +28,20 @@ def load(day):
     return json.load(open(p)) if os.path.exists(p) else {}
 
 
+_RANGE = None
+
+
+def all_time_range():
+    """(lowest, highest) game total any run has ever projected (every data/moves file); the chart's y-axis."""
+    global _RANGE
+    if _RANGE is None:
+        d = paths.data("moves")
+        ps = [s["proj"] for f in sorted(os.listdir(d)) if f.endswith(".json")
+              for runs in json.load(open(os.path.join(d, f))).values() for s in runs] if os.path.isdir(d) else []
+        _RANGE = (min(ps), max(ps)) if ps else None
+    return _RANGE
+
+
 def _names(v, sep):
     return sorted({x.split("|")[0].split(" (")[0].strip() for x in str(v or "").split(sep) if x.strip()})  # tags / order ignored
 
