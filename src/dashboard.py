@@ -1466,7 +1466,41 @@ def moves_html(r):
                      + (f"<span class='mv-why'>{'; '.join(why)}</span>" if why else "") + "</li>")
     when = "on game day" if pd.notna(getattr(r, "final_total", np.nan)) else "today"
     return (f"<details class='mu-why'><summary>How the projection moved {when} ({hist[0]['proj']:.2f} → {hist[-1]['proj']:.2f})</summary>"
-            f"<ul class='mv'>{''.join(items)}</ul><p class='muted small kp-note'>{e(TIPS['Moves'])}</p></details>")
+            f"{moves_chart(hist)}<ul class='mv'>{''.join(items)}</ul><p class='muted small kp-note'>{e(TIPS['Moves'])}</p></details>")
+
+
+def moves_chart(hist):
+    """Line chart of the projected total at each run (one dot per run, x = run times, evenly spaced); the y-axis
+    runs from the lowest to the highest total any run has ever projected (moves.all_time_range)."""
+    import moves
+    ps = [h["proj"] for h in hist]
+    lo, hi = moves.all_time_range() or (min(ps), max(ps))
+    lo, hi = min(lo, *ps), max(hi, *ps)
+    if hi - lo < 0.01:
+        return ""
+    W, H, L, R, T, B = 420, 170, 34, 12, 12, 26
+    x = lambda i: L + (W - L - R) * (i / (len(ps) - 1))
+    y = lambda p: T + (H - T - B) * (hi - p) / (hi - lo)
+    grid = "".join(f"<line x1='{L}' x2='{W - R}' y1='{y(v):.1f}' y2='{y(v):.1f}' class='mc-g'/>"
+                   f"<text x='{L - 4}' y='{y(v) + 3.5:.1f}' text-anchor='end'>{v:.2f}</text>"
+                   for v in (hi, (lo + hi) / 2, lo))
+    step = -(-len(ps) // 5)  # at most ~5 time labels; first and last always shown
+    ticks = "".join(f"<text x='{x(i):.1f}' y='{H - 8}' text-anchor='{'start' if i == 0 else 'end' if i == len(ps) - 1 else 'middle'}'>"
+                    f"{e(h['at'])}</text>" for i, h in enumerate(hist)
+                    if i in (0, len(ps) - 1) or (i % step == 0 and len(ps) - 1 - i >= step / 2))
+    line = " ".join(f"{x(i):.1f},{y(p):.1f}" for i, p in enumerate(ps))
+    dots = ""
+    for i, (h, p) in enumerate(zip(hist, ps)):
+        d = p - ps[i - 1] if i else 0.0
+        cls = "mc-up" if d >= moves.MIN_MOVE else "mc-dn" if d <= -moves.MIN_MOVE else "mc-0"
+        tip_ = f"{h['at']}: {p:.2f}" + (" (first run)" if not i else f" ({d:+.2f})" if cls != "mc-0" else " (no change)")
+        dots += (f"<g class='{cls}'><circle cx='{x(i):.1f}' cy='{y(p):.1f}' r='9' class='mc-hit'/>"
+                 f"<circle cx='{x(i):.1f}' cy='{y(p):.1f}' r='4'/><title>{e(tip_)}</title></g>")
+    return (f"<svg class='mc' viewBox='0 0 {W} {H}' role='img' aria-label='Projected total at each run: "
+            f"{ps[0]:.2f} to {ps[-1]:.2f}; y-axis is the lowest to highest total ever projected'>"
+            f"{grid}<polyline points='{line}' class='mc-l'/>{dots}{ticks}</svg>"
+            f"<p class='muted small mc-n'>Y-axis: lowest ({lo:.2f}) to highest ({hi:.2f}) total the model has ever projected. "
+            f"Green dot = up, red = down, gray = no change.</p>")
 
 
 def key_players(r, kp, phone=False):
@@ -2200,7 +2234,7 @@ body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 -apple-system
 table.tor-t tr.t-great td{background:rgba(22,163,74,.50)}table.tor-t tr.t-good td{background:rgba(22,163,74,.22)}table.tor-t tr.t-mid td{background:rgba(234,179,8,.28)}table.tor-t tr.t-bad td{background:rgba(220,38,38,.22)}table.tor-t tr.t-trash td{background:rgba(220,38,38,.50)}table.tor-t td.pos,table.tor-t td.neg{color:var(--ink)}.acc-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:18px;margin-top:16px}.acc-grid h3{margin:0 0 6px;font-size:15px}table.acc-t{width:100%}table.acc-t td,table.acc-t th{padding:6px 8px}
 .rk-switch{display:inline-flex;gap:4px;padding:4px;margin:0 0 14px;background:var(--ice);border:1px solid var(--line);border-radius:999px}
 .rk-switch button{font:inherit;font-size:14px;font-weight:800;padding:7px 22px;border:0;border-radius:999px;background:transparent;color:var(--muted);cursor:pointer}
-.fm-switch{display:flex;flex-wrap:wrap;gap:4px;margin:0 0 10px}.fm-switch button{font:inherit;font-size:12.5px;font-weight:700;padding:5px 12px;border:1px solid var(--line);border-radius:999px;background:transparent;color:var(--muted);cursor:pointer}.fm-switch button.on{background:var(--card);color:var(--ink);border-color:var(--muted)}.fm-note{max-width:820px}.fm-h{margin:14px 0 4px;font-size:13.5px}.fm-notes{max-width:820px;margin-top:4px}@media (max-width:760px){table.fm-t td.tm img,table.fm-t td.tm picture{display:none}table.fm-t th,table.fm-t td{padding:5px 3px!important;font-size:11.5px}table.fm-t th{white-space:normal;font-size:9px;letter-spacing:0}table.fm-t .fm-p,table.fm-t .fm-gp,table.fm-t .fm-sd{display:none}table.fm-t th,table.fm-t td{padding:5px 2px!important}table.fm-t td.fm-sm,table.fm-t th.fm-sm{display:table-cell;line-height:1.25}table.fm-t th .fm-long{display:none}table.fm-t th .fm-short{display:inline}}table.fm-t .fm-sm,table.fm-t .fm-short{display:none}.fm-sl{color:var(--muted);font-size:9px;margin-right:3px}.fm-d{display:block;font-size:10px;font-weight:600;opacity:.8;line-height:1.2;white-space:nowrap}.fm-rkm{display:none}@media (max-width:760px){.fm-d{font-size:8.5px}.fm-rkm{display:block;font-size:8.5px;color:var(--muted);white-space:nowrap}.fm-rkm .fm-d{display:inline}}.mv{list-style:none;margin:4px 0 4px;padding:0;font-size:12.5px;max-width:820px}.mv li{padding:4px 0;border-bottom:1px solid var(--line)}.mv li b{font-variant-numeric:tabular-nums}.mv-d{font-weight:800;margin:0 6px}.mv-up{color:#15803d}.mv-dn{color:#b91c1c}.mv-why{display:block;color:var(--muted);font-size:12px;margin-top:1px}.kp-also{margin:8px 0 2px;font-size:13px;line-height:1.5}.fm-chip{display:inline-block;padding:1px 7px;border-radius:999px;font-size:11px;font-weight:700;line-height:1.5}.fm-tough{background:#6d28d9;color:#fff}.fm-average{background:transparent;color:var(--muted);border:1px solid var(--line)}.fm-easy{background:rgba(14,165,233,.30);color:var(--ink)}@media (max-width:760px){.fm-chip{padding:0 3px;font-size:9px;letter-spacing:-.1px}.fm-sl{margin-right:1px}}
+.fm-switch{display:flex;flex-wrap:wrap;gap:4px;margin:0 0 10px}.fm-switch button{font:inherit;font-size:12.5px;font-weight:700;padding:5px 12px;border:1px solid var(--line);border-radius:999px;background:transparent;color:var(--muted);cursor:pointer}.fm-switch button.on{background:var(--card);color:var(--ink);border-color:var(--muted)}.fm-note{max-width:820px}.fm-h{margin:14px 0 4px;font-size:13.5px}.fm-notes{max-width:820px;margin-top:4px}@media (max-width:760px){table.fm-t td.tm img,table.fm-t td.tm picture{display:none}table.fm-t th,table.fm-t td{padding:5px 3px!important;font-size:11.5px}table.fm-t th{white-space:normal;font-size:9px;letter-spacing:0}table.fm-t .fm-p,table.fm-t .fm-gp,table.fm-t .fm-sd{display:none}table.fm-t th,table.fm-t td{padding:5px 2px!important}table.fm-t td.fm-sm,table.fm-t th.fm-sm{display:table-cell;line-height:1.25}table.fm-t th .fm-long{display:none}table.fm-t th .fm-short{display:inline}}table.fm-t .fm-sm,table.fm-t .fm-short{display:none}.fm-sl{color:var(--muted);font-size:9px;margin-right:3px}.fm-d{display:block;font-size:10px;font-weight:600;opacity:.8;line-height:1.2;white-space:nowrap}.fm-rkm{display:none}@media (max-width:760px){.fm-d{font-size:8.5px}.fm-rkm{display:block;font-size:8.5px;color:var(--muted);white-space:nowrap}.fm-rkm .fm-d{display:inline}}.mv{list-style:none;margin:4px 0 4px;padding:0;font-size:12.5px;max-width:820px}.mv li{padding:4px 0;border-bottom:1px solid var(--line)}.mv li b{font-variant-numeric:tabular-nums}.mv-d{font-weight:800;margin:0 6px}.mv-up{color:#15803d}.mv-dn{color:#b91c1c}.mv-why{display:block;color:var(--muted);font-size:12px;margin-top:1px}.mc{display:block;width:100%;max-width:520px;height:auto;margin:6px 0 0;overflow:visible}.mc text{font-size:10.5px;fill:var(--muted);font-variant-numeric:tabular-nums}.mc-g{stroke:var(--line);stroke-width:1}.mc-l{fill:none;stroke:var(--muted);stroke-width:2;stroke-linejoin:round}.mc circle{stroke:var(--card);stroke-width:2}.mc circle.mc-hit{fill:transparent;stroke:none}.mc-up circle{fill:#15803d}.mc-dn circle{fill:#b91c1c}.mc-0 circle{fill:#9ca3af}.mc-n{margin:2px 0 4px}.kp-also{margin:8px 0 2px;font-size:13px;line-height:1.5}.fm-chip{display:inline-block;padding:1px 7px;border-radius:999px;font-size:11px;font-weight:700;line-height:1.5}.fm-tough{background:#6d28d9;color:#fff}.fm-average{background:transparent;color:var(--muted);border:1px solid var(--line)}.fm-easy{background:rgba(14,165,233,.30);color:var(--ink)}@media (max-width:760px){.fm-chip{padding:0 3px;font-size:9px;letter-spacing:-.1px}.fm-sl{margin-right:1px}}
 .rk-switch button.on{background:var(--card);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.25)}
 .rk[hidden]{display:none!important}
 table.rk-t th.sortable{cursor:pointer;user-select:none}table.tor-t th.sortable{cursor:pointer;user-select:none}table.tor-t th.sorted{color:var(--ink)}table.tor-t th.sorted::after{content:" ▼";font-size:9px}table.tor-t th.sorted.rev::after{content:" ▲"}table.rk-t th.sorted{color:var(--ink)}
@@ -2394,7 +2428,7 @@ svg.cal .cal-line{fill:none;stroke-width:2;opacity:.55}.cal-line.cal-a{stroke:va
 ul.archive{list-style:none;margin:0;padding:0}ul.archive li{padding:8px 0;border-bottom:1px solid var(--line)}
 ul.archive li:last-child{border-bottom:none}
 /* light mode: solid fills and darker text for contrast (audit m6); dark mode keeps the translucent look */
-@media (prefers-color-scheme:dark){.mv-up{color:#4ade80}.mv-dn{color:#f87171}.fm-tough{background:rgba(124,58,237,.45)}.gb.g-strong{background:rgba(220,38,38,.50)}.gb.g-trash{background:rgba(22,163,74,.50)}}
+@media (prefers-color-scheme:dark){.mv-up{color:#4ade80}.mv-dn{color:#f87171}.mc-up circle{fill:#4ade80}.mc-dn circle{fill:#f87171}.mc-0 circle{fill:#6b7280}.fm-tough{background:rgba(124,58,237,.45)}.gb.g-strong{background:rgba(220,38,38,.50)}.gb.g-trash{background:rgba(22,163,74,.50)}}
 """
 
 
