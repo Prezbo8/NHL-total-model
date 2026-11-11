@@ -22,7 +22,8 @@ Every game gets a call:
 | **AVOID** | not flagged, or both teams face strong goalies | no bet |
 
 Take it at the **best over** book shown on the dashboard. The paper-trading record uses closing
-information only: the call at the last run before puck drop, graded at the closing consensus line.
+information only: the call at the last run before puck drop, graded at the closing consensus line (if the consensus
+feed is down: the last pre-game line, retried for 3 days, so a recent result can still change).
 `P(7+)` is the model's chance of 7+ total goals (wins an over 6.5 and an over 6; exactly 6 pushes an
 over 6). It comes from the projected total and how evenly matched the teams are; calls don't use it.
 
@@ -92,7 +93,9 @@ src/                          everything the daily run uses
   speed.py                      team skating speed (NHL EDGE)
   injuries.py  lineups.py       ESPN injuries, DailyFaceoff projected lineups vs NHL roster
   confirm.py                    starting goalies from DailyFaceoff + Rotowire + GoaliePost combined; Rotowire injuries; actual starters (NHL box score)
-  odds.py  books.py  grade.py   betting lines (consensus, opening, every sportsbook) and line math
+  odds.py  books.py  grade.py   betting lines (consensus, opening, every sportsbook) and line math; backup when the
+                                consensus has no current line for a game: DraftKings' line from ESPN's scoreboard, else
+                                the game's last saved line (marked on the site; Action Network's failure still alerts)
   paper.py                      paper-trading log: log, settle, report
   health.py                     retries every data source (not a 403), re-runs in 5 min if one still fails, GitHub issue alerts
   retune.py                     monthly check-up: tier cutoffs, call record, calibration, goalie predictions (GitHub issue)

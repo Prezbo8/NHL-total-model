@@ -83,3 +83,107 @@ def fetch_all(book=15, path=ODDS):
 if __name__ == "__main__":
     import sys
     fetch_all(30, ODDS_OPEN) if "open" in sys.argv else fetch_all()
+
+
+# ---- backup: DraftKings' total from ESPN's public scoreboard, only for games Action Network has no current line for ----
+ESPN = "https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/scoreboard?dates={}"
+CONSENSUS, BACKUP, SAVED = "consensus", "DraftKings (ESPN backup)", " (last saved)"
+
+
+def _num(v):
+    """'+110' / '-115' / 'EVEN' / 110.0 / '' / None / NaN -> int price or None."""
+    if v is None or (isinstance(v, float) and v != v) or str(v).strip() == "":
+        return None
+    s = str(v).strip().upper()
+    return 100 if s == "EVEN" else int(round(float(s)))
+
+
+def norm_line(total, over, under):
+    """{'total': float, 'over': int, 'under': int or None}, or None when the total or the over price is missing."""
+    o = _num(over)
+    try:
+        t = float(total)
+    except (TypeError, ValueError):
+        return None
+    if t != t or o is None:
+        return None
+    return {"total": t, "over": o, "under": _num(under)}
+
+
+def espn_scoreboard(d):
+    req = urllib.request.Request(ESPN.format(d.strftime("%Y%m%d")), headers={"User-Agent": UA})
+    with urllib.request.urlopen(req, timeout=30) as f:
+        return json.load(f)
+
+
+def espn_lines(data, warn=print):
+    """{(home, away): line} from an ESPN scoreboard (the requested slate): DraftKings' current total ('close' while the
+    game hasn't started) for games not yet started (status state 'pre'). Teams matched by full name, like the ESPN
+    injury list (injuries.fetch); an unknown name is reported and that game skipped."""
+    import model as m
+    from teams import TEAMS
+    by_name = {m.norm_name(v): k for k, v in TEAMS.items()}
+    out = {}
+    for e in (data or {}).get("events", []):
+        c = (e.get("competitions") or [{}])[0]
+        state = ((c.get("status") or e.get("status") or {}).get("type") or {}).get("state")
+        if state != "pre":
+            continue
+        teams = {}
+        for x in c.get("competitors", []):
+            name = (x.get("team") or {}).get("displayName", "")
+            ab = by_name.get(m.norm_name(name))
+            if ab is None:
+                warn(f"(ESPN odds: unknown team name {name!r}; game skipped)")
+            teams[x.get("homeAway")] = ab
+        if not teams.get("home") or not teams.get("away"):
+            continue
+        tot = ((c.get("odds") or [{}])[0] or {}).get("total") or {}
+        ov, un = ((tot.get("over") or {}).get("close") or {}), ((tot.get("under") or {}).get("close") or {})
+        val = str(ov.get("line") or "")[1:]  # 'o6.5' -> '6.5'
+        if str(un.get("line") or "")[1:] != val:
+            continue
+        line = norm_line(val, ov.get("odds"), un.get("odds"))
+        if line:
+            out[(teams["home"], teams["away"])] = line
+    return out
+
+
+def fill_lines(lines, upcoming, espn=None, saved=None):
+    """Fill each not-started game's current line ('now') when Action Network has none: DraftKings from ESPN first, else the
+    game's last saved line. lines: {(home, away): {'open': ..., 'now': ...}} (changed in place); upcoming: [(home, away)]
+    not started; espn: {(home, away): line}; saved: {(home, away): (line, its source)}.
+    Returns {(home, away): source of its current line} for every game in lines / upcoming with one."""
+    src = {k: CONSENSUS for k, v in lines.items() if v.get("now")}
+    for k in upcoming:
+        if (lines.get(k) or {}).get("now"):
+            continue
+        if espn and espn.get(k):
+            lines.setdefault(k, {})["now"], src[k] = espn[k], BACKUP
+        elif saved and saved.get(k):
+            line, was = saved[k]
+            base = (was or CONSENSUS).replace(SAVED, "")
+            lines.setdefault(k, {})["now"], src[k] = line, base + SAVED
+    return src
+
+
+def no_line(lines, upcoming):
+    """['AWY@HOM', ...]: not-started games with no usable line at all (no current and no opening line)."""
+    return [f"{a}@{h}" for h, a in upcoming if not ((lines.get((h, a)) or {}).get("now") or (lines.get((h, a)) or {}).get("open"))]
+
+
+def line_health(h, missing, no_line_games):
+    """Health bookkeeping for the lines (h = the health module): 'ESPN odds (backup)' resets when it wasn't needed, so an
+    old failure count can't stick; 'Betting lines' fails (retries + an alert after 2 runs) when a game has no line and an
+    odds source failed this run; when every source answered and a game is simply off the board, only a summary line."""
+    if not missing:
+        h._results.setdefault("ESPN odds (backup)", None)
+    if not no_line_games:
+        h._results.setdefault("Betting lines", None)
+        return
+    msg = f"no line for {len(no_line_games)} game{'s' if len(no_line_games) != 1 else ''}: {', '.join(no_line_games)}"
+    if h._results.get("Action Network now lines") or h._results.get("ESPN odds (backup)"):
+        h._results["Betting lines"] = msg
+    else:
+        print(f"({msg}: every source answered, off the board)")
+        h.note(f"✗ Betting lines: {msg} (every source answered: off the board)")

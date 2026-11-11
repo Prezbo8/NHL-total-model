@@ -31,6 +31,7 @@ create table if not exists nhl_projections (
   call          text,              -- SLAM / 1U / PASS / AVOID
   open_total    real, open_over int,
   line_total    real, line_over int, line_under int,
+  line_src      text,              -- consensus / DraftKings (ESPN backup) / ... (last saved)
   best_book     text, best_total real, best_over int, best_under int,
   away_goalie   text, home_goalie text,
   away_b2b      boolean, home_b2b boolean,
@@ -50,7 +51,7 @@ create table if not exists nhl_games (
   start_utc     timestamptz,
   away_score    int, home_score int, final_total int,
   close_total   real, close_over int, close_under int,
-  close_src     text,              -- feed / pre-game / rejected (src/paper.py official_close)
+  close_src     text,              -- feed / pre-game / pre-game (feed down) / rejected (src/paper.py official_close, set_close)
   updated_at    timestamptz default now(),
   primary key (game_date, away, home)
 );
@@ -167,3 +168,4 @@ revoke all on nhl_daily_teams, nhl_daily_goalies, nhl_daily_skaters, nhl_daily_m
 -- alter table nhl_games add column if not exists close_src text;
 -- alter table nhl_paper_bets add column if not exists in_record boolean, add column if not exists call_close text,
 --   add column if not exists close_result text, add column if not exists close_units real;
+-- Nov 11 2026 (applied to the live database first): alter table nhl_projections add column if not exists line_src text;

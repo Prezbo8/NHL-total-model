@@ -718,6 +718,28 @@ def today(day=None, preview=False):
         name = names.get(r["book"], str(r["book"]))
         if books.mine(name):  # only the books the owner bets
             shop.setdefault(key, []).append((name, r["total"], int(r["over"]), int(r["under"])))
+    # games not started that Action Network has no current line for: DraftKings from ESPN, else the last saved line
+    # (odds.fill_lines; the opening line never comes from ESPN). Action Network's own failure still counts (alerts, retries).
+    now_utc0 = pd.Timestamp.now(tz="UTC")
+    upcoming = [(g["homeTeam"]["abbrev"], g["awayTeam"]["abbrev"]) for g in todays if pd.Timestamp(g["startTimeUTC"]) > now_utc0]
+    missing = [k for k in upcoming if not (lines.get(k) or {}).get("now")]
+    espn = {}
+    if missing:
+        espn = odds.espn_lines(health.attempt("ESPN odds (backup)", lambda: odds.espn_scoreboard(date.fromisoformat(day)), {}, waits=[]))
+    saved = {}
+    if missing and not preview:
+        today_log = paper.read_log()
+        for r in today_log[today_log.date == day].itertuples():
+            ln_ = odds.norm_line(r.bet_total_now, r.bet_over_now, r.bet_under_now)
+            if ln_:
+                saved[(r.home, r.away)] = (ln_, r.line_src_now if isinstance(r.line_src_now, str) else None)
+    line_src = odds.fill_lines(lines, upcoming, espn, saved)
+    for k, src_name in line_src.items():
+        if src_name == odds.BACKUP and not shop.get(k):  # Best over during an outage: DraftKings (one of the owner's books)
+            n_ = lines[k]["now"]
+            shop[k] = [("DraftKings", n_["total"], n_["over"], n_["under"])]
+    if not preview:
+        odds.line_health(health, missing, odds.no_line(lines, upcoming))
     import confirm  # second and third sources for starting goalies (+ Rotowire injuries)
     if preview:  # both only list today's games: their starters would be wrong for another day
         (rw_goalies, rw_injuries), gp_goalies = ({}, {}), {}
@@ -781,7 +803,10 @@ def today(day=None, preview=False):
         return max(opts) if opts else None
 
     def fmt(ln):
-        return f"{ln['total']:g} o{ln['over']:+d}/u{ln['under']:+d}" if ln else "-"
+        if not ln:
+            return "-"
+        u = ln.get("under")
+        return f"{ln['total']:g} o{ln['over']:+d}/u{'?' if u is None else f'{u:+d}'}"
 
     flagged, log_rows, starters = [], [], {}  # starters: {team: (goalie name, NHL id)} for the game notes' goalie form
     print(f"{day}  (high-scoring = projected {cutoff:.2f}+ goals for that team)\n")
@@ -839,6 +864,7 @@ def today(day=None, preview=False):
                          "open_total": op["total"] if op else None, "open_over": op["over"] if op else None,
                          "bet_total": cur["total"] if cur else None, "bet_over": cur["over"] if cur else None,
                          "bet_under": cur["under"] if cur else None,
+                         "line_src": (line_src.get((h, a), odds.CONSENSUS) if ln.get("now") else odds.CONSENSUS) if cur else None,
                          "best_book": best[1] if best else None, "best_total": best[2] if best else None,
                          "best_over": best[3] if best else None, "best_under": best[4] if best else None,
                          "logged_at": pd.Timestamp.now().strftime("%Y-%m-%d %H:%M"),
