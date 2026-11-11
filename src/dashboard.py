@@ -37,7 +37,7 @@ TIPS = {
     "KP defense": "How much the OPPONENT's projected goals rise if this player sits (same injury adjustment, defensive side). Players ranked by this number. OUT players are already in the projection. Rough guide only: tested on 2021-26, this side is too small and noisy to prove on its own.",
     "Proj total": "Projected total goals for the game (away + home), from the model.",
     "P(7+)": "Model's chance of 7 or more total goals, from the projected total and how evenly matched the teams are. 7+ wins an over 6.5 and an over 6 (exactly 6 pushes an over 6). NHL average ≈ 45%.",
-    "Line": "Consensus total: opening line → line when logged (on results: logged line → closing line). ↑/↓ = which way it moved.",
+    "Line": "Consensus total (Action Network): opening line → line when logged (on results: logged line → closing line). ↑/↓ = which way it moved. When the consensus feed is down, DraftKings' line from ESPN is used (marked 'DK backup'), or the game's last saved line ('saved').",
     "Over price": "Consensus price for the over at the logged line (American odds: −120 = risk 120 to win 100; +110 = risk 100 to win 110).",
     "Best over": "Best-value over at 6 or 6.5 across DraftKings, FanDuel, BetRivers, BetMGM and Caesars, chosen with the model's probabilities (an over 6 can push).",
     "Total goals": "Final total goals (a shootout winner counts as one goal, as sportsbooks settle it).",
@@ -81,7 +81,7 @@ TIPS = {
     "1U": "Flagged over where one team is great at 5-on-5 (above 2.19) but the other isn't good. Went over 63% (opening line) / 61% (closing line) in 2021-26 (tier cutoffs cut only from the two seasons before each one; the rule itself was chosen on 2021-26).",
     "PASS": "Flagged over, but neither team is great at 5-on-5 and they aren't both good. No bet: these went over only 47.5% (opening line) / 49% (closing line) in 2021-26 (tier cutoffs cut only from the two seasons before each one; the rule itself was chosen on 2021-26).",
     "AVOID": "Not flagged, or flagged but both teams face a Strong or Good goalie. These went over only 47% (opening line) / 49% (closing line) in 2021-26 (tier cutoffs cut only from the two seasons before each one; the rule itself was chosen on 2021-26).",
-    "Paper bet": "The paper-trading record's pick: flagged at the last model run before puck drop, graded at the closing consensus total and over price (6 or 6.5 closes only).",
+    "Paper bet": "The paper-trading record's pick: flagged at the last model run before puck drop, graded at the closing consensus total and over price (6 or 6.5 closes only; when the consensus feed was down, the last pre-game line, possibly DraftKings' via ESPN).",
     "Near miss": "{team} missed the {cutoff:.2f}-goal high-scoring cutoff by only {gap:.3f}. Not a bet: the over rule needs both teams over the cutoff (and a 6 or 6.5 line). Shown so close calls are easy to spot.",
     "B2B tag": "Played yesterday: the model cuts this team's scoring ~8% and raises its opponent's ~6.5%.",
 }
@@ -157,7 +157,7 @@ def current(g):
         g[f"{s_}_goalie"] = g[f"{s_}_goalie"].astype(object)
         g.loc[has, f"{s_}_goalie"] = g.loc[has, f"{s_}_goalie_now"]
     g["flag"] = g.flag.map(_is)
-    for c in [c for c in paper.NOW_BASE if c not in ("flag", "call")]:
+    for c in [c for c in paper.NOW_BASE if c not in ("flag", "call", "line_src")]:
         g[c] = pd.to_numeric(g[c], errors="coerce")
     return g
 
@@ -462,6 +462,15 @@ def start_time(v):
     if pd.isna(v) or not str(v).strip():
         return ""
     return f"{pd.Timestamp(v).tz_convert('America/New_York'):%-I:%M %p}"
+
+
+def line_src_tag(r):
+    """' DK backup' / ' saved' after a line that didn't come from the consensus feed (paper.py line_src)."""
+    src = getattr(r, "line_src", None)
+    if not isinstance(src, str) or not src or src == "consensus":
+        return ""
+    short = "saved" if src.endswith("(last saved)") else "DK backup"
+    return f" <span class='muted small' title='{e(src)}'>{short}</span>"
 
 
 def line(t):
@@ -809,7 +818,7 @@ def day_table(g):
             callpill += f" <span class='was'>{tip('was ' + r.first_call, f'First call when this game was logged: {r.first_call}. Updated with the latest goalies, lines and injuries.')}</span>"
         if final_day and not final:  # this game isn't settled yet (still on, or finished after the last run)
             ln = ("–" if pd.isna(r.bet_total) else f"{line(r.open_total)} <span class='muted'>{'o' + price(r.open_over) if not pd.isna(r.open_over) else ''}</span> → "
-                  f"{line(r.bet_total)} <span class='muted'>o{price(r.bet_over)}</span>")
+                  f"{line(r.bet_total)} <span class='muted'>o{price(r.bet_over)}</span>{line_src_tag(r)}")
             vs, outcome = "<span class='pill muted-pill'>pending</span>", "<span class='muted small'>not final yet</span>"
             game = (f"<td class='gcol tot' rowspan='2'><span class='big-total muted'>–</span>{vs}</td>"
                     f"<td class='num' rowspan='2'>{r.proj:.2f}</td><td class='num' rowspan='2'>{r.p7:.0%}</td>"
@@ -839,7 +848,7 @@ def day_table(g):
         else:
             ln = ("<span class='muted'>not posted</span>" if pd.isna(r.bet_total) else
                   f"{line(r.open_total)} <span class='muted'>{'o' + price(r.open_over) if not pd.isna(r.open_over) else ''}</span> → "
-                  f"{line(r.bet_total)} <span class='muted'>o{price(r.bet_over)}</span>")
+                  f"{line(r.bet_total)} <span class='muted'>o{price(r.bet_over)}</span>{line_src_tag(r)}")
             game = (f"<td class='num gcol big-total' rowspan='2'>{r.proj:.2f}</td><td class='num p7' rowspan='2'>{r.p7:.0%}</td>"
                     f"<td rowspan='2'>{gtime}{callpill}<br>{ln}</td>")
         mu = matchup(r)
@@ -1239,7 +1248,10 @@ def record(d):
         <li><b>Closing information only.</b> A flagged pick counts if the game was still flagged at the last model run before
         puck drop. Everything is graded at the closing consensus total and price, 1 unit per pick; picks count only when
         the close is 6 or 6.5 (the lines bet). When the odds feed's closing line is an in-game line (a long-shot price, or
-        more than half a goal off), the last line before puck drop is used instead.</li>
+        more than half a goal off), the last line before puck drop is used instead. When the consensus feed is down at
+        settling, the last pre-game line is used and the feed is retried for 3 days, so a recent day's result can still
+        change. When it was down before the game, the line is DraftKings' via ESPN, or the game's last saved line (which
+        can be hours old); the game's line is marked so.</li>
         <li><b>Top total / Top P(7+):</b> each day's single highest game, flagged or not. <b>P(7+) over 50%:</b> every such game.</li>
         <li><b>AVOID:</b> every AVOID game; its units are for betting the under at the closing under price.</li>
         <li>Retroactive days are left out of everything here.</li>

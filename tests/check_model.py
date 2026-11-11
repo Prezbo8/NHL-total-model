@@ -158,6 +158,48 @@ paper.remove_games(s3.date, {("XXX", "YYY")})
 kept = len(paper.read_log())
 paper.remove_games(s3.date, {("CLA", "CLH")})
 check("a game postponed after it was logged leaves the log (others stay)", kept == 1 and paper.read_log().empty)
+# offline: the odds feed is down at settling -> scores still settle, the close is the last pre-game line marked
+# 'pre-game (feed down)', kept while the feed stays down or doesn't list the game, upgraded when it answers, final after 3 days
+_yd2 = (datetime.date.today() - datetime.timedelta(days=1)).isoformat()
+_od = oct1.iloc[:1].copy()
+_od["date"], _od["away"], _od["home"] = _yd2, "OAW", "OHM"
+for _c in ("final_total", "away_score", "home_score", "result", "profit", "close_total", "close_over", "close_under", "close_src", "clv"):
+    _od[_c] = None
+_od[["flag", "bet_total", "bet_over", "bet_under", "bet_total_now", "bet_over_now", "bet_under_now"]] = [True, 6.5, -110, -110, 6.5, -115, -105]
+_od.to_csv(paper.LOG, index=False)
+_score = {"games": [{"awayTeam": {"abbrev": "OAW", "score": 3}, "homeTeam": {"abbrev": "OHM", "score": 4}, "gameState": "OFF"}]}
+def _down(*a, **k):
+    raise OSError("odds feed down")
+_steps = []
+for _feed in (_down, lambda *a, **k: [], lambda *a, **k: [{"away": "OAW", "home": "OHM", "total": 6.5, "over": -125, "under": 105}]):
+    paper.urllib.request.urlopen = lambda *a, **k: io.BytesIO(json.dumps(_score).encode())
+    paper.odds.day_games = _feed
+    try:
+        paper.settle()
+    finally:
+        paper.urllib.request.urlopen, paper.odds.day_games = real_open, real_day
+    _r = paper.read_log().iloc[0]
+    _steps.append((_r.final_total, _r.result, _r.close_over, _r.close_src, _r.clv))
+paper.odds.day_games = _down
+paper.urllib.request.urlopen = lambda *a, **k: io.BytesIO(json.dumps(_score).encode())
+try:
+    paper.settle()  # down again after the upgrade: an upgraded close stays
+finally:
+    paper.urllib.request.urlopen, paper.odds.day_games = real_open, real_day
+_after = paper.read_log().iloc[0].close_src
+_old = paper.read_log()
+_old["date"], _old["close_src"] = (datetime.date.today() - datetime.timedelta(days=paper.CLOSE_RETRY_DAYS + 2)).isoformat(), paper.FEED_DOWN
+_old.to_csv(paper.LOG, index=False)
+paper.urllib.request.urlopen, paper.odds.day_games = (lambda *a, **k: io.BytesIO(json.dumps(_score).encode())), (lambda *a, **k: [])
+try:
+    paper.settle()
+finally:
+    paper.urllib.request.urlopen, paper.odds.day_games = real_open, real_day
+_final = paper.read_log().iloc[0].close_src
+check("settle with the odds feed down: scores settle (W), the close is the last pre-game line marked 'feed down', kept "
+      "while the feed is down or lacks the game, upgraded with CLV when it answers; a mark older than 3 days becomes final",
+      _steps[0][:4] == (7, "W", -115, paper.FEED_DOWN) and _steps[1][3] == paper.FEED_DOWN
+      and _steps[2][2:] == (-125, "feed", 1) and _after == "feed" and _final == "pre-game", f"{_steps} {_after} {_final}")
 paper.LOG = _log
 c0 = {"total": 6.5, "over": -130, "under": 110}
 check("line-move: up a full line = toward over", paper.clv(6.0, -110, -110, {"total": 6.5, "over": 100, "under": -120}) == 1)
@@ -879,6 +921,80 @@ _tl, _ = retune.tier_section(2026)
 _row = next((l for l in _tl if l.startswith("| 5v5")), "")
 check("October tier report: a 'Rule (two previous seasons)' column (2024-26 = the live cutoffs) beside the drift view",
       any("Rule (two previous seasons)" in l for l in _tl) and _row.split("|")[3].strip() == "1.83 / 1.94 / 2.05 / 2.19", _row)
+
+print("backup odds (ESPN / DraftKings) and the line merge")
+_espn = odds.espn_lines(_load("espn_sb_20261111.json"))
+_ev = lambda state, **x: {"competitions": [{"status": {"type": {"state": state}}, "competitors": [
+    {"homeAway": "home", "team": {"displayName": x.get("home", "Boston Bruins")}},
+    {"homeAway": "away", "team": {"displayName": x.get("away", "Montréal Canadiens")}}],
+    "odds": [{"total": {"over": {"close": {"line": f"o{x.get('t', 6.5)}", "odds": x.get("o", "-110")}},
+                       "under": {"close": {"line": f"u{x.get('t', 6.5)}", "odds": x.get("u", "-110")}}}}] if x.get("odds", True) else []}]}
+_warn = []
+_made = odds.espn_lines({"events": [_ev("pre", o="EVEN", u="-120"), _ev("in", home="Ottawa Senators"), _ev("post", home="Florida Panthers"),
+                                    _ev("pre", home="Nowhere Nobodies"), _ev("pre", home="Dallas Stars", odds=False)]}, warn=_warn.append)
+check("ESPN backup: DraftKings' current total for each scheduled game, teams by full name (TB -> TBL); live / final games "
+      "and games without odds skipped; 'EVEN' = +100; an unknown team name is reported",
+      len(_espn) == 6 and _espn[("BUF", "TBL")] == {"total": 6.5, "over": -115, "under": -105} and _espn[("SJS", "PIT")]["over"] == -135
+      and _made == {("BOS", "MTL"): {"total": 6.5, "over": 100, "under": -120}} and len(_warn) == 1 and "Nowhere" in _warn[0],
+      f"{sorted(_espn)} {_made} {_warn}")
+check("odds.norm_line: saved CSV floats become whole prices; an empty under is None; no over or no total = no line",
+      odds.norm_line(6.5, -114.0, float("nan")) == {"total": 6.5, "over": -114, "under": None}
+      and odds.norm_line(6.0, None, -110) is None and odds.norm_line(float("nan"), -110, -110) is None)
+_L = lambda t, o: {"total": t, "over": o, "under": -110}
+_lines = {("A", "B"): {"now": _L(6.5, -105)}, ("C", "D"): {"open": _L(6.0, -110)}}
+_src = odds.fill_lines(_lines, [("A", "B"), ("C", "D"), ("E", "F"), ("G", "H"), ("I", "J")],
+                       espn={("C", "D"): _L(6.5, 100)},
+                       saved={("E", "F"): (_L(6.0, -120), None), ("G", "H"): (_L(6.5, -115), "DraftKings (ESPN backup) (last saved)")})
+check("line merge: Action Network's line kept; a game it lacks gets DraftKings from ESPN; else its last saved line, labelled "
+      "with the original source (never doubled); none -> no line; the opening line is never filled from ESPN",
+      _src == {("A", "B"): "consensus", ("C", "D"): "DraftKings (ESPN backup)", ("E", "F"): "consensus (last saved)",
+               ("G", "H"): "DraftKings (ESPN backup) (last saved)"}
+      and _lines[("C", "D")]["open"] == _L(6.0, -110) and _lines[("C", "D")]["now"]["over"] == 100 and ("I", "J") not in _lines
+      and odds.no_line(_lines, [("A", "B"), ("I", "J")]) == ["J@I"], str(_src))
+class _H:  # a stand-in for the health module
+    def __init__(self, r):
+        self._results, self.notes = dict(r), []
+    def note(self, x):
+        self.notes.append(x)
+_h1 = _H({"Action Network now lines": None})  # a fresh run where the backup wasn't needed
+odds.line_health(_h1, [], [])
+_h2 = _H({"Action Network now lines": "HTTPError 404"})
+odds.line_health(_h2, [("X", "Y")], ["Y@X"])
+_h3 = _H({"Action Network now lines": None})
+with contextlib.redirect_stdout(io.StringIO()):
+    odds.line_health(_h3, [("X", "Y")], ["Y@X"])
+check("line health: when the backup wasn't needed its old failure resets; a game with no line after a source failed "
+      "fails 'Betting lines' (retries, alert); every source answered and a game is off the board -> a summary line only",
+      "ESPN odds (backup)" in _h1._results and _h1._results["ESPN odds (backup)"] is None
+      and _h2._results.get("Betting lines", "").startswith("no line for 1 game") and "Betting lines" not in _h3._results
+      and _h3.notes and "off the board" in _h3.notes[0], f"{_h1._results} {_h2._results} {_h3._results}")
+_hr = dict(health._results)
+health._results.clear()
+health.attempt("Action Network now lines", lambda: (_ for _ in ()).throw(OSError("404")), [], must=True, waits=[])
+health.attempt("ESPN odds (backup)", lambda: {"events": []}, {}, waits=[])
+_failed = list(health.failed())
+health._results.clear(); health._results.update(_hr)
+check("Action Network failing is still recorded (alerts, retries) when the backup works", "Action Network now lines" in str(_failed)
+      and "ESPN odds (backup)" not in str(_failed), str(_failed))
+_cur = dashboard.current(pd.DataFrame([{**row0, "proj_now": row0["proj"], "line_src_now": odds.BACKUP, "line_src": "consensus"}]))
+check("dashboard: the line source stays text and a backup line is marked 'DK backup' (a saved one 'saved')",
+      _cur.line_src.iloc[0] == odds.BACKUP and "DK backup" in dashboard.line_src_tag(_cur.iloc[0])
+      and "saved" in dashboard.line_src_tag(pd.Series({"line_src": "consensus (last saved)"})) and dashboard.line_src_tag(pd.Series({"line_src": "consensus"})) == "",
+      str(_cur.line_src.iloc[0]))
+_lg0 = paper.LOG
+paper.LOG = SP + "linesrc_log.csv"
+_fut = (pd.Timestamp.now(tz="UTC") + pd.Timedelta(hours=6)).isoformat()
+_base = {"start_utc": _fut, "date": datetime.date.today().isoformat(), "away": "LSA", "home": "LSH", "proj": 6.4, "proj_away": 3.2,
+         "proj_home": 3.2, "cutoff": 3.1, "p7": 0.5, "logged_at": "t", "updated_at": "t"}
+paper.log_games([{**_base, "flag": False, "bet_total": 6.5, "bet_over": -110, "bet_under": -110, "line_src": "consensus",
+                  "open_total": None, "open_over": None}])
+paper.log_games([{**_base, "flag": True, "bet_total": 6.5, "bet_over": 105, "bet_under": -125, "line_src": odds.BACKUP,
+                  "open_total": 6.0, "open_over": -115}])
+_ls = paper.read_log().iloc[0]
+paper.LOG = _lg0
+check("paper log: a game newly flagged at a backup line records that source; an opening line missing at first is filled later",
+      _ls.line_src == odds.BACKUP and _ls.line_src_now == odds.BACKUP and _ls.bet_over == 105 and _ls.open_total == 6.0
+      and _ls.open_over == -115, str(_ls[["line_src", "line_src_now", "bet_over", "open_total"]].to_dict()))
 
 print("team rankings page (Overview, Offense, Defense, Form)")
 rk_html = dashboard.rankings(real)

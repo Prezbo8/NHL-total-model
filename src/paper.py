@@ -36,12 +36,15 @@ COLS = ["date", "away", "home", "proj", "proj_away", "proj_home", "cutoff", "fla
         # goalie confirmation sources (confirm.py) and, after the game, who actually started (NHL box score)
         "game_id", "start_utc", "away_goalie_src", "home_goalie_src", "away_goalie_actual", "home_goalie_actual",
         # SLAM / 1U / PASS / AVOID as the model called it at the time (never recomputed from later tier cutoffs)
-        "call"] + [
+        "call",
+        # where the bet line came from: 'consensus' (Action Network, empty on old rows), 'DraftKings (ESPN backup)', or
+        # '... (last saved)' when a run had no line and the game kept its last saved one (odds.py, Nov 2026)
+        "line_src"] + [
         f"{s}_{c}" for s in ("away", "home") for c in ("ev", "pp", "oth", "gadj", "b2badj", "spd", "inj", "elim")]
 BREAKDOWN = [f"{s}_{c}" for s in ("away", "home") for c in ("ev", "pp", "oth", "gadj", "b2badj", "spd", "inj", "elim")]
 # latest run's numbers for games that haven't started (what the dashboard shows); the columns above
 # stay as first logged, which is the paper bet
-NOW_BASE = ["proj", "proj_away", "proj_home", "p7", "cutoff", "flag", "bet_total", "bet_over", "bet_under", "call"] + BREAKDOWN
+NOW_BASE = ["proj", "proj_away", "proj_home", "p7", "cutoff", "flag", "bet_total", "bet_over", "bet_under", "call", "line_src"] + BREAKDOWN
 NOW = [f"{c}_now" for c in NOW_BASE]
 COLS += NOW
 
@@ -62,7 +65,7 @@ def read_log():
     for c in ("result", "result_best", "best_book", "away_goalie_now", "home_goalie_now", "updated_at", "flagged_at",
               "away_goalie", "home_goalie", "away_out", "home_out", "away_dtd", "home_dtd", "away_lineup", "home_lineup",
               "h2h_last", "trend_lean", "start_utc", "away_goalie_src", "home_goalie_src", "away_goalie_actual", "home_goalie_actual",
-              "call", "call_now", "close_src"):
+              "call", "call_now", "close_src", "line_src", "line_src_now"):
         d[c] = d[c].astype(object)
     return d
 
@@ -101,13 +104,16 @@ def log_games(rows):
             if not was_flagged_now(old.at[i, "flag"]):  # best book is informational until a game is flagged
                 for c in ("best_book", "best_total", "best_over", "best_under"):
                     old.loc[i, c] = r[c]
+            if pd.isna(old.at[i, "open_total"]) and not pd.isna(r["open_total"]):  # logged while the opening line was missing
+                for c in ("open_total", "open_over"):
+                    old.loc[i, c] = r[c]
             if pd.isna(old.at[i, "away_ev"]):  # rows logged before breakdowns existed
                 for c in BREAKDOWN:
                     old.loc[i, c] = r[c]
             if r.flag and not was_flagged_now(old.at[i, "flag"]):  # newly qualifies: flag it at today's current line
                 for c in ("proj", "proj_away", "proj_home", "p7", "away_goalie", "home_goalie",
                           "bet_total", "bet_over", "bet_under", "best_book", "best_total", "best_over", "best_under",
-                          "flag", "flagged_at", "call") + tuple(BREAKDOWN):
+                          "flag", "flagged_at", "call", "line_src") + tuple(BREAKDOWN):
                     old.loc[i, c] = r[c]
                 upgraded += 1
     out = pd.concat([old, added], ignore_index=True) if len(old) else added
@@ -186,6 +192,7 @@ def remove_games(day, keys):
 
 
 CLOSE_RETRY_DAYS = 3  # how long a settled game missing its closing line keeps getting re-checked
+FEED_DOWN = "pre-game (feed down)"  # close_src while the odds feed was down at settling: retried for CLOSE_RETRY_DAYS
 
 
 def settle():
@@ -196,24 +203,30 @@ def settle():
     past = pd.to_datetime(d.date) < pd.Timestamp(date.today())
     # also settled games still missing a closing line (the odds feed skipped them once): retried for CLOSE_RETRY_DAYS
     recent = pd.to_datetime(d.date) >= pd.Timestamp(date.today()) - pd.Timedelta(days=CLOSE_RETRY_DAYS)
-    todo = d[past & (d.final_total.isna() | (d.close_total.isna() & recent))]
+    todo = d[past & (d.final_total.isna() | (d.close_total.isna() & recent) | ((d.close_src == FEED_DOWN) & recent))]
     postponed, newly, bets = [], 0, []  # newly settled games / bets: for the run's summary
     for day in sorted(todo.date.unique()):
-        try:  # a score / odds blip skips this day; the next run settles it
+        try:  # a score blip skips this day; the next run settles it
             with urllib.request.urlopen(fetch(f"https://api-web.nhle.com/v1/score/{day}"), timeout=30) as f:
                 scores = {(g["awayTeam"]["abbrev"], g["homeTeam"]["abbrev"]): g for g in json.load(f)["games"]}
-            closing = {}
-            for r in odds.day_games(date.fromisoformat(day), 15):
-                closing[(grade.ABBR.get(r["away"], r["away"]), grade.ABBR.get(r["home"], r["home"]))] = r
         except Exception as e:
             print(f"(couldn't settle {day} yet: {e})")
             health.note(f"✗ Couldn't settle {day} yet ({type(e).__name__}): the next run tries again")
             continue
+        closing, feed_ok = {}, True
+        try:  # an odds outage no longer holds up the scores: closes fall back to the last pre-game line, retried later
+            for r in odds.day_games(date.fromisoformat(day), 15):
+                closing[(grade.ABBR.get(r["away"], r["away"]), grade.ABBR.get(r["home"], r["home"]))] = r
+        except Exception as e:
+            feed_ok = False
+            print(f"(closing lines for {day} unavailable: {e})")
+            health.note(f"⚠ Closing lines for {day} unavailable ({type(e).__name__}): scores settled; closes use the last "
+                        f"pre-game line, retried for {CLOSE_RETRY_DAYS} days")
         for i in todo[todo.date == day].index:
             k = (d.at[i, "away"], d.at[i, "home"])
             g = scores.get(k)
             if not pd.isna(d.at[i, "final_total"]):  # already settled: only the closing line (and a bet's CLV) was missing
-                c = set_close(d, i, closing.get(k))
+                c = set_close(d, i, closing.get(k), feed_ok)
                 if c and not pd.isna(d.at[i, "result"]) and not pd.isna(d.at[i, "bet_under"]):
                     d.at[i, "clv"] = clv(d.at[i, "bet_total"], d.at[i, "bet_over"], d.at[i, "bet_under"], c)
                 continue
@@ -225,7 +238,7 @@ def settle():
             a, h = g["awayTeam"]["score"], g["homeTeam"]["score"]  # NHL final score counts the shootout goal
             d.loc[i, ["away_score", "home_score", "final_total"]] = [a, h, a + h]
             newly += 1
-            c = set_close(d, i, closing.get(k))
+            c = set_close(d, i, closing.get(k), feed_ok)
             if d.at[i, "flag"] and not pd.isna(d.at[i, "bet_total"]) and not pd.isna(d.at[i, "bet_over"]):
                 bt, bo = d.at[i, "bet_total"], d.at[i, "bet_over"]
                 res = "W" if a + h > bt else "P" if a + h == bt else "L"
@@ -242,6 +255,8 @@ def settle():
     if postponed:  # the game gets logged again on its new date
         print("(postponed / cancelled, removed from the log: " + ", ".join(f"{d.at[i, 'date']} {d.at[i, 'away']}@{d.at[i, 'home']}" for i in postponed) + ")")
         d = d.drop(index=postponed)
+    old_marks = (d.close_src == FEED_DOWN) & ~recent.reindex(d.index, fill_value=False)
+    d.loc[old_marks, "close_src"] = "pre-game"  # out of the retry window: the last pre-game line is final
     fixed = recheck_closes(d)
     if fixed:
         print("(closing lines replaced by the last pre-game line: " + ", ".join(fixed) + ")")
@@ -280,8 +295,16 @@ def official_close(r, c):
     return None, "rejected" if c else None
 
 
-def set_close(d, i, c):
-    """Write the official closing line (official_close) into row i; returns it (None when there isn't one)."""
+def set_close(d, i, c, feed_ok=True):
+    """Write the official closing line (official_close) into row i; returns it (None when there isn't one).
+    feed_ok=False (the odds feed failed this run): the last pre-game line is written and marked FEED_DOWN, so the row
+    is retried for CLOSE_RETRY_DAYS. A FEED_DOWN row whose feed answered without this game keeps its mark (and close)."""
+    if not feed_ok or (c is None and d.at[i, "close_src"] == FEED_DOWN):
+        snap, _ = official_close(d.loc[i], None)
+        if snap:  # only a written close gets the mark; no snapshot = the empty close is retried anyway
+            d.loc[i, ["close_total", "close_over", "close_under"]] = [snap["total"], snap["over"], snap.get("under")]
+            d.at[i, "close_src"] = FEED_DOWN
+        return snap
     c, src = official_close(d.loc[i], c)
     if src:
         d.at[i, "close_src"] = src

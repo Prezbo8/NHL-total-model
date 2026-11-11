@@ -107,7 +107,7 @@ def projection_rows(run_id, rows, now=None):
                     **{k: r.get(k) for k in ("proj", "proj_away", "proj_home", "p7", "cutoff", "open_total", "open_over",
                                              "best_book", "best_total", "best_over", "best_under", "away_goalie",
                                              "home_goalie", "away_b2b", "home_b2b", "away_out", "home_out",
-                                             "away_dtd", "home_dtd")},
+                                             "away_dtd", "home_dtd", "line_src")},
                     "flag": bool(r.get("flag")), "call": dashboard.call(ns, bool(r.get("flag"))),
                     "line_total": r.get("bet_total"), "line_over": r.get("bet_over"), "line_under": r.get("bet_under"),
                     **{k: r.get(k) for k in BREAKDOWN}})
