@@ -2212,13 +2212,17 @@ CSS = """
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
 .wrap{max-width:1360px;margin:0 auto;padding:0 16px 64px}
-/* hero: a rink seen from above - red center line, blue lines, faceoff circle */
+/* hero: night ice - a rink seen from above (red center line, blue lines, faceoff circle) with faint skate scratches
+   and a cold glow from below; the lines are soft so the title stands out */
 .hero{position:relative;overflow:hidden;margin:0 -16px;padding:34px 24px 30px;color:#fff;
-  background:linear-gradient(90deg,transparent calc(50% - 2px),rgba(200,16,46,.85) calc(50% - 2px),rgba(200,16,46,.85) calc(50% + 2px),transparent calc(50% + 2px)),
-    linear-gradient(90deg,transparent 30%,rgba(31,111,235,.75) 30%,rgba(31,111,235,.75) calc(30% + 6px),transparent calc(30% + 6px),
-      transparent calc(70% - 6px),rgba(31,111,235,.75) calc(70% - 6px),rgba(31,111,235,.75) 70%,transparent 70%),
-    radial-gradient(circle at 50% 50%,transparent 58px,rgba(31,111,235,.6) 59px,rgba(31,111,235,.6) 61px,transparent 62px),
-    linear-gradient(160deg,#0d2440,#0a1a2e 60%,#081422)}
+  background:repeating-linear-gradient(115deg,rgba(255,255,255,.035) 0 1px,transparent 1px 9px),
+    repeating-linear-gradient(25deg,rgba(255,255,255,.025) 0 1px,transparent 1px 13px),
+    radial-gradient(ellipse at 50% 120%,rgba(147,197,253,.28),transparent 60%),
+    linear-gradient(90deg,transparent calc(50% - 2px),rgba(200,16,46,.55) calc(50% - 2px),rgba(200,16,46,.55) calc(50% + 2px),transparent calc(50% + 2px)),
+    linear-gradient(90deg,transparent 30%,rgba(59,130,246,.45) 30%,rgba(59,130,246,.45) calc(30% + 6px),transparent calc(30% + 6px),
+      transparent calc(70% - 6px),rgba(59,130,246,.45) calc(70% - 6px),rgba(59,130,246,.45) 70%,transparent 70%),
+    radial-gradient(circle at 50% 50%,transparent 58px,rgba(59,130,246,.45) 59px,rgba(59,130,246,.45) 61px,transparent 62px),
+    linear-gradient(180deg,#15335a,#0c1f38)}
 .hero:has(>.lastrun){display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px 16px}
 .lastrun{position:relative;margin:-20px -6px 0 auto;text-align:right;font-size:11px;line-height:1.35;color:#c9d6e6;z-index:2}
 .lastrun b{display:block;font-size:13px;color:#fff;font-weight:700}
@@ -2355,7 +2359,7 @@ footer{margin-top:32px;font-size:13px;color:var(--muted)}a{color:var(--accent)}
 .small-hero{padding:24px 24px 20px}.small-hero h1{font-size:clamp(22px,4vw,32px)}
 .tabs{display:flex;gap:6px;margin:14px 0 4px;border-bottom:2px solid var(--line)}
 .tab{padding:8px 16px;font-weight:700;font-size:14px;color:var(--muted);text-decoration:none;border-radius:8px 8px 0 0;margin-bottom:-2px;border:2px solid transparent}
-.tab:hover{color:var(--ink)}.tab.on{color:var(--ink);background:var(--card);border-color:var(--line);border-bottom-color:var(--card)}
+.tab:hover{color:var(--ink)}@media (max-width:760px){.tabs{gap:0}.tab{padding:7px 6px;font-size:12.5px;text-align:center;line-height:1.2}}.tab.on{color:var(--ink);background:var(--card);border-color:var(--line);border-bottom-color:var(--card)}
 .daynav{display:flex;justify-content:space-between;align-items:center;margin:16px 0 0;font-weight:700}
 .legend{margin:8px 0 0}
 /* table layout: two rows per game, sized to fit a desktop screen */
@@ -2438,10 +2442,10 @@ ul.archive li:last-child{border-bottom:none}
 
 
 def tabs(active, has_rankings):
-    """Tab bar between the dashboard, tomorrow's preview and the team rankings page."""
+    """Tab bar between the dashboard, yesterday's results, tomorrow's preview and the team rankings page."""
     if not has_rankings:
         return ""
-    t = [("dash", "index.html", "Dashboard"), ("prev", "preview.html", "Tomorrow preview"), ("rank", "rankings.html", "Team rankings")]
+    t = [("dash", "index.html", "Dashboard"), ("yest", "yesterday.html", "Yesterday's results"), ("prev", "preview.html", "Tomorrow preview"), ("rank", "rankings.html", "Team rankings")]
     return ("<nav class='tabs'>" + "".join(f"<a href='{u}' class='tab{' on' if k == active else ''}'>{n}</a>" for k, u, n in t)
             + "</nav>")
 
@@ -2571,8 +2575,6 @@ def build():
 
 <section><h2>Today's slate</h2>{slate(d)}</section>
 
-<section><h2>Yesterday's results</h2>{yesterday(d)}</section>
-
 <section><h2>Team over records</h2><div class="panel">{team_records(d)}</div></section>
 
 <section><h2>Paper trading record</h2>{record(d)}</section>
@@ -2605,6 +2607,10 @@ Data from the 2020-21 season onward only (MoneyPuck, NHL API, DailyFaceoff, Acti
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
     with open(OUT, "w") as f:
         f.write(shell("NHL Total Model", body))
+    with open(os.path.join(os.path.dirname(OUT), "yesterday.html"), "w") as f:
+        f.write(shell("NHL Total Model · Yesterday's results",
+                      f"<header class='hero'><h1>{BRAND}Yesterday's results</h1>{stamp}</header>{tabs('yest', bool(rk))}"
+                      f"<section>{yesterday(d)}</section>"))
     with open(os.path.join(os.path.dirname(OUT), "preview.html"), "w") as f:
         f.write(shell("NHL Total Model · Tomorrow preview",
                       f"<header class='hero'><h1>{BRAND}Tomorrow preview</h1>{stamp}</header>{tabs('prev', bool(rk))}"
