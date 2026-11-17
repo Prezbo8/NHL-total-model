@@ -774,7 +774,7 @@ def day_table(g):
         def team(side, abbr, proj, score):
             hot = proj >= r.cutoff
             rk = f"<span class='rk-tag' title='{e(TIPS['Rank tag'])}'>{e(ranks[abbr])}</span>" if abbr in ranks else ""
-            cells = (f"<td class='tm'>{logo(abbr, 22)}<b title='{e(TEAMS.get(abbr, abbr))}'>{e(abbr)}</b>{rk}</td>")
+            cells = (f"<td class='tm stm'>{logo(abbr, 34)}<b title='{e(TEAMS.get(abbr, abbr))}'>{e(abbr)}</b>{rk}</td>")
             if final_day:
                 cells += f"<td class='num score-cell'>{'–' if score is None or pd.isna(score) else int(score)}</td>"
             sq = f"<span class='b2b-sq' title='{e(TIPS['B2B tag'])}'></span>" if _is(getattr(r, f"{side}_b2b")) else ""
@@ -880,7 +880,7 @@ def mobile_card(r, final, callpill, st, status, breakdown_cells, cls, ranks, kpt
         g_ = lambda c: getattr(r, f"{side}_{c}", float("nan"))
         rk = f"<span class='rk-tag' title='{e(TIPS['Rank tag'])}'>{e(ranks[abbr])}</span>" if abbr in ranks else ""
         sq = f"<span class='b2b-sq' title='{e(TIPS['B2B tag'])}'></span>" if _is(getattr(r, f"{side}_b2b")) else ""
-        return (f"<div class='mc-team'>{logo(abbr, 26)}<b>{e(abbr)}</b><span>{rk}</span>"
+        return (f"<div class='mc-team'>{logo(abbr, 34)}<b>{e(abbr)}</b><span>{rk}</span>"
                 + (f"<span class='mc-score'>{int(score)}</span>" if final else "")
                 + f"<span class='mc-proj{' hot' if hot else ''}'>{sq}{proj:.2f}<span class='hot-dot{'' if hot else ' off'}'>●</span></span>"
                 + f"<div class='mc-gl'>{goalie_compact(g_('goalie'), g_('goalie_now'), g_('goalie_src'), g_('goalie_actual'), getattr(r, f"{'home' if side == 'away' else 'away'}_gadj", float('nan')), r.home if side == 'away' else r.away)}</div></div>")
@@ -2265,14 +2265,14 @@ table.tg-t td.tm img,table.tg-t td.tm picture{vertical-align:middle;margin:0 4px
 .mc-top{display:flex;align-items:center;justify-content:space-between;gap:8px}.mc-top .gtime{font-size:15px}
 .mc-status{margin:6px 0 4px;font-size:13px;line-height:1.35}
 .mc-team{display:grid;grid-template-columns:auto auto 1fr auto auto;align-items:center;gap:6px;padding:6px 0;border-top:1px solid var(--line)}
-.mc-team b{font-size:15px}.mc-team .b2b{justify-self:start}
+.mc-team b{font-size:19px}.mc-team .b2b{justify-self:start}
 .mc-score{font-size:18px;font-weight:800;grid-column:4}.mc-proj{grid-column:5;font-weight:700;font-variant-numeric:tabular-nums}
 .mc-proj.hot{color:var(--accent)}.mc-gl{grid-column:1/-1;font-size:12.5px;color:var(--muted)}
 .mc-sum{font-size:13px;padding:6px 0;border-top:1px solid var(--line)}.mc-sum .big-total{font-size:18px}
 table.gt.mc-bd{table-layout:auto;font-size:11px;margin:2px 0 6px}table.gt.mc-bd td,table.gt.mc-bd th{padding:4px 2px;overflow:visible;text-overflow:clip;white-space:nowrap}
 table.gt.mc-bd th{font-size:9.5px}table.gt.mc-bd td:first-child{font-weight:700;padding-right:4px}
 .mc-why summary{cursor:pointer;font-size:13px;color:var(--muted);padding:4px 0}.mc-why .why-text{font-size:13px;line-height:1.45}
-.hero h1{margin:0;font-size:clamp(28px,5vw,44px);letter-spacing:-.02em;position:relative}
+.hero h1{margin:0;font-size:clamp(28px,5vw,44px);letter-spacing:-.02em;position:relative}.hero h1 .brand{height:1.9em;width:auto;vertical-align:-.6em;margin:-.2em .25em -.2em -.1em}
 .hero p{margin:6px 0 0;color:#c9d6e6;position:relative}
 .hero .stats{display:flex;gap:12px;flex-wrap:wrap;margin-top:18px;position:relative}
 .hero .stat{background:rgba(255,255,255,.1);backdrop-filter:blur(4px);border:1px solid rgba(255,255,255,.18);border-radius:10px;padding:8px 14px}
@@ -2366,7 +2366,7 @@ table.gt{font-size:12.5px;border-collapse:separate;border-spacing:0;width:100%;t
 .gt td[rowspan]{white-space:normal}.gt td[rowspan].nowrap,.gt td[rowspan].tot{white-space:nowrap}
 .gt td.tot{padding-left:3px;padding-right:3px}.gt td.linecell{white-space:normal;overflow:visible;text-overflow:clip;text-align:center}
 .gt td.pickcell{line-height:1.15;padding-top:2px;padding-bottom:2px}.gt td.pickcell .small{font-size:10.5px}.gt td.pickcell .flagpill{margin-bottom:1px}
-.gt td.tm{white-space:nowrap}.gt td.tm .b2b{margin-left:4px}.gt td.tm img,.gt td.tm picture{margin-right:5px}
+.gt td.tm{white-space:nowrap}.gt td.stm{white-space:normal;line-height:1.1}.gt td.stm b{font-size:18px;letter-spacing:.01em;vertical-align:middle}.gt td.stm .rk-tag{font-size:11px;display:inline-block}.gt td.tm .b2b{margin-left:4px}.gt td.tm img,.gt td.tm picture{margin-right:5px}
 .gt tbody.game tr.away td:not([rowspan]),.gt tbody.game tr.home td:not([rowspan]){height:34px;vertical-align:middle}
 .gt th.num,.gt td.num{text-align:right}.gt th:not(.num),.gt td:not(.num){text-align:left}
 .gt td,.gt th{vertical-align:middle}.gt thead tr:not(.sec) th{vertical-align:bottom}
@@ -2446,11 +2446,14 @@ def tabs(active, has_rankings):
             + "</nav>")
 
 
+# site logo (crossed sticks, O/U plate, puck); the same file is the browser-tab icon
+BRAND = "<img class='brand' src='favicon.svg' alt='' width='100' height='106'>"
+
+
 def shell(title, body, root=""):
     return f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>{e(title)}</title>
-<link rel="icon" type="image/svg+xml" href="{root}favicon.svg" media="(prefers-color-scheme: light)">
-<link rel="icon" type="image/svg+xml" href="{root}favicon-dark.svg" media="(prefers-color-scheme: dark)">
+<link rel="icon" type="image/svg+xml" href="{root}favicon.svg">
 <link rel="icon" type="image/png" sizes="32x32" href="{root}favicon-32.png">
 <link rel="apple-touch-icon" href="{root}apple-touch-icon.png"><style>{CSS}</style></head>
 <body><div class="wrap">{body}
@@ -2563,7 +2566,7 @@ def build():
              f"<b>{e(lr)}{run_status()}</b></div>{checkpoints(d)}</div>") if lr else ""
     rk = rankings(d)
     body = f"""
-<header class="hero"><h1>NHL Total Model</h1>{stamp}</header>
+<header class="hero"><h1>{BRAND}NHL Total Model</h1>{stamp}</header>
 {tabs("dash", bool(rk))}
 
 <section><h2>Today's slate</h2>{slate(d)}</section>
@@ -2604,13 +2607,13 @@ Data from the 2020-21 season onward only (MoneyPuck, NHL API, DailyFaceoff, Acti
         f.write(shell("NHL Total Model", body))
     with open(os.path.join(os.path.dirname(OUT), "preview.html"), "w") as f:
         f.write(shell("NHL Total Model · Tomorrow preview",
-                      f"<header class='hero'><h1>Tomorrow preview</h1>{stamp}</header>{tabs('prev', bool(rk))}"
+                      f"<header class='hero'><h1>{BRAND}Tomorrow preview</h1>{stamp}</header>{tabs('prev', bool(rk))}"
                       f"<section><h2>Tomorrow's slate</h2>{preview(d)}</section>"))
     rk_path = os.path.join(os.path.dirname(OUT), "rankings.html")
     if rk:
         with open(rk_path, "w") as f:
             f.write(shell("NHL Total Model · Team rankings",
-                          f"<header class='hero'><h1>Team rankings</h1>{stamp}</header>{tabs('rank', True)}"
+                          f"<header class='hero'><h1>{BRAND}Team rankings</h1>{stamp}</header>{tabs('rank', True)}"
                           f"<section><div class='panel'>{rk}</div></section>"))
     elif os.path.exists(rk_path):
         os.remove(rk_path)
