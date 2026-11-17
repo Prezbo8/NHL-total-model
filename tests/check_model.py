@@ -489,7 +489,7 @@ days = os.listdir(SP + "site/days")
 visible = re.sub(r"<style>.*?</style>|<[^>]+>", " ", html, flags=re.S)
 check("index + a page per logged day", len(days) == real.date.nunique(), f"{len(days)} day pages")
 check("no 'nan' / 'None' shown on the page", not re.search(r"\bnan\b|\bNone\b", visible))
-check("header: title + last model run time", re.search(r"<header class=\"hero\"><h1>NHL Total Model</h1>(<div class='lastrun'>.*?</div>)?</header>", html) is not None
+check("header: logo + title + last model run time", re.search("<header class=\"hero\"><h1>" + re.escape(dashboard.BRAND) + r"NHL Total Model</h1>(<div class='lastrun'>.*?</div>)?</header>", html) is not None
       and (dashboard.last_run() == "" or dashboard.last_run() in html))
 # reasoning text: every logged game plus awkward future cases (no line, missing goalie/rating/scores, push, both tired)
 nan = float("nan")
