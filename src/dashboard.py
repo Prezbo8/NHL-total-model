@@ -1797,7 +1797,7 @@ def rankings(d=None):
         if fw is not None:
             x = fw[fw.window.astype(str) == "14"].sort_values("net", ascending=False).reset_index(drop=True)
             f14 = {w_.team: (w_.net, i + 1) for i, w_ in x.iterrows()}
-        fcls = lambda v: "t-" + ("great" if v >= 0.5 else "good" if v >= 0.2 else "mid" if v > -0.2 else "bad" if v > -0.5 else "trash")
+        fcls = form_cls  # the Form view's colours
 
         def form_cell(t):
             if t not in f14:
@@ -1809,7 +1809,7 @@ def rankings(d=None):
             if not x["games"]:
                 return "<td class='num ov muted' data-k='99'>–</td>"
             chips = "".join(f"<span class='ov-c'><span class='fm-sl'>{s}</span><span class='fm-chip fm-{sched_level(c, x[c]).lower()}'>"
-                            f"{sched_level(c, x[c]).replace('Average', 'Avg')}</span></span>" for s, c in (("D", "opp_d"), ("O", "opp_o")))
+                            f"{SCHED_WORDS.get((c, sched_level(c, x[c])), ('', 'Avg'))[1]}</span></span>" for s, c in (("D", "opp_d"), ("O", "opp_o")))
             return f"<td class='num ov' data-k='{x['opp_d'] - x['opp_o']:.4f}'>{chips}</td>"  # toughest schedule first
         rows = "".join(
             f"<tr class='rk-row'><td class='num rk-x' data-k='{x['r_score_off']}'>{x['r_score_off']}</td>"
@@ -1821,7 +1821,7 @@ def rankings(d=None):
         heads = (f"<th class='num rk-x'>#</th><th>Team</th><th class='num'>{tip('Offense', TIPS['Rank OFF composite'])}</th>"
                  f"<th class='num'>{tip('Defense', TIPS['Rank DEF composite'])}</th>"
                  f"<th class='num'>{tip('Form, last 14', 'Goals a game better (+) or worse (−) than the model expected over the last 14 days, both ends together, and its rank (the Form view). Context only: not in the projection.', 'tr')}</th>"
-                 f"<th class='num'>{tip('Schedule', 'How tough the defenses (D) and offenses (O) this team has faced this season were: Tough / Avg / Easy (the Sched column of the Offense and Defense views).', 'tr')}</th>")
+                 f"<th class='num'>{tip('Schedule', 'How good the defenses (D) and scoring teams (O) this team has faced this season were: Good / Avg / Bad (the Sched column of the Offense and Defense views).', 'tr')}</th>")
         note = ("<details class='mu-why rk-how'><summary>How to read this</summary><ul class='notes'>"
                 "<li><b>Offense / Defense</b> = the team's Total rank in those views (#1 = scores the most / allows the fewest), with "
                 "the goals the model projects it to score and allow against a league-average opponent (what the picks use).</li>"
@@ -1955,6 +1955,12 @@ def form_frame():
     return f
 
 
+def form_cls(v):
+    """Form numbers (goals a game vs what the model expected): green = better, red = worse, darker = bigger; within ±0.2 =
+    no colour. Also the Overview's Form cell and the game notes' Form numbers (src/notes.py)."""
+    return "" if -0.2 < v < 0.2 else "t-" + ("great" if v >= 0.5 else "good" if v > 0 else "trash" if v <= -0.5 else "bad")
+
+
 TREND_EDGE = 0.3  # Last 14 Overall this much above / below the season = Heating up / Cooling off
 
 
@@ -2021,8 +2027,7 @@ def form_view():
     if f is None:
         return ""
 
-    def cls(v):  # per game: green = better than expected, red = worse, darker = bigger; within ±0.2 = no colour
-        return "" if -0.2 < v < 0.2 else "t-" + ("great" if v >= 0.5 else "good" if v > 0 else "trash" if v <= -0.5 else "bad")
+    cls = form_cls
     sched = FORM_SCHED if "opp_d" in f else ()
 
     def chip(c, v, short=False):  # colour by Tough / Average / Easy; words say good / bad defenses or scoring teams
