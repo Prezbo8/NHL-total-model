@@ -11,16 +11,18 @@
 body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
 .wrap{max-width:1360px;margin:0 auto;padding:0 16px 64px}
 /* hero: night ice - a rink seen from above (red center line, blue lines, faceoff circle) with faint skate scratches
-   and a cold glow from below; the lines are soft so the title stands out */
+   and a cold glow from below; the lines are soft so the title stands out; the edges and bottom fade into the dark page colour (--bg #0b1119), so it has no hard box edges */
 .hero{position:relative;overflow:hidden;margin:0 -16px;padding:34px 24px 30px;color:#fff;
-  background:repeating-linear-gradient(115deg,rgba(255,255,255,.035) 0 1px,transparent 1px 9px),
-    repeating-linear-gradient(25deg,rgba(255,255,255,.025) 0 1px,transparent 1px 13px),
-    radial-gradient(ellipse at 50% 120%,rgba(147,197,253,.28),transparent 60%),
+  background:linear-gradient(90deg,#0b1119,rgba(11,17,25,0) 7%,rgba(11,17,25,0) 93%,#0b1119),
+    linear-gradient(180deg,rgba(11,17,25,0) 55%,#0b1119),
+    repeating-linear-gradient(115deg,rgba(255,255,255,.03) 0 1px,transparent 1px 9px),
+    repeating-linear-gradient(25deg,rgba(255,255,255,.02) 0 1px,transparent 1px 13px),
+    radial-gradient(ellipse at 50% 140%,rgba(147,197,253,.10),transparent 55%),
     linear-gradient(90deg,transparent calc(50% - 2px),rgba(200,16,46,.55) calc(50% - 2px),rgba(200,16,46,.55) calc(50% + 2px),transparent calc(50% + 2px)),
     linear-gradient(90deg,transparent 30%,rgba(59,130,246,.45) 30%,rgba(59,130,246,.45) calc(30% + 6px),transparent calc(30% + 6px),
       transparent calc(70% - 6px),rgba(59,130,246,.45) calc(70% - 6px),rgba(59,130,246,.45) 70%,transparent 70%),
     radial-gradient(circle at 50% 50%,transparent 58px,rgba(59,130,246,.45) 59px,rgba(59,130,246,.45) 61px,transparent 62px),
-    linear-gradient(180deg,#15335a,#0c1f38)}
+    linear-gradient(180deg,#1d4573,#13304f 40%,#0d1a2b 75%,#0b1119)}
 .hero:has(>.lastrun){display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px 16px}
 .lastrun{position:relative;margin:-20px -6px 0 auto;text-align:right;font-size:11px;line-height:1.35;color:#c9d6e6;z-index:2}
 .lastrun b{display:block;font-size:13px;color:#fff;font-weight:700}
