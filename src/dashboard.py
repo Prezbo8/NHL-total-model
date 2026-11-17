@@ -1862,15 +1862,17 @@ FORM_COLS = (  # (column, header, explanation); every number is per game, + = go
 )
 FORM_WINDOWS = (("season", "Season"), ("30", "Last 30"), ("14", "Last 14"), ("7", "Last 7"))
 FORM_SCHED = (  # schedule faced in the window (trends.team_form with rankings), judged by today's Total ranks
-    ("opp_d", "Defenses faced", "How good the defenses this team played in this window were. <b>Tough</b> = they allow 3%+ fewer goals "
-     "than an average defense, <b>Easy</b> = 3%+ more, else <b>Average</b>. Tap a cell for how many games were against a top-10 "
+    ("opp_d", "Defenses faced", "How good the defenses this team played in this window were. <b>Good defenses</b> = they allow 3%+ fewer goals "
+     "than an average defense, <b>Bad defenses</b> = 3%+ more, else <b>Average</b>. Tap a cell for how many games were against a top-10 "
      "Total Defense or one of the 5 worst, and each opponent with its rank. Scoring already accounts for this (each game's "
      "projection includes the opponent); Finish doesn't."),
-    ("opp_o", "Offenses faced", "How good the offenses this team played in this window were. <b>Tough</b> = they score 3%+ more goals "
-     "than an average offense, <b>Easy</b> = 3%+ fewer. Tap a cell for how many games were against a top-10 Total Offense or one "
+    ("opp_o", "Offenses faced", "How good the scoring teams this team played in this window were. <b>Good scorers</b> = they score 3%+ more goals "
+     "than an average offense, <b>Bad scorers</b> = 3%+ fewer. Tap a cell for how many games were against a top-10 Total Offense or one "
      "of the 5 worst, and each opponent with its rank. Allowing already accounts for this; Goalie doesn't."),
 )
 SCHED_EDGE = 0.03  # 3% more / fewer goals than average = Tough / Easy
+SCHED_WORDS = {("opp_d", "Tough"): ("Good defenses", "Good"), ("opp_d", "Easy"): ("Bad defenses", "Bad"),  # (desktop, phone)
+               ("opp_o", "Tough"): ("Good scorers", "Good"), ("opp_o", "Easy"): ("Bad scorers", "Bad")}
 BOTTOM5_RANK = 28  # Total rank 28-32 of 32 = a bottom-5 defense / offense
 
 
@@ -1956,9 +1958,10 @@ def form_frame():
 TREND_EDGE = 0.3  # Last 14 Overall this much above / below the season = Heating up / Cooling off
 
 
-def form_trend(f, cls):
+def form_trend(f, cls, sched, sched_cell, sched_phone):
     """Form view 'Trend' table: each team's Overall (goals a game vs what the model expected) in every window side by side,
-    plus Heating up / Cooling off (last 14 days vs the season). cls = the Form view's cell colour."""
+    plus Heating up / Cooling off and the defenses / scoring teams faced, both over the last 14 days. cls, sched_cell and
+    sched_phone = the Form view's cell colour and schedule cells."""
     w = f.assign(window=f.window.astype(str)).pivot(index="team", columns="window", values=["net", "gp"])
     x = pd.DataFrame({"team": w.index, **{k: w[("net", k)].values for k, _ in FORM_WINDOWS},
                       **{f"gp{k}": w[("gp", k)].values for k, _ in FORM_WINDOWS}}).sort_values("season", ascending=False).reset_index(drop=True)
@@ -1979,11 +1982,23 @@ def form_trend(f, cls):
             return "<td class='num muted' data-k='99'>–</td>"
         return f"<td class='num {cls(v)}' data-k='{-v:.4f}'><b>{v:+.2f}</b><span class='fm-g'>{int(gp)} gp</span></td>"
     y = x.rename(columns={k: f"w{k}" for k, _ in FORM_WINDOWS})  # w30 etc.: row fields can't start with a digit
+    last14 = f[f.window.astype(str) == "14"].set_index("team")
+
+    def faced(team):  # the defenses / scoring teams faced over the last 14 days (same cells as the window tables)
+        if not sched:
+            return ""
+        if team not in last14.index:
+            return "<td class='num muted fm-sd g1' data-k='99'>–</td><td class='num muted fm-sd' data-k='99'>–</td><td class='num muted fm-sm g1' data-k='99'>–</td>"
+        r = last14.loc[team]
+        return "".join(sched_cell(r, c) for c, _, _ in sched) + sched_phone(r)
     rows = "".join(f"<tr class='rk-row'><td class='num rk-x' data-k='{i + 1}'>{i + 1}</td><td class='tm' data-k='{e(r.team)}'>"
-                   f"{logo(r.team, 26)}<b>{e(r.team)}</b></td>" + "".join(cell(r, k) for k, _ in FORM_WINDOWS) + trend(r.trend) + "</tr>"
-                   for i, r in enumerate(y.itertuples()))
+                   f"{logo(r.team, 26)}<b>{e(r.team)}</b></td>" + "".join(cell(r, k) for k, _ in FORM_WINDOWS) + trend(r.trend)
+                   + faced(r.team) + "</tr>" for i, r in enumerate(y.itertuples()))
     heads = "".join(f"<th class='num{' g1' if k == 'season' else ''}'>{lbl}</th>" for k, lbl in FORM_WINDOWS)
     heads += f"<th class='num g1'>{tip('Trend', 'Last 14 days vs the season: Heating up = Overall 0.3+ goals a game better than its season, Cooling off = 0.3+ worse, else Steady.', 'tr')}</th>"
+    if sched:
+        heads += ("".join(f"<th class='num fm-sd{' g1' if j == 0 else ''}'>{tip(h, ex, 'tr')}</th>" for j, (_, h, ex) in enumerate(sched))
+                  + f"<th class='num fm-sm g1'>{tip('Faced', 'Last 14 days: D = the defenses faced, O = the scoring teams faced. Good / Avg / Bad; tap a cell for the opponents.', 'tr')}</th>")
     t = x.dropna(subset=["trend"]).sort_values("trend", ascending=False)
     name = lambda r: f"{e(TEAMS.get(r.team, r.team))} ({r.trend:+.2f})"
     up, down = t[t.trend >= TREND_EDGE].head(3), t[t.trend <= -TREND_EDGE].iloc[::-1].head(3)
@@ -1994,7 +2009,8 @@ def form_trend(f, cls):
     return (f"<div class='fm-win' data-win='trend' hidden><div class='fm-now'><h4 class='fm-h'>Right now (trend)</h4>"
             f"<ul class='notes fm-notes'>{''.join(notes)}</ul></div>"
             f"<table class='gt rk-t fm-t fm-tr' data-sort='2'><thead><tr class='rk-g'><th class='rk-x'></th><th></th>"
-            f"<th class='g1' colspan='{len(FORM_WINDOWS)}'>Overall: goals a game vs what the model expected</th><th class='g1'></th></tr>"
+            f"<th class='g1' colspan='{len(FORM_WINDOWS)}'>Overall: goals a game vs what the model expected</th><th class='g1'></th>"
+            + ("<th class='fm-sd g1' colspan='2'>who they played, last 14 days</th><th class='fm-sm g1'>last 14</th>" if sched else "") + "</tr>"
             f"<tr><th class='num rk-x'>#</th><th>Team</th>{heads}</tr></thead><tbody>{rows}</tbody></table></div>")
 
 
@@ -2009,9 +2025,10 @@ def form_view():
         return "" if -0.2 < v < 0.2 else "t-" + ("great" if v >= 0.5 else "good" if v > 0 else "trash" if v <= -0.5 else "bad")
     sched = FORM_SCHED if "opp_d" in f else ()
 
-    def chip(c, v, short=False):
+    def chip(c, v, short=False):  # colour by Tough / Average / Easy; words say good / bad defenses or scoring teams
         lv = sched_level(c, v)
-        return f"<span class='fm-chip fm-{lv.lower()}'>{'Avg' if short and lv == 'Average' else lv}</span>"
+        long, brief = SCHED_WORDS.get((c, lv), ("Average", "Avg"))
+        return f"<span class='fm-chip fm-{lv.lower()}'>{brief if short else long}</span>"
 
     def sched_cell(r, c):  # desktop: Tough / Average / Easy; the top-10 / bottom-5 counts and each opponent on hover / tap
         g1 = " g1" if c == "opp_d" else ""
@@ -2063,7 +2080,7 @@ def form_view():
         hlabel = lambda h: f"<span class='fm-long'>{h}</span><span class='fm-short'>{short[h]}</span>" if h in short else h
         heads = "".join(f"<th class='num{' fm-sd' if j >= len(FORM_COLS) else ''}{' g1' if c in g1 or j == len(FORM_COLS) else ''}'>{tip(hlabel(h), ex, 'tr' if j > 2 else '')}</th>"
                         for j, (c, h, ex) in enumerate(FORM_COLS + sched))
-        heads += (f"<th class='num fm-sm g1'>{tip('Faced', 'How tough the schedule was in this window: D = the defenses faced, O = the offenses faced. Tough / Avg / Easy; tap a cell for the opponents.', 'tr')}</th>"
+        heads += (f"<th class='num fm-sm g1'>{tip('Faced', 'How tough the schedule was in this window: D = the defenses faced, O = the scoring teams faced. Good / Avg / Bad; tap a cell for the opponents.', 'tr')}</th>"
                   if sched else "")
         groups = ("<tr class='rk-g'><th class='rk-x'></th><th></th><th class='g1' colspan='3'>vs what the model expected</th><th class='g1' colspan='2'>luck (usually fades)</th>"
                   + ("<th class='fm-sd g1' colspan='2'>schedule faced</th><th class='fm-sm g1'>schedule</th>" if sched else "")
@@ -2071,7 +2088,7 @@ def form_view():
         tables.append(f"<div class='fm-win' data-win='{win}'{'' if win == 'season' else ' hidden'}><div class='fm-now'>{form_notes(x, label, f)}</div>"
                       f"<table class='gt rk-t fm-t' data-sort='2'><thead>{groups}<tr>"
                       f"<th class='num rk-x'>#</th><th>Team</th>{heads}<th class='num fm-gp'>{tip('GP', 'Games in this window.', 'tr')}</th></tr></thead><tbody>{rows}</tbody></table></div>")
-    tables.append(form_trend(f, cls))
+    tables.append(form_trend(f, cls, sched, sched_cell, sched_phone))
     sub = "<div class='fm-switch'>" + "".join(
         f"<button type='button' data-win='{w}'{' class=on' if w == 'season' else ''}>{lbl}{' <span class=fm-same>= season</span>' if same.get(w) else ''}</button>"
         for w, lbl in FORM_WINDOWS + (("trend", "Trend: all windows"),)) + "</div>"
