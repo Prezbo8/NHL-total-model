@@ -264,7 +264,8 @@ def colors(f):
         out[k] = c
     lvl = lambda v: "t-great" if v >= 0.10 else "t-good" if v >= 0.03 else "t-trash" if v <= -0.10 else "t-bad" if v <= -0.03 else "t-mid"
     fifth = lambda good: "t-" + ("trash", "bad", "mid", "good", "great")[4 - min(4, (good - 1) * 5 // 32)]  # 1 = best of 32
-    form = lambda v: "t-" + ("great" if v >= 0.5 else "good" if v >= 0.2 else "mid" if v > -0.2 else "bad" if v > -0.5 else "trash")
+    import dashboard
+    form = dashboard.form_cls  # the Form view's colours (no colour within ±0.2)
     cut = re.search(r"(\d+\.\d\d)\+", f.get("over_flag_needs", ""))
     for t, x in f["teams"].items():
         for z in x["pushing_up"] + x["holding_back"] + [x.get("vs_an_average_team") or ""]:
