@@ -1854,23 +1854,25 @@ def rankings(d=None):
 
 
 FORM_COLS = (  # (column, header, explanation); every number is per game, + = good for the team
-    ("net", "Net", "Scoring + Allowing: goals a game better (+) or worse (−) than the model expected, both ends combined."),
-    ("scoring", "Scoring", "Goals scored a game minus what the model projected before each game. + = scoring more than expected."),
-    ("allowing", "Allowing", "Goals the model projected against minus goals actually allowed, a game. + = allowing fewer than expected."),
-    ("finishing", "Finish", "Goals scored minus expected goals (xG), a game, vs the league average. + = finishing chances better than usual (skill or hot shooting)."),
-    ("goaltending", "Goalie", "Expected goals against minus goals allowed, a game, vs the league average. + = goalies stopping more than expected."),
+    ("net", "Overall", "Scoring + Defense: goals a game better (+) or worse (−) than the model expected, both ends combined."),
+    ("scoring", "Scoring", "Goals scored a game minus what the model projected before each game. + = scored more than expected."),
+    ("allowing", "Defense", "Goals the model projected against minus goals actually allowed, a game. + = allowed fewer than expected (good defense)."),
+    ("finishing", "Shooting luck", "Goals scored minus expected goals (xG), a game, vs the league average. + = finishing chances better than usual (skill or hot shooting; usually fades)."),
+    ("goaltending", "Goalie luck", "Expected goals against minus goals allowed, a game, vs the league average. + = goalies stopping more than expected (usually fades)."),
 )
 FORM_WINDOWS = (("season", "Season"), ("30", "Last 30"), ("14", "Last 14"), ("7", "Last 7"))
 FORM_SCHED = (  # schedule faced in the window (trends.team_form with rankings), judged by today's Total ranks
-    ("opp_d", "Defenses faced", "How good the defenses this team played in this window were. <b>Tough</b> = they allow 3%+ fewer goals "
-     "than an average defense, <b>Easy</b> = 3%+ more, else <b>Average</b>. Tap a cell for how many games were against a top-10 "
+    ("opp_d", "Defenses faced", "How good the defenses this team played in this window were. <b>Good defenses</b> = they allow 3%+ fewer goals "
+     "than an average defense, <b>Bad defenses</b> = 3%+ more, else <b>Average</b>. Tap a cell for how many games were against a top-10 "
      "Total Defense or one of the 5 worst, and each opponent with its rank. Scoring already accounts for this (each game's "
      "projection includes the opponent); Finish doesn't."),
-    ("opp_o", "Offenses faced", "How good the offenses this team played in this window were. <b>Tough</b> = they score 3%+ more goals "
-     "than an average offense, <b>Easy</b> = 3%+ fewer. Tap a cell for how many games were against a top-10 Total Offense or one "
+    ("opp_o", "Offenses faced", "How good the scoring teams this team played in this window were. <b>Good scorers</b> = they score 3%+ more goals "
+     "than an average offense, <b>Bad scorers</b> = 3%+ fewer. Tap a cell for how many games were against a top-10 Total Offense or one "
      "of the 5 worst, and each opponent with its rank. Allowing already accounts for this; Goalie doesn't."),
 )
 SCHED_EDGE = 0.03  # 3% more / fewer goals than average = Tough / Easy
+SCHED_WORDS = {("opp_d", "Tough"): ("Good defenses", "Good"), ("opp_d", "Easy"): ("Bad defenses", "Bad"),  # (desktop, phone)
+               ("opp_o", "Tough"): ("Good scorers", "Good"), ("opp_o", "Easy"): ("Bad scorers", "Bad")}
 BOTTOM5_RANK = 28  # Total rank 28-32 of 32 = a bottom-5 defense / offense
 
 
@@ -1953,6 +1955,65 @@ def form_frame():
     return f
 
 
+TREND_EDGE = 0.3  # Last 14 Overall this much above / below the season = Heating up / Cooling off
+
+
+def form_trend(f, cls, sched, sched_cell, sched_phone):
+    """Form view 'Trend' table: each team's Overall (goals a game vs what the model expected) in every window side by side,
+    plus Heating up / Cooling off and the defenses / scoring teams faced, both over the last 14 days. cls, sched_cell and
+    sched_phone = the Form view's cell colour and schedule cells."""
+    w = f.assign(window=f.window.astype(str)).pivot(index="team", columns="window", values=["net", "gp"])
+    x = pd.DataFrame({"team": w.index, **{k: w[("net", k)].values for k, _ in FORM_WINDOWS},
+                      **{f"gp{k}": w[("gp", k)].values for k, _ in FORM_WINDOWS}}).sort_values("season", ascending=False).reset_index(drop=True)
+    x["trend"] = x["14"] - x["season"]
+
+    def trend(v):
+        if pd.isna(v):
+            return "<td class='num muted' data-k='99'>–</td>"
+        hot, cold = v >= TREND_EDGE, v <= -TREND_EDGE
+        long, short, c = (("▲ Heating up", "▲ Up", "fm-hot") if hot else ("▼ Cooling off", "▼ Down", "fm-cold") if cold
+                          else ("Steady", "–", "fm-steady"))
+        chip = f"<span class='fm-trend {c}'><span class='fm-long'>{long}</span><span class='fm-short'>{short}</span></span>"
+        return f"<td class='num' data-k='{-v:.4f}'>{tip(chip, f'Last 14 days {v:+.2f} goals a game vs its season.', 'tr')}</td>"
+
+    def cell(r, k):
+        v, gp = getattr(r, f"w{k}"), getattr(r, f"gp{k}")
+        if pd.isna(v):
+            return "<td class='num muted' data-k='99'>–</td>"
+        return f"<td class='num {cls(v)}' data-k='{-v:.4f}'><b>{v:+.2f}</b><span class='fm-g'>{int(gp)} gp</span></td>"
+    y = x.rename(columns={k: f"w{k}" for k, _ in FORM_WINDOWS})  # w30 etc.: row fields can't start with a digit
+    last14 = f[f.window.astype(str) == "14"].set_index("team")
+
+    def faced(team):  # the defenses / scoring teams faced over the last 14 days (same cells as the window tables)
+        if not sched:
+            return ""
+        if team not in last14.index:
+            return "<td class='num muted fm-sd g1' data-k='99'>–</td><td class='num muted fm-sd' data-k='99'>–</td><td class='num muted fm-sm g1' data-k='99'>–</td>"
+        r = last14.loc[team]
+        return "".join(sched_cell(r, c) for c, _, _ in sched) + sched_phone(r)
+    rows = "".join(f"<tr class='rk-row'><td class='num rk-x' data-k='{i + 1}'>{i + 1}</td><td class='tm' data-k='{e(r.team)}'>"
+                   f"{logo(r.team, 26)}<b>{e(r.team)}</b></td>" + "".join(cell(r, k) for k, _ in FORM_WINDOWS) + trend(r.trend)
+                   + faced(r.team) + "</tr>" for i, r in enumerate(y.itertuples()))
+    heads = "".join(f"<th class='num{' g1' if k == 'season' else ''}'>{lbl}</th>" for k, lbl in FORM_WINDOWS)
+    heads += f"<th class='num g1'>{tip('Trend', 'Last 14 days vs the season: Heating up = Overall 0.3+ goals a game better than its season, Cooling off = 0.3+ worse, else Steady.', 'tr')}</th>"
+    if sched:
+        heads += ("".join(f"<th class='num fm-sd{' g1' if j == 0 else ''}'>{tip(h, ex, 'tr')}</th>" for j, (_, h, ex) in enumerate(sched))
+                  + f"<th class='num fm-sm g1'>{tip('Faced', 'Last 14 days: D = the defenses faced, O = the scoring teams faced. Good / Avg / Bad; tap a cell for the opponents.', 'tr')}</th>")
+    t = x.dropna(subset=["trend"]).sort_values("trend", ascending=False)
+    name = lambda r: f"{e(TEAMS.get(r.team, r.team))} ({r.trend:+.2f})"
+    up, down = t[t.trend >= TREND_EDGE].head(3), t[t.trend <= -TREND_EDGE].iloc[::-1].head(3)
+    notes = ([f"<li><b>Heating up most</b>: {', '.join(name(r) for r in up.itertuples())}.</li>"] if len(up) else []) \
+        + ([f"<li><b>Cooling off most</b>: {', '.join(name(r) for r in down.itertuples())}.</li>"] if len(down) else []) \
+        + ["<li class='muted'>Trend = the last 14 days vs the season (Last 7 is only about 3 games, mostly noise). "
+           "Each cell shows its games (gp).</li>"]
+    return (f"<div class='fm-win' data-win='trend' hidden><div class='fm-now'><h4 class='fm-h'>Right now (trend)</h4>"
+            f"<ul class='notes fm-notes'>{''.join(notes)}</ul></div>"
+            f"<table class='gt rk-t fm-t fm-tr' data-sort='2'><thead><tr class='rk-g'><th class='rk-x'></th><th></th>"
+            f"<th class='g1' colspan='{len(FORM_WINDOWS)}'>Overall: goals a game vs what the model expected</th><th class='g1'></th>"
+            + ("<th class='fm-sd g1' colspan='2'>who they played, last 14 days</th><th class='fm-sm g1'>last 14</th>" if sched else "") + "</tr>"
+            f"<tr><th class='num rk-x'>#</th><th>Team</th>{heads}</tr></thead><tbody>{rows}</tbody></table></div>")
+
+
 def form_view():
     """Team rankings 'Form' view: over / under performance vs the model and vs xG for the season and the last 30 /
     14 / 7 days (data/team_form.csv, written by each model run). Context only, not in the projection."""
@@ -1960,13 +2021,14 @@ def form_view():
     if f is None:
         return ""
 
-    def cls(v):  # per game: +0.5 great .. -0.5 trash
-        return "t-" + ("great" if v >= 0.5 else "good" if v >= 0.2 else "mid" if v > -0.2 else "bad" if v > -0.5 else "trash")
+    def cls(v):  # per game: green = better than expected, red = worse, darker = bigger; within ±0.2 = no colour
+        return "" if -0.2 < v < 0.2 else "t-" + ("great" if v >= 0.5 else "good" if v > 0 else "trash" if v <= -0.5 else "bad")
     sched = FORM_SCHED if "opp_d" in f else ()
 
-    def chip(c, v, short=False):
+    def chip(c, v, short=False):  # colour by Tough / Average / Easy; words say good / bad defenses or scoring teams
         lv = sched_level(c, v)
-        return f"<span class='fm-chip fm-{lv.lower()}'>{'Avg' if short and lv == 'Average' else lv}</span>"
+        long, brief = SCHED_WORDS.get((c, lv), ("Average", "Avg"))
+        return f"<span class='fm-chip fm-{lv.lower()}'>{brief if short else long}</span>"
 
     def sched_cell(r, c):  # desktop: Tough / Average / Easy; the top-10 / bottom-5 counts and each opponent on hover / tap
         g1 = " g1" if c == "opp_d" else ""
@@ -1993,7 +2055,7 @@ def form_view():
             return ""
         if round(abs(v), digits) == 0:
             return "<span class='fm-d'>=</span>"
-        return f"<span class='fm-d {'fm-up' if v > 0 else 'fm-dn'}'>{'▲' if v > 0 else '▼'}{abs(v):.{digits}f}</span>"
+        return f"<span class='fm-d {'fm-up' if v > 0 else 'fm-dn'}' title='vs the team’s season number'>{'▲' if v > 0 else '▼'}{abs(v):.{digits}f}</span>"
     tables, same = [], {}
     for win, label in FORM_WINDOWS:
         x = f[f.window == win].sort_values("net", ascending=False).reset_index(drop=True)
@@ -2014,29 +2076,34 @@ def form_view():
             + "".join(sched_cell(r, c) for c, _, _ in sched) + sched_phone(r)
             + f"<td class='num muted fm-gp' data-k='{-r.gp}'>{r.gp}</td></tr>"
             for i, r in enumerate(x.itertuples()))
-        short = {"Allowing": "Allow", "Scoring": "Score"}  # phones: narrower headers (no sideways scrolling at 375 px)
+        short = {"Scoring": "Score", "Defense": "Def", "Shooting luck": "Shoot luck"}  # phones: narrower headers (no sideways scrolling at 375 px)
         hlabel = lambda h: f"<span class='fm-long'>{h}</span><span class='fm-short'>{short[h]}</span>" if h in short else h
         heads = "".join(f"<th class='num{' fm-sd' if j >= len(FORM_COLS) else ''}{' g1' if c in g1 or j == len(FORM_COLS) else ''}'>{tip(hlabel(h), ex, 'tr' if j > 2 else '')}</th>"
                         for j, (c, h, ex) in enumerate(FORM_COLS + sched))
-        heads += (f"<th class='num fm-sm g1'>{tip('Faced', 'How tough the schedule was in this window: D = the defenses faced, O = the offenses faced. Tough / Avg / Easy; tap a cell for the opponents.', 'tr')}</th>"
+        heads += (f"<th class='num fm-sm g1'>{tip('Faced', 'How tough the schedule was in this window: D = the defenses faced, O = the scoring teams faced. Good / Avg / Bad; tap a cell for the opponents.', 'tr')}</th>"
                   if sched else "")
-        groups = ("<tr class='rk-g'><th class='rk-x'></th><th></th><th class='g1' colspan='3'>vs the model</th><th class='g1' colspan='2'>luck check</th>"
+        groups = ("<tr class='rk-g'><th class='rk-x'></th><th></th><th class='g1' colspan='3'>vs what the model expected</th><th class='g1' colspan='2'>luck (usually fades)</th>"
                   + ("<th class='fm-sd g1' colspan='2'>schedule faced</th><th class='fm-sm g1'>schedule</th>" if sched else "")
                   + "<th class='fm-gp'></th></tr>")
         tables.append(f"<div class='fm-win' data-win='{win}'{'' if win == 'season' else ' hidden'}><div class='fm-now'>{form_notes(x, label, f)}</div>"
                       f"<table class='gt rk-t fm-t' data-sort='2'><thead>{groups}<tr>"
                       f"<th class='num rk-x'>#</th><th>Team</th>{heads}<th class='num fm-gp'>{tip('GP', 'Games in this window.', 'tr')}</th></tr></thead><tbody>{rows}</tbody></table></div>")
+    tables.append(form_trend(f, cls, sched, sched_cell, sched_phone))
     sub = "<div class='fm-switch'>" + "".join(
         f"<button type='button' data-win='{w}'{' class=on' if w == 'season' else ''}>{lbl}{' <span class=fm-same>= season</span>' if same.get(w) else ''}</button>"
-        for w, lbl in FORM_WINDOWS) + "</div>"
+        for w, lbl in FORM_WINDOWS + (("trend", "Trend: all windows"),)) + "</div>"
+    key = ("<p class='fm-key'>Every number = <b>goals per game</b> better (+) or worse (−) than the model expected. "
+           "<span class='fm-sw fm-swg'>green</span> = better, <span class='fm-sw fm-swr'>red</span> = worse, darker = bigger, "
+           "no colour = about as expected. In Last 30 / 14 / 7 the small ▲ / ▼ under a number = the change from that team's season number.</p>")
     cols = "".join(f"<li><b>{h}</b>: {ex}</li>" for _, h, ex in FORM_COLS + sched)
     cols += ("<li><b>▲ / ▼</b> (Last 30 / 14 / 7): under each number, how much better (▲) or worse (▼) it is than the team's "
              "season number; under # (under the team on phones), how many spots the team moved up (▲) or down (▼) from its season "
              "rank. = means no change. A window marked '= season' has the same games as the season so far.</li>")
-    return (f"<div class='rk' data-kind='form' hidden><h3>Form: over / under performing</h3>{sub}{''.join(tables)}"
+    return (f"<div class='rk' data-kind='form' hidden><h3>Form: over / under performing</h3>{sub}{key}{''.join(tables)}"
             "<details class='mu-why rk-how'><summary>How to read this</summary>"
-            "<p class='fm-gl'><b>vs the model</b> = Net, Scoring, Allowing: how the team did against the model's own projection. "
-            "<b>luck check</b> = Finish, Goalie: goals vs expected goals, the part that usually doesn't last. "
+            "<p class='fm-gl'><b>vs what the model expected</b> = Overall, Scoring, Defense: how the team did against the model's own projection. "
+            "<b>luck</b> = Shooting luck, Goalie luck: goals vs expected goals, the part that usually doesn't last. "
+            "<b>Trend</b> = Overall in every window side by side; Heating up / Cooling off compares the last 14 days with the season. "
             "<b>schedule faced</b> = how tough its opponents were.</p>"
             f"<h4 class='fm-h'>What the columns mean</h4><ul class='notes fm-notes'>{cols}<li>Every number is per game; + (green) = good for "
             "that team, − (red) = bad. Click a column to sort by it.</li></ul>"
@@ -2044,7 +2111,7 @@ def form_view():
             "<li><b>Context only, not in the projection.</b> Tested on 2021-26 (research/studies/recent_form.py): a team scoring above or "
             "below the model does not keep doing it in the next games (mostly luck), and xG-based form carries over only ~7%, so the model "
             "keeps using season-long ratings.</li>"
-            "<li><b>Finish and Goalie say why.</b> A team far above expectations mostly because of Goalie (or Finish) is riding hot "
+            "<li><b>Shooting luck and Goalie luck say why.</b> A team far above expectations mostly because of Goalie luck (or Shooting luck) is riding hot "
             "goaltending (or shooting), which usually cools off.</li>"
             "<li><b>Small windows are noisy.</b> Over 7 days a team plays about 3 games, so Last 7 is mostly noise; Last 30 and the season "
             "mean more.</li></ul></details></div>")
@@ -2245,7 +2312,11 @@ body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 -apple-system
 table.tor-t tr.t-great td{background:rgba(22,163,74,.50)}table.tor-t tr.t-good td{background:rgba(22,163,74,.22)}table.tor-t tr.t-mid td{background:rgba(234,179,8,.28)}table.tor-t tr.t-bad td{background:rgba(220,38,38,.22)}table.tor-t tr.t-trash td{background:rgba(220,38,38,.50)}table.tor-t td.pos,table.tor-t td.neg{color:var(--ink)}.acc-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:18px;margin-top:16px}.acc-grid h3{margin:0 0 6px;font-size:15px}table.acc-t{width:100%}table.acc-t td,table.acc-t th{padding:6px 8px}
 .rk-switch{display:inline-flex;gap:4px;padding:4px;margin:0 0 14px;background:var(--ice);border:1px solid var(--line);border-radius:999px}
 .rk-switch button{font:inherit;font-size:14px;font-weight:800;padding:7px 22px;border:0;border-radius:999px;background:transparent;color:var(--muted);cursor:pointer}
-.fm-switch{display:flex;flex-wrap:wrap;gap:4px;margin:0 0 10px}.fm-switch button{font:inherit;font-size:12.5px;font-weight:700;padding:5px 12px;border:1px solid var(--line);border-radius:999px;background:transparent;color:var(--muted);cursor:pointer}.fm-switch button.on{background:var(--card);color:var(--ink);border-color:var(--muted)}.fm-note{max-width:820px}.fm-h{margin:14px 0 4px;font-size:13.5px}.fm-notes{max-width:820px;margin-top:4px}@media (max-width:760px){table.fm-t td.tm img,table.fm-t td.tm picture{display:none}table.fm-t th,table.fm-t td{padding:5px 3px!important;font-size:11.5px}table.fm-t th{white-space:normal;font-size:9px;letter-spacing:0}table.fm-t .fm-p,table.fm-t .fm-gp,table.fm-t .fm-sd{display:none}table.fm-t th,table.fm-t td{padding:5px 2px!important}table.fm-t td.fm-sm,table.fm-t th.fm-sm{display:table-cell;line-height:1.25}table.fm-t th .fm-long{display:none}table.fm-t th .fm-short{display:inline}}table.fm-t .fm-sm,table.fm-t .fm-short{display:none}.fm-sl{color:var(--muted);font-size:9px;margin-right:3px}.fm-d{display:block;font-size:10px;font-weight:600;opacity:.8;line-height:1.2;white-space:nowrap}.fm-rkm{display:none}@media (max-width:760px){.fm-d{font-size:8.5px}.fm-rkm{display:block;font-size:8.5px;color:var(--muted);white-space:nowrap}.fm-rkm .fm-d{display:inline}}.mv{list-style:none;margin:4px 0 4px;padding:0;font-size:12.5px;max-width:820px}.mv li{padding:4px 0;border-bottom:1px solid var(--line)}.mv li b{font-variant-numeric:tabular-nums}.mv-d{font-weight:800;margin:0 6px}.mv-up{color:#15803d}.mv-dn{color:#b91c1c}.mv-why{display:block;color:var(--muted);font-size:12px;margin-top:1px}.mvc{display:block;width:100%;max-width:520px;height:auto;margin:6px 0 0;overflow:visible}.mvc text{font-size:10.5px;fill:var(--muted);font-variant-numeric:tabular-nums}.mvc-g{stroke:var(--line);stroke-width:1}.mvc-l{fill:none;stroke:var(--muted);stroke-width:2;stroke-linejoin:round}.mvc circle{stroke:var(--card);stroke-width:2}.mvc circle.mvc-hit{fill:transparent;stroke:none}.mvc .tip{cursor:pointer;outline:none}.mvc .tip:focus circle:not(.mvc-hit),.mvc .tip:hover circle:not(.mvc-hit){r:6}.mvc-up circle{fill:#15803d}.mvc-dn circle{fill:#b91c1c}.mvc-0 circle{fill:#9ca3af}.mvc-n{margin:2px 0 4px}.kp-also{margin:8px 0 2px;font-size:13px;line-height:1.5}.fm-chip{display:inline-block;padding:1px 7px;border-radius:999px;font-size:11px;font-weight:700;line-height:1.5}.fm-tough{background:#6d28d9;color:#fff}.fm-average{background:transparent;color:var(--muted);border:1px solid var(--line)}.fm-easy{background:rgba(14,165,233,.30);color:var(--ink)}@media (max-width:760px){.fm-chip{padding:0 3px;font-size:9px;letter-spacing:-.1px}.fm-sl{margin-right:1px}}
+.fm-switch{display:flex;flex-wrap:wrap;gap:4px;margin:0 0 10px}.fm-switch button{font:inherit;font-size:12.5px;font-weight:700;padding:5px 12px;border:1px solid var(--line);border-radius:999px;background:transparent;color:var(--muted);cursor:pointer}.fm-switch button.on{background:var(--card);color:var(--ink);border-color:var(--muted)}.fm-note{max-width:820px}.fm-h{margin:14px 0 4px;font-size:13.5px}.fm-notes{max-width:820px;margin-top:4px}@media (max-width:760px){table.fm-t td.tm img,table.fm-t td.tm picture{display:none}table.fm-t th,table.fm-t td{padding:5px 3px!important;font-size:11.5px}table.fm-t th{white-space:normal;font-size:9px;letter-spacing:0}table.fm-t .fm-p,table.fm-t .fm-gp,table.fm-t .fm-sd{display:none}table.fm-t th,table.fm-t td{padding:5px 2px!important}table.fm-t td.fm-sm,table.fm-t th.fm-sm{display:table-cell;line-height:1.25}table.fm-t th .fm-long{display:none}table.fm-t th .fm-short{display:inline}}table.fm-t .fm-sm,table.fm-t .fm-short{display:none}.fm-sl{color:var(--muted);font-size:9px;margin-right:3px}.fm-d{display:block;font-size:10px;font-weight:600;opacity:.8;line-height:1.2;white-space:nowrap}.fm-rkm{display:none}@media (max-width:760px){.fm-d{font-size:8.5px}.fm-rkm{display:block;font-size:8.5px;color:var(--muted);white-space:nowrap}.fm-rkm .fm-d{display:inline}}.mv{list-style:none;margin:4px 0 4px;padding:0;font-size:12.5px;max-width:820px}.mv li{padding:4px 0;border-bottom:1px solid var(--line)}.mv li b{font-variant-numeric:tabular-nums}.mv-d{font-weight:800;margin:0 6px}.mv-up{color:#15803d}.mv-dn{color:#b91c1c}.mv-why{display:block;color:var(--muted);font-size:12px;margin-top:1px}.mvc{display:block;width:100%;max-width:520px;height:auto;margin:6px 0 0;overflow:visible}.mvc text{font-size:10.5px;fill:var(--muted);font-variant-numeric:tabular-nums}.mvc-g{stroke:var(--line);stroke-width:1}.mvc-l{fill:none;stroke:var(--muted);stroke-width:2;stroke-linejoin:round}.mvc circle{stroke:var(--card);stroke-width:2}.mvc circle.mvc-hit{fill:transparent;stroke:none}.mvc .tip{cursor:pointer;outline:none}.mvc .tip:focus circle:not(.mvc-hit),.mvc .tip:hover circle:not(.mvc-hit){r:6}.mvc-up circle{fill:#15803d}.mvc-dn circle{fill:#b91c1c}.mvc-0 circle{fill:#9ca3af}.mvc-n{margin:2px 0 4px}.kp-also{margin:8px 0 2px;font-size:13px;line-height:1.5}.fm-key{margin:0 0 8px;font-size:12.5px;color:var(--muted);max-width:900px}.fm-sw{display:inline-block;padding:0 6px;border-radius:4px;color:var(--ink)}.fm-swg{background:rgba(22,163,74,.5)}.fm-swr{background:rgba(220,38,38,.5)}
+.fm-g{display:block;font-size:9.5px;font-weight:600;opacity:.65}.fm-trend{display:inline-block;padding:1px 8px;border-radius:999px;font-size:11.5px;font-weight:800;white-space:nowrap}
+.fm-hot{background:rgba(22,163,74,.5);color:var(--ink)}.fm-cold{background:rgba(220,38,38,.5);color:var(--ink)}.fm-steady{color:var(--muted);border:1px solid var(--line)}
+table.fm-t td .fm-short{display:none}@media (max-width:760px){table.fm-t td .fm-long{display:none}table.fm-t td .fm-short{display:inline}.fm-g{font-size:8px}table.fm-tr th{font-size:9px}}
+.fm-chip{display:inline-block;padding:1px 7px;border-radius:999px;font-size:11px;font-weight:700;line-height:1.5}.fm-tough{background:#6d28d9;color:#fff}.fm-average{background:transparent;color:var(--muted);border:1px solid var(--line)}.fm-easy{background:rgba(14,165,233,.30);color:var(--ink)}@media (max-width:760px){.fm-chip{padding:0 3px;font-size:9px;letter-spacing:-.1px}.fm-sl{margin-right:1px}}
 .rk-switch button.on{background:var(--card);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.25)}
 .rk[hidden]{display:none!important}
 table.rk-t th.sortable{cursor:pointer;user-select:none}table.tor-t th.sortable{cursor:pointer;user-select:none}table.tor-t th.sorted{color:var(--ink)}table.tor-t th.sorted::after{content:" ▼";font-size:9px}table.tor-t th.sorted.rev::after{content:" ▲"}table.rk-t th.sorted{color:var(--ink)}
