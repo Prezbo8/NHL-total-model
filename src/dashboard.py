@@ -1034,17 +1034,20 @@ def team_records(d):
     s = closing_bets(d)
     s = s[[call(r, True) in ("SLAM", "1U") and r.close_total == 6.5 for r in s.itertuples()]]
     picks = (team_over_table(team_over_rows(s), "Picks") if len(s) else "<p class='muted'>No SLAM or 1U picks have settled yet.</p>")
+    sl = s[[call(r, True) == "SLAM" for r in s.itertuples()]]
+    slams = (team_over_table(team_over_rows(sl), "Picks") if len(sl) else "<p class='muted'>No SLAM picks have settled yet.</p>")
     return f"""<div class='acc-grid'>
         <div><h3>Games over 6.5 · any line</h3>{team_7_table(team_7_rows(g))}</div>
         <div><h3>🔨 SLAM + 1U picks by team · 6.5</h3>{picks}</div>
+        <div><h3>🔨 SLAM picks by team · 6.5</h3>{slams}</div>
       </div>
       <div class='tier-key'>Row color:{''.join(f"<span class='t-{t}'>{t}</span>" for t in reversed(TIER_NAMES))}</div>
       <ul class='notes'><li><b>Games over 6.5:</b> every finished game ({len(g)} so far, {g.date.min()} to {g.date.max()}), over = 7+ goals,
       whatever the game's line was. A game counts for both teams.</li>
-      <li><b>Sort:</b> click a column header to sort by it (highest first; ties go to the higher Avg goals, or vs close in the SLAM + 1U table); click again to flip it.</li>
-      <li><b>Row colors</b> grade each team against the others, in fifths: Over % in the left table, Units in the right (great = top fifth, trash = bottom fifth; tied teams share a color).</li>
+      <li><b>Sort:</b> click a column header to sort by it (highest first; ties go to the higher Avg goals, or vs close in the SLAM tables); click again to flip it.</li>
+      <li><b>Row colors</b> grade each team against the others, in fifths: Over % in the Games over 6.5 table, Units in the SLAM tables (great = top fifth, trash = bottom fifth; tied teams share a color).</li>
       <li><b>SLAM + 1U</b> are the flagged picks in the paper record below that closed at 6.5, graded at the closing price
-      (1 unit each), by team.</li>
+      (1 unit each), by team. The SLAM table counts only the SLAM picks.</li>
       <li>About 15 games a team is a small sample: early-season team records are mostly noise.</li></ul>"""
 
 
