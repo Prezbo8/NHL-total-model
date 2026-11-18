@@ -2520,10 +2520,10 @@ ul.archive li:last-child{border-bottom:none}
 
 
 def tabs(active, has_rankings):
-    """Tab bar between the dashboard, yesterday's results, tomorrow's preview and the team rankings page."""
+    """Tab bar between the dashboard, tomorrow's preview, the team rankings page and yesterday's results."""
     if not has_rankings:
         return ""
-    t = [("dash", "index.html", "Dashboard"), ("yest", "yesterday.html", "Yesterday's results"), ("prev", "preview.html", "Tomorrow preview"), ("rank", "rankings.html", "Team rankings")]
+    t = [("dash", "index.html", "Dashboard"), ("prev", "preview.html", "Tomorrow preview"), ("rank", "rankings.html", "Team rankings"), ("yest", "yesterday.html", "Yesterday's results")]
     return ("<nav class='tabs'>" + "".join(f"<a href='{u}' class='tab{' on' if k == active else ''}'>{n}</a>" for k, u, n in t)
             + "</nav>")
 
