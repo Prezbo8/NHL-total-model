@@ -13,7 +13,7 @@
  },
  "Daily stats": {
   "consecutive_failures": 0,
-  "last_ok": "2026-11-20 00:01 EST"
+  "last_ok": "2026-11-20 04:32 EST"
  },
  "DailyFaceoff goalies": {
   "consecutive_failures": 0,
@@ -57,15 +57,15 @@
  },
  "NHL schedule": {
   "consecutive_failures": 0,
-  "last_ok": "2026-11-20 00:01 EST"
+  "last_ok": "2026-11-20 04:32 EST"
  },
  "NHL schedule (yesterday)": {
   "consecutive_failures": 0,
-  "last_ok": "2026-11-20 00:01 EST"
+  "last_ok": "2026-11-20 04:32 EST"
  },
  "NHL standings": {
   "consecutive_failures": 0,
-  "last_ok": "2026-11-20 00:01 EST"
+  "last_ok": "2026-11-20 04:32 EST"
  },
  "NHL team skater games": {
   "consecutive_failures": 0,
