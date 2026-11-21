@@ -1,39 +1,39 @@
 {
  "Action Network now lines": {
   "consecutive_failures": 0,
-  "last_ok": "2026-11-19 23:02 EST"
+  "last_ok": "2026-11-21 00:07 EST"
  },
  "Action Network open lines": {
   "consecutive_failures": 0,
-  "last_ok": "2026-11-19 23:02 EST"
+  "last_ok": "2026-11-21 00:07 EST"
  },
  "Betting lines": {
   "consecutive_failures": 0,
-  "last_ok": "2026-11-19 23:02 EST"
+  "last_ok": "2026-11-21 00:07 EST"
  },
  "Daily stats": {
   "consecutive_failures": 0,
-  "last_ok": "2026-11-20 23:00 EST"
+  "last_ok": "2026-11-21 00:07 EST"
  },
  "DailyFaceoff goalies": {
-  "consecutive_failures": 0,
+  "consecutive_failures": 1,
   "last_error": "HTTPError: HTTP Error 403: Forbidden",
-  "last_failed": "2026-11-19 22:17 EST",
+  "last_failed": "2026-11-21 00:07 EST",
   "last_ok": "2026-11-19 23:02 EST"
  },
  "DailyFaceoff lineups": {
-  "consecutive_failures": 0,
+  "consecutive_failures": 1,
   "last_error": "HTTPError: HTTP Error 403: Forbidden",
-  "last_failed": "2026-11-19 22:17 EST",
+  "last_failed": "2026-11-21 00:07 EST",
   "last_ok": "2026-11-19 23:02 EST"
  },
  "ESPN injuries": {
   "consecutive_failures": 0,
-  "last_ok": "2026-11-19 23:02 EST"
+  "last_ok": "2026-11-21 00:07 EST"
  },
  "ESPN odds (backup)": {
   "consecutive_failures": 0,
-  "last_ok": "2026-11-19 23:02 EST"
+  "last_ok": "2026-11-21 00:07 EST"
  },
  "Goalie data": {
   "consecutive_failures": 0,
@@ -41,7 +41,7 @@
  },
  "GoaliePost": {
   "consecutive_failures": 0,
-  "last_ok": "2026-11-19 23:02 EST"
+  "last_ok": "2026-11-21 00:07 EST"
  },
  "MoneyPuck skaters": {
   "consecutive_failures": 0,
@@ -57,30 +57,30 @@
  },
  "NHL schedule": {
   "consecutive_failures": 0,
-  "last_ok": "2026-11-20 23:00 EST"
+  "last_ok": "2026-11-21 00:07 EST"
  },
  "NHL schedule (yesterday)": {
   "consecutive_failures": 0,
-  "last_ok": "2026-11-20 23:00 EST"
+  "last_ok": "2026-11-21 00:07 EST"
  },
  "NHL standings": {
   "consecutive_failures": 0,
-  "last_ok": "2026-11-20 23:00 EST"
+  "last_ok": "2026-11-21 00:07 EST"
  },
  "NHL team skater games": {
   "consecutive_failures": 0,
-  "last_ok": "2026-11-19 23:02 EST"
+  "last_ok": "2026-11-21 00:07 EST"
  },
  "Rotowire": {
   "consecutive_failures": 0,
-  "last_ok": "2026-11-19 23:02 EST"
+  "last_ok": "2026-11-21 00:07 EST"
  },
  "Sportsbook lines": {
   "consecutive_failures": 0,
-  "last_ok": "2026-11-19 23:02 EST"
+  "last_ok": "2026-11-21 00:07 EST"
  },
  "Supabase": {
   "consecutive_failures": 0,
-  "last_ok": "2026-11-19 23:02 EST"
+  "last_ok": "2026-11-21 00:07 EST"
  }
 }
